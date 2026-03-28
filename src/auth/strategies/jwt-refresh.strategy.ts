@@ -2,11 +2,11 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
-import { Request } from 'express';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { User } from '../../users/entites/user.entity';
+import { Request } from 'express';
 import * as bcrypt from 'bcrypt';
+import { User } from '../../users/entites/user.entity';
 
 @Injectable()
 export class JwtRefreshStrategy extends PassportStrategy(Strategy, 'jwt-refresh') {
@@ -16,19 +16,27 @@ export class JwtRefreshStrategy extends PassportStrategy(Strategy, 'jwt-refresh'
   ) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
-      secretOrKey: config.get<string>('jwt.refreshSecret'),
-      passReqToCallback: true,
+      secretOrKey: config.get<string>('jwt.refreshSecret') ?? 'fallback-refresh-secret',
+      passReqToCallback: true as true,  
     });
   }
 
   async validate(req: Request, payload: { sub: string }) {
-    const refreshToken = req.headers.authorization?.split(' ')[1];
+    const incomingToken = req.headers.authorization?.split(' ')[1];
+    if (!incomingToken) throw new UnauthorizedException('No token provided');
+
     const user = await this.userRepo.findOne({ where: { id: payload.sub } });
 
-    if (!user?.refreshToken) throw new UnauthorizedException();
+    if (!user || !user.refreshToken) {
+      throw new UnauthorizedException('Refresh token revoked');
+    }
 
-    const matches = await bcrypt.compare(refreshToken, user.refreshToken);
-    if (!matches) throw new UnauthorizedException('Refresh token invalid');
+    const isMatch = await bcrypt.compare(incomingToken, user.refreshToken);
+    if (!isMatch) {
+     
+      await this.userRepo.update(user.id, { refreshToken: null });
+      throw new UnauthorizedException('Token reuse detected — please login again');
+    }
 
     return user;
   }
