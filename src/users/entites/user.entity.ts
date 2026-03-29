@@ -60,27 +60,22 @@ export class User {
 
   // ─── 2-Step Verification (email OTP) ──────────────────────────────────────
 
-  /** User explicitly toggled email 2FA ON from the settings screen */
   @Column({ name: 'is_2fa_enabled', default: false })
   is2faEnabled: boolean;
 
-  /** SHA-256 hash of the current OTP code */
   @Column({ name: 'otp_code', type: 'text', nullable: true, default: null })
   otpCode: string | null;
 
-  /** When the current OTP expires */
   @Column({ name: 'otp_expiry', type: 'timestamptz', nullable: true, default: null })
   otpExpiry: Date | null;
 
-  // ─── Magic Link ───────────────────────────────────────────────────────────
+  // ─── TOTP (Authenticator App) ─────────────────────────────────────────────
 
-  /** SHA-256 hash of the one-time magic link token */
-  @Column({ name: 'magic_link_token', type: 'text', nullable: true, default: null })
-  magicLinkToken: string | null;
+  @Column({ name: 'totp_secret', type: 'text', nullable: true, default: null })
+  totpSecret: string | null;
 
-  /** When the magic link token expires */
-  @Column({ name: 'magic_link_expiry', type: 'timestamptz', nullable: true, default: null })
-  magicLinkExpiry: Date | null;
+  @Column({ name: 'totp_enabled', default: false })
+  totpEnabled: boolean;
 
   // ─── Timestamps ───────────────────────────────────────────────────────────
 

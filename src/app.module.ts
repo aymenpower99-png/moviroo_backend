@@ -13,6 +13,7 @@ import { MailModule } from './mail/mail.module';        // ← ADD
 
 @Module({
   imports: [
+    
     ConfigModule.forRoot({
       isGlobal: true,
       load: [databaseConfig, jwtConfig, mailConfig],   // ← ADD mailConfig

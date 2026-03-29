@@ -7,19 +7,16 @@ import {
   HttpCode,
   Patch,
   Query,
+  Delete,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
-import {
-  VerifyOtpDto,
-  ResendOtpDto,
-  VerifyMagicLinkDto,
-  Toggle2faDto,
-} from './dto/verify-otp.dto';
+import { VerifyOtpDto, ResendOtpDto, Toggle2faDto } from './dto/verify-otp.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { User } from '../users/entites/user.entity';
+import { PassengerGuard } from '../common/guards/passenger.guard';
 
 @Controller('auth')
 export class AuthController {
@@ -27,15 +24,13 @@ export class AuthController {
 
   // ─── Register ─────────────────────────────────────────────────────────────
 
-  /** POST /auth/register → returns { requiresOtp, userId } */
   @Post('register')
   register(@Body() dto: RegisterDto) {
     return this.authService.register(dto);
   }
 
-  // ─── Verify Email (after register) ───────────────────────────────────────
+  // ─── Verify Email ─────────────────────────────────────────────────────────
 
-  /** POST /auth/verify-email → submit 6-digit code from email */
   @Post('verify-email')
   @HttpCode(200)
   verifyEmail(@Body() dto: VerifyOtpDto) {
@@ -44,14 +39,12 @@ export class AuthController {
 
   // ─── Login ────────────────────────────────────────────────────────────────
 
-  /** POST /auth/login → if 2FA off: tokens. If 2FA on: { requiresOtp, preAuthToken } */
   @Post('login')
   @HttpCode(200)
   login(@Body() dto: LoginDto) {
     return this.authService.login(dto);
   }
 
-  /** POST /auth/login/verify-otp → step 2 when 2FA is ON */
   @Post('login/verify-otp')
   @HttpCode(200)
   verifyLoginOtp(@Body() body: { preAuthToken: string; code: string }) {
@@ -60,7 +53,6 @@ export class AuthController {
 
   // ─── Resend OTP ───────────────────────────────────────────────────────────
 
-  /** POST /auth/resend-otp */
   @Post('resend-otp')
   @HttpCode(200)
   resendOtp(
@@ -70,35 +62,42 @@ export class AuthController {
     return this.authService.resendOtp(dto.userId, purpose);
   }
 
-  // ─── Magic Link ───────────────────────────────────────────────────────────
+  // ─── TOTP Setup (passengers only) ────────────────────────────────────────
 
-  /** POST /auth/magic-link → request a magic sign-in link */
-  @Post('magic-link')
+  @Post('2fa/totp/setup')
+  @UseGuards(AuthGuard('jwt'), PassengerGuard)
   @HttpCode(200)
-  requestMagicLink(@Body() body: { email: string }) {
-    return this.authService.requestMagicLink(body.email);
+  setupTotp(@CurrentUser() user: User) {
+    return this.authService.setupTotp(user);
   }
 
-  /** GET /auth/magic-link/verify?token=xxx → user clicks link from email */
-  @Get('magic-link/verify')
-  verifyMagicLink(@Query('token') token: string) {
-    return this.authService.verifyMagicLink(token);
+  @Post('2fa/totp/confirm')
+  @UseGuards(AuthGuard('jwt'), PassengerGuard)
+  @HttpCode(200)
+  confirmTotpSetup(
+    @CurrentUser() user: User,
+    @Body() body: { code: string },
+  ) {
+    return this.authService.confirmTotpSetup(user.id, body.code);
   }
 
-  // ─── 2FA Settings (requires login) ───────────────────────────────────────
+  @Delete('2fa/totp')
+  @UseGuards(AuthGuard('jwt'), PassengerGuard)
+  @HttpCode(200)
+  disableTotp(@CurrentUser() user: User) {
+    return this.authService.disableTotp(user.id);
+  }
 
-  /** PATCH /auth/2fa → { enabled: true/false } from the settings screen */
+  // ─── Email 2FA ────────────────────────────────────────────────────────────
+
   @Patch('2fa')
   @UseGuards(AuthGuard('jwt'))
   @HttpCode(200)
-  toggle2fa(
-    @CurrentUser() user: User,
-    @Body() dto: Toggle2faDto,
-  ) {
+  toggle2fa(@CurrentUser() user: User, @Body() dto: Toggle2faDto) {
     return this.authService.toggle2fa(user.id, dto.enabled);
   }
 
-  // ─── Refresh / Logout / Me (unchanged) ───────────────────────────────────
+  // ─── Refresh / Logout / Me ────────────────────────────────────────────────
 
   @Post('refresh')
   @UseGuards(AuthGuard('jwt-refresh'))
@@ -117,7 +116,7 @@ export class AuthController {
   @Get('me')
   @UseGuards(AuthGuard('jwt'))
   me(@CurrentUser() user: User) {
-    const { password, refreshToken, otpCode, magicLinkToken, ...safe } = user;
+    const { password, refreshToken, otpCode, totpSecret, ...safe } = user;
     return safe;
   }
 }

@@ -8,16 +8,18 @@ import { JwtStrategy } from './strategies/jwt.strategy';
 import { JwtRefreshStrategy } from './strategies/jwt-refresh.strategy';
 import { User } from '../users/entites/user.entity';
 import { OtpService } from '../otp/otp.service';
-import { MailModule } from '../mail/mail.module';   // ← ADD THIS
+import { MailModule } from '../mail/mail.module';
+import { PassengerEntity } from '../passenger/entities/passengers.entity';
+import { PassengerGuard } from '../common/guards/passenger.guard';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User]),
+    TypeOrmModule.forFeature([User, PassengerEntity]),
     JwtModule.register({}),
-    MailModule,                                      // ← ADD THIS
+    MailModule,
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, JwtRefreshStrategy, OtpService],
+  providers: [AuthService, JwtStrategy, JwtRefreshStrategy, OtpService, PassengerGuard],
   exports: [AuthService],
 })
 export class AuthModule {}

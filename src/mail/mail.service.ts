@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
 
-const LOGO_URL    = 'https://res.cloudinary.com/dox9rfabz/image/upload/f_auto,q_auto/ls2_b5rolr';
+const LOGO_URL    = 'https://res.cloudinary.com/dox9rfabz/image/upload/v1774816416/ls2-removebg-preview_azlsfa.png';
 const BRAND_COLOR = '#7C3AED';
 const BRAND_DARK  = '#5B21B6';
 
@@ -19,8 +19,6 @@ const baseTemplate = (content: string) => `
     <tr>
       <td align="center">
         <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
-
-          <!-- Header: clean white with logo only -->
           <tr>
             <td align="center" style="
               background:#ffffff;
@@ -30,24 +28,16 @@ const baseTemplate = (content: string) => `
               border-right:1px solid #E5E7EB;
               border-top:1px solid #E5E7EB;
             ">
-              <img
-                src="${LOGO_URL}"
-                alt="Moviroo"
-                width="140"
-                style="display:block;height:auto;margin:0 auto;"
-              />
+              <img src="${LOGO_URL}" alt="Moviroo" width="140"
+                style="display:block;height:auto;margin:0 auto;" />
             </td>
           </tr>
-
-          <!-- Purple accent line under logo -->
           <tr>
             <td style="
               height:4px;
               background:linear-gradient(90deg, ${BRAND_COLOR} 0%, ${BRAND_DARK} 100%);
             "></td>
           </tr>
-
-          <!-- Body -->
           <tr>
             <td style="
               background:#ffffff;
@@ -58,8 +48,6 @@ const baseTemplate = (content: string) => `
               ${content}
             </td>
           </tr>
-
-          <!-- Footer -->
           <tr>
             <td style="
               background:#F9FAFB;
@@ -78,7 +66,6 @@ const baseTemplate = (content: string) => `
               </p>
             </td>
           </tr>
-
         </table>
       </td>
     </tr>
@@ -102,15 +89,10 @@ const otpTemplate = (
       ? 'Welcome to Moviroo! Use the code below to verify your email address and activate your account.'
       : 'Use the code below to complete your sign-in. This code is valid for a limited time.'}
   </p>
-
   <hr style="border:none;border-top:1px solid #E5E7EB;margin:0 0 28px;" />
-
-  <!-- Label -->
   <p style="margin:0 0 12px;font-size:11px;font-weight:700;color:#9CA3AF;text-transform:uppercase;letter-spacing:1.5px;">
     Your verification code
   </p>
-
-  <!-- OTP Box -->
   <div style="
     background:#F5F3FF;
     border:2px dashed ${BRAND_COLOR};
@@ -127,8 +109,6 @@ const otpTemplate = (
       font-family:'Courier New',monospace;
     ">${code}</span>
   </div>
-
-  <!-- Expiry warning -->
   <div style="
     background:#FFFBEB;
     border-left:4px solid #F59E0B;
@@ -141,61 +121,9 @@ const otpTemplate = (
       Never share this code with anyone — Moviroo will never ask for it.
     </p>
   </div>
-
   <p style="margin:0;font-size:13px;color:#9CA3AF;text-align:center;">
     Did not request this?
     <a href="mailto:support@moviroo.com" style="color:${BRAND_COLOR};text-decoration:none;font-weight:600;">Contact support</a>
-  </p>
-`);
-
-const magicLinkTemplate = (firstName: string, link: string) => baseTemplate(`
-  <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#111827;">
-    Your sign-in link
-  </h1>
-  <p style="margin:0 0 28px;font-size:15px;color:#6B7280;line-height:1.6;">
-    Hi <strong style="color:#111827;">${firstName}</strong>,<br/>
-    Click the button below to sign in to your Moviroo account.
-    This link is valid for 15 minutes and can only be used once.
-  </p>
-
-  <hr style="border:none;border-top:1px solid #E5E7EB;margin:0 0 28px;" />
-
-  <!-- CTA Button -->
-  <div style="text-align:center;margin-bottom:28px;">
-    <a href="${link}" style="
-      display:inline-block;
-      background:linear-gradient(135deg, ${BRAND_COLOR} 0%, ${BRAND_DARK} 100%);
-      color:#ffffff;
-      font-size:15px;
-      font-weight:700;
-      padding:16px 48px;
-      border-radius:10px;
-      text-decoration:none;
-      letter-spacing:0.3px;
-    ">
-      Sign in to Moviroo
-    </a>
-  </div>
-
-  <!-- Expiry -->
-  <div style="
-    background:#FFFBEB;
-    border-left:4px solid #F59E0B;
-    border-radius:6px;
-    padding:14px 16px;
-    margin-bottom:28px;
-  ">
-    <p style="margin:0;font-size:13px;color:#92400E;line-height:1.5;">
-      This link expires in <strong>15 minutes</strong> and can only be used once.
-    </p>
-  </div>
-
-  <!-- Fallback URL -->
-  <p style="margin:0 0 6px;font-size:12px;color:#9CA3AF;text-align:center;">
-    If the button does not work, copy and paste this link into your browser:
-  </p>
-  <p style="margin:0;font-size:11px;text-align:center;word-break:break-all;">
-    <a href="${link}" style="color:${BRAND_COLOR};text-decoration:none;">${link}</a>
   </p>
 `);
 
@@ -234,23 +162,5 @@ export class MailService {
     });
 
     this.logger.log(`OTP email sent to ${to} [${purpose}]`);
-  }
-
-  async sendMagicLink(
-    to: string,
-    firstName: string,
-    token: string,
-  ): Promise<void> {
-    const baseUrl = this.config.get<string>('app.frontendUrl');
-    const link    = `${baseUrl}/auth/magic-link?token=${token}`;
-
-    await this.transporter.sendMail({
-      from:    `"Moviroo" <${this.config.get<string>('mail.from')}>`,
-      to,
-      subject: 'Moviroo – Your sign-in link',
-      html:    magicLinkTemplate(firstName, link),
-    });
-
-    this.logger.log(`Magic link email sent to ${to}`);
   }
 }

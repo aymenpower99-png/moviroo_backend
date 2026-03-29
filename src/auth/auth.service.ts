@@ -2,7 +2,6 @@ import {
   Injectable,
   ConflictException,
   UnauthorizedException,
-  ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -20,21 +19,20 @@ interface JwtPayload {
   email: string;
 }
 
-// Intermediate token issued after password check when 2FA is ON.
-// Short-lived (10 min), only used to verify the OTP step.
 interface PreAuthPayload {
   sub:     string;
   email:   string;
   preAuth: true;
+  method:  'email' | 'totp';
 }
 
 @Injectable()
 export class AuthService {
   constructor(
     @InjectRepository(User) private userRepo: Repository<User>,
-    private jwtService: JwtService,
-    private config:     ConfigService,
-    private otpService: OtpService,
+    private jwtService:  JwtService,
+    private config:      ConfigService,
+    private otpService:  OtpService,
     private mailService: MailService,
   ) {}
 
@@ -54,32 +52,27 @@ export class AuthService {
     });
     await this.userRepo.save(user);
 
-    // Always send email-verification OTP on register
     const code = await this.otpService.generateOtp(user.id);
     await this.mailService.sendOtp(user.email, user.firstName, code, 'verify-email');
 
     return {
       message:     'Registration successful. Check your email for a verification code.',
       requiresOtp: true,
-      userId:      user.id,   // frontend needs this to call POST /auth/verify-email
+      userId:      user.id,
     };
   }
 
-  // ─── Verify Email (OTP after register) ────────────────────────────────────
+  // ─── Verify Email ─────────────────────────────────────────────────────────
 
   async verifyEmail(userId: string, code: string) {
-    await this.otpService.verifyOtp(userId, code); // throws on bad/expired code
-
+    await this.otpService.verifyOtp(userId, code);
     await this.userRepo.update(userId, { emailVerified: true });
 
     const user   = await this.userRepo.findOneOrFail({ where: { id: userId } });
     const tokens = await this.generateTokens(user);
     await this.saveRefreshToken(user.id, tokens.refreshToken);
 
-    return {
-      ...tokens,
-      user: this.safeUser(user),
-    };
+    return { ...tokens, user: this.safeUser(user) };
   }
 
   // ─── Login ────────────────────────────────────────────────────────────────
@@ -92,7 +85,6 @@ export class AuthService {
     if (!valid) throw new UnauthorizedException('Invalid credentials');
 
     if (!user.emailVerified) {
-      // Re-send verification OTP and force them to verify first
       const code = await this.otpService.generateOtp(user.id);
       await this.mailService.sendOtp(user.email, user.firstName, code, 'verify-email');
       return {
@@ -103,36 +95,37 @@ export class AuthService {
       };
     }
 
-    if (user.is2faEnabled) {
-      // Step 1 of 2: issue short-lived pre-auth token, send OTP
-      const code       = await this.otpService.generateOtp(user.id);
-      await this.mailService.sendOtp(user.email, user.firstName, code, 'login');
-
-      const preAuthToken = await this.jwtService.signAsync(
-        { sub: user.id, email: user.email, preAuth: true } satisfies PreAuthPayload,
-        {
-          secret:    this.config.get<string>('jwt.accessSecret')!,
-          expiresIn: '10m',
-        },
-      );
-
+    // TOTP takes priority over email OTP
+    if (user.totpEnabled) {
+      const preAuthToken = await this.issuePreAuthToken(user, 'totp');
       return {
-        message:      'Check your email for a verification code.',
-        requiresOtp:  true,
-        stage:        'login-otp',
-        preAuthToken, // frontend sends this back with the OTP code
+        message:     'Enter the code from your authenticator app.',
+        requiresOtp: true,
+        stage:       'login-totp',
+        preAuthToken,
       };
     }
 
-    // No 2FA → issue full tokens immediately
+    if (user.is2faEnabled) {
+      const code = await this.otpService.generateOtp(user.id);
+      await this.mailService.sendOtp(user.email, user.firstName, code, 'login');
+      const preAuthToken = await this.issuePreAuthToken(user, 'email');
+      return {
+        message:     'Check your email for a verification code.',
+        requiresOtp: true,
+        stage:       'login-otp',
+        preAuthToken,
+      };
+    }
+
+    // No 2FA
     await this.userRepo.update(user.id, { lastLoginAt: new Date() });
     const tokens = await this.generateTokens(user);
     await this.saveRefreshToken(user.id, tokens.refreshToken);
-
     return { ...tokens, user: this.safeUser(user) };
   }
 
-  // ─── Verify Login OTP (step 2 when 2FA is ON) ─────────────────────────────
+  // ─── Verify Login OTP (email or TOTP) ────────────────────────────────────
 
   async verifyLoginOtp(preAuthToken: string, code: string) {
     let payload: PreAuthPayload;
@@ -146,14 +139,17 @@ export class AuthService {
 
     if (!payload.preAuth) throw new UnauthorizedException('Invalid token type');
 
-    await this.otpService.verifyOtp(payload.sub, code); // throws on bad code
+    if (payload.method === 'totp') {
+      await this.otpService.verifyTotpCode(payload.sub, code);
+    } else {
+      await this.otpService.verifyOtp(payload.sub, code);
+    }
 
     const user = await this.userRepo.findOneOrFail({ where: { id: payload.sub } });
     await this.userRepo.update(user.id, { lastLoginAt: new Date() });
 
     const tokens = await this.generateTokens(user);
     await this.saveRefreshToken(user.id, tokens.refreshToken);
-
     return { ...tokens, user: this.safeUser(user) };
   }
 
@@ -165,38 +161,26 @@ export class AuthService {
 
     const code = await this.otpService.generateOtp(user.id);
     await this.mailService.sendOtp(user.email, user.firstName, code, purpose);
-
     return { message: 'A new verification code has been sent to your email.' };
   }
 
-  // ─── Magic Link ───────────────────────────────────────────────────────────
+  // ─── TOTP Setup ───────────────────────────────────────────────────────────
 
-  async requestMagicLink(email: string) {
-    const user = await this.userRepo.findOne({ where: { email } });
-    // Always return same message to prevent email enumeration
-    if (!user) return { message: 'If that email exists, a magic link has been sent.' };
-
-    const token = await this.otpService.generateMagicToken(user.id);
-    await this.mailService.sendMagicLink(user.email, user.firstName, token);
-
-    return { message: 'If that email exists, a magic link has been sent.' };
+  async setupTotp(user: User) {
+    return this.otpService.generateTotpSecret(user);
   }
 
-  async verifyMagicLink(rawToken: string) {
-    const user = await this.otpService.verifyMagicToken(rawToken); // throws on bad/expired
-
-    if (!user.emailVerified) {
-      await this.userRepo.update(user.id, { emailVerified: true });
-    }
-
-    await this.userRepo.update(user.id, { lastLoginAt: new Date() });
-    const tokens = await this.generateTokens(user);
-    await this.saveRefreshToken(user.id, tokens.refreshToken);
-
-    return { ...tokens, user: this.safeUser(user) };
+  async confirmTotpSetup(userId: string, code: string) {
+    await this.otpService.verifyAndEnableTotp(userId, code);
+    return { message: 'Authenticator app linked successfully.', totpEnabled: true };
   }
 
-  // ─── Toggle 2FA (from settings screen) ───────────────────────────────────
+  async disableTotp(userId: string) {
+    await this.otpService.disableTotp(userId);
+    return { message: 'Authenticator app unlinked.', totpEnabled: false };
+  }
+
+  // ─── Toggle email 2FA ─────────────────────────────────────────────────────
 
   async toggle2fa(userId: string, enable: boolean) {
     await this.userRepo.update(userId, { is2faEnabled: enable });
@@ -208,7 +192,7 @@ export class AuthService {
     };
   }
 
-  // ─── Refresh / Logout / Me (unchanged) ───────────────────────────────────
+  // ─── Refresh / Logout ─────────────────────────────────────────────────────
 
   async refresh(user: User) {
     const tokens = await this.generateTokens(user);
@@ -223,9 +207,18 @@ export class AuthService {
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
 
+  private async issuePreAuthToken(user: User, method: 'email' | 'totp') {
+    return this.jwtService.signAsync(
+      { sub: user.id, email: user.email, preAuth: true, method } satisfies PreAuthPayload,
+      {
+        secret:    this.config.get<string>('jwt.accessSecret')!,
+        expiresIn: '10m',
+      },
+    );
+  }
+
   private async generateTokens(user: User) {
     const payload: JwtPayload = { sub: user.id, email: user.email };
-
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(payload, {
         secret:    this.config.get<string>('jwt.accessSecret')!,
@@ -236,7 +229,6 @@ export class AuthService {
         expiresIn: '7d',
       }),
     ]);
-
     return { accessToken, refreshToken };
   }
 
@@ -246,7 +238,7 @@ export class AuthService {
   }
 
   private safeUser(user: User) {
-    const { password, refreshToken, otpCode, magicLinkToken, ...safe } = user;
+    const { password, refreshToken, otpCode, totpSecret, ...safe } = user;
     return safe;
   }
 }

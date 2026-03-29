@@ -5,12 +5,13 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { randomInt, randomBytes, createHash } from 'crypto';
+import { randomInt, createHash } from 'crypto';
+import { authenticator } from '@otplib/preset-default';
+import * as QRCode from 'qrcode';
 import { User } from '../users/entites/user.entity';
 
-const OTP_TTL_MS        = 10 * 60 * 1000;  // 10 minutes
-const MAGIC_LINK_TTL_MS = 15 * 60 * 1000;  // 15 minutes
-const OTP_LENGTH        = 6;
+const OTP_TTL_MS = 10 * 60 * 1000;
+const OTP_LENGTH = 6;
 
 @Injectable()
 export class OtpService {
@@ -19,22 +20,20 @@ export class OtpService {
     private readonly userRepo: Repository<User>,
   ) {}
 
-  // ─── Generate & persist OTP ───────────────────────────────────────────────
+  // ─── Email OTP ────────────────────────────────────────────────────────────
 
   async generateOtp(userId: string): Promise<string> {
-    const code    = this.makeCode();
-    const hashed  = this.hash(code);
-    const expiry  = new Date(Date.now() + OTP_TTL_MS);
+    const code   = this.makeCode();
+    const hashed = this.hash(code);
+    const expiry = new Date(Date.now() + OTP_TTL_MS);
 
     await this.userRepo.update(userId, {
       otpCode:   hashed,
       otpExpiry: expiry,
     });
 
-    return code; // plain code → send via email
+    return code;
   }
-
-  // ─── Verify OTP ───────────────────────────────────────────────────────────
 
   async verifyOtp(userId: string, code: string): Promise<void> {
     const user = await this.userRepo.findOne({ where: { id: userId } });
@@ -57,43 +56,6 @@ export class OtpService {
     await this.clearOtp(userId);
   }
 
-  // ─── Generate & persist Magic Link token ──────────────────────────────────
-
-  async generateMagicToken(userId: string): Promise<string> {
-    const raw    = randomBytes(32).toString('hex');   // 64-char hex
-    const hashed = this.hash(raw);
-    const expiry = new Date(Date.now() + MAGIC_LINK_TTL_MS);
-
-    await this.userRepo.update(userId, {
-      magicLinkToken:  hashed,
-      magicLinkExpiry: expiry,
-    });
-
-    return raw; // plain token → embed in URL
-  }
-
-  // ─── Verify Magic Link token, return user ─────────────────────────────────
-
-  async verifyMagicToken(rawToken: string): Promise<User> {
-    const hashed = this.hash(rawToken);
-
-    const user = await this.userRepo.findOne({
-      where: { magicLinkToken: hashed },
-    });
-
-    if (!user) throw new UnauthorizedException('Invalid magic link');
-
-    if (!user.magicLinkExpiry || new Date() > user.magicLinkExpiry) {
-      await this.clearMagicToken(user.id);
-      throw new BadRequestException('Magic link expired');
-    }
-
-    await this.clearMagicToken(user.id);
-    return user;
-  }
-
-  // ─── Cleanup helpers ──────────────────────────────────────────────────────
-
   async clearOtp(userId: string): Promise<void> {
     await this.userRepo.update(userId, {
       otpCode:   null,
@@ -101,17 +63,50 @@ export class OtpService {
     });
   }
 
-  async clearMagicToken(userId: string): Promise<void> {
+  // ─── TOTP (Authenticator App) ─────────────────────────────────────────────
+
+  async generateTotpSecret(user: User): Promise<{ secret: string; qrCodeUrl: string; otpauthUrl: string }> {
+    const secret     = authenticator.generateSecret();
+    const otpauthUrl = authenticator.keyuri(user.email, 'Moviroo', secret);
+    const qrCodeUrl  = await (QRCode.toDataURL as Function)(otpauthUrl) as string;
+
+    await this.userRepo.update(user.id, { totpSecret: secret });
+
+    return { secret, qrCodeUrl, otpauthUrl };
+  }
+
+  async verifyAndEnableTotp(userId: string, code: string): Promise<void> {
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) throw new UnauthorizedException('User not found');
+    if (!user.totpSecret) throw new BadRequestException('TOTP setup not started');
+
+    const isValid = authenticator.verify({ token: code, secret: user.totpSecret });
+    if (!isValid) throw new UnauthorizedException('Invalid authenticator code');
+
+    await this.userRepo.update(userId, { totpEnabled: true });
+  }
+
+  async verifyTotpCode(userId: string, code: string): Promise<void> {
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) throw new UnauthorizedException('User not found');
+    if (!user.totpSecret || !user.totpEnabled) {
+      throw new BadRequestException('TOTP not enabled');
+    }
+
+    const isValid = authenticator.verify({ token: code, secret: user.totpSecret });
+    if (!isValid) throw new UnauthorizedException('Invalid authenticator code');
+  }
+
+  async disableTotp(userId: string): Promise<void> {
     await this.userRepo.update(userId, {
-      magicLinkToken:  null,
-      magicLinkExpiry: null,
+      totpSecret:  null,
+      totpEnabled: false,
     });
   }
 
   // ─── Private utils ────────────────────────────────────────────────────────
 
   private makeCode(): string {
-    // Cryptographically random 6-digit code, zero-padded
     return randomInt(0, 999999).toString().padStart(OTP_LENGTH, '0');
   }
 

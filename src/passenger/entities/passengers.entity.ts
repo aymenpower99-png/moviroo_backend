@@ -14,8 +14,9 @@ export enum MembershipLevel {
   GO    = 'Moviroo Go',
   MAX   = 'Moviroo Max',
   ELITE = 'Moviroo Elite',
-  VIP   = 'Moviroo VIP',
+  VIP   = 'Moviroo Vip',  // ← lowercase p
 }
+
 
 export enum VehicleType {
   STANDARD = 'standard',
@@ -26,8 +27,6 @@ export enum VehicleType {
 
 export enum PaymentMethod {
   CARD = 'card',
-  // CASH   = 'cash'    ← add later
-  // WALLET = 'wallet'  ← add later
 }
 
 export interface PaymentAddress {
@@ -45,7 +44,7 @@ export class PassengerEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ name: 'user_id', unique: true })
+  @Column({ name: 'user_id', type: 'uuid', unique: true })
   userId: string;
 
   @OneToOne(() => User, { onDelete: 'CASCADE' })
@@ -61,7 +60,7 @@ export class PassengerEntity {
   })
   preferredVehicleType: VehicleType;
 
-  // ─── Payment (card only for now) ─────────────────────────────────────────
+  // ─── Payment ──────────────────────────────────────────────────────────────
   @Column({
     name: 'default_payment_method',
     type: 'enum',
@@ -70,12 +69,12 @@ export class PassengerEntity {
   })
   defaultPaymentMethod: PaymentMethod | null;
 
-  // ─── Payment Addresses ──────────────────────────────────────────────────────
+  // ─── Payment Addresses ────────────────────────────────────────────────────
   @Column({ name: 'payment_addresses', type: 'jsonb', nullable: true })
   paymentAddresses: PaymentAddress[] | null;
 
   // ─── Stripe ───────────────────────────────────────────────────────────────
-  @Column({ name: 'stripe_customer_id', length: 255, unique: true, nullable: true })
+  @Column({ name: 'stripe_customer_id', type: 'varchar', length: 255, unique: true, nullable: true })
   stripeCustomerId: string | null;
 
   // ─── Loyalty & Membership ─────────────────────────────────────────────────
@@ -101,10 +100,10 @@ export class PassengerEntity {
   totalRatings: number;
 
   // ─── Emergency Contact ────────────────────────────────────────────────────
-  @Column({ name: 'emergency_contact_name', length: 100, nullable: true })
+  @Column({ name: 'emergency_contact_name', type: 'varchar', length: 100, nullable: true })
   emergencyContactName: string | null;
 
-  @Column({ name: 'emergency_contact_phone', length: 20, nullable: true })
+  @Column({ name: 'emergency_contact_phone', type: 'varchar', length: 20, nullable: true })
   emergencyContactPhone: string | null;
 
   // ─── Misc ─────────────────────────────────────────────────────────────────
@@ -112,7 +111,7 @@ export class PassengerEntity {
   newsletterOptIn: boolean;
 
   // ─── Referral ─────────────────────────────────────────────────────────────
-  @Column({ name: 'referral_code', length: 20, unique: true, nullable: true })
+  @Column({ name: 'referral_code', type: 'varchar', length: 20, unique: true, nullable: true })
   referralCode: string | null;
 
   @Column({ name: 'referred_by', type: 'uuid', nullable: true })
