@@ -1,10 +1,17 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, DeleteDateColumn } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  UpdateDateColumn,
+  DeleteDateColumn,
+} from 'typeorm';
 
 export enum UserRole {
   SUPER_ADMIN = 'super_admin',
-  AGENCY = 'agency',
-  DRIVER = 'driver',
-  PASSENGER = 'passenger',
+  AGENCY      = 'agency',
+  DRIVER      = 'driver',
+  PASSENGER   = 'passenger',
 }
 
 @Entity('users')
@@ -18,7 +25,7 @@ export class User {
   @Column({ unique: true, nullable: true })
   phone: string;
 
-  @Column({ name: 'password_hash' })   // ← maps to password_hash in DB
+  @Column({ name: 'password_hash' })
   password: string;
 
   @Column({ name: 'first_name', length: 100 })
@@ -50,6 +57,32 @@ export class User {
 
   @Column({ name: 'last_login_at', nullable: true })
   lastLoginAt: Date;
+
+  // ─── 2-Step Verification (email OTP) ──────────────────────────────────────
+
+  /** User explicitly toggled email 2FA ON from the settings screen */
+  @Column({ name: 'is_2fa_enabled', default: false })
+  is2faEnabled: boolean;
+
+  /** SHA-256 hash of the current OTP code */
+  @Column({ name: 'otp_code', type: 'text', nullable: true, default: null })
+  otpCode: string | null;
+
+  /** When the current OTP expires */
+  @Column({ name: 'otp_expiry', type: 'timestamptz', nullable: true, default: null })
+  otpExpiry: Date | null;
+
+  // ─── Magic Link ───────────────────────────────────────────────────────────
+
+  /** SHA-256 hash of the one-time magic link token */
+  @Column({ name: 'magic_link_token', type: 'text', nullable: true, default: null })
+  magicLinkToken: string | null;
+
+  /** When the magic link token expires */
+  @Column({ name: 'magic_link_expiry', type: 'timestamptz', nullable: true, default: null })
+  magicLinkExpiry: Date | null;
+
+  // ─── Timestamps ───────────────────────────────────────────────────────────
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

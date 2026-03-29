@@ -1,4 +1,12 @@
-import { IsEmail, IsString, MinLength, MaxLength, IsOptional, IsEnum, Matches } from 'class-validator';
+import {
+  IsEmail,
+  IsString,
+  MinLength,
+  MaxLength,
+  IsOptional,
+  IsEnum,
+  Matches,
+} from 'class-validator';
 import { UserRole } from '../../users/entites/user.entity';
 
 export class RegisterDto {
@@ -15,9 +23,10 @@ export class RegisterDto {
   @IsEmail()
   email: string;
 
+  @IsOptional()
   @IsString()
   @Matches(/^\+?[0-9]{8,15}$/, { message: 'Invalid phone number' })
-  phone: string;
+  phone?: string;
 
   @IsString()
   @MinLength(8)
