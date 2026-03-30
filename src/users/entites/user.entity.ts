@@ -9,9 +9,9 @@ import {
 
 export enum UserRole {
   SUPER_ADMIN = 'super_admin',
-  AGENCY      = 'agency',
-  DRIVER      = 'driver',
-  PASSENGER   = 'passenger',
+  AGENCY = 'agency',
+  DRIVER = 'driver',
+  PASSENGER = 'passenger',
 }
 
 @Entity('users')
@@ -21,6 +21,13 @@ export class User {
 
   @Column({ unique: true })
   email: string;
+
+  @Column({
+    type: 'enum',
+    enum: UserRole,
+    default: UserRole.PASSENGER,
+  })
+  role: UserRole;
 
   @Column({ unique: true, nullable: true })
   phone: string;
@@ -52,7 +59,12 @@ export class User {
   @Column({ name: 'ban_reason', nullable: true })
   banReason: string;
 
-  @Column({ name: 'refresh_token', type: 'text', nullable: true, default: null })
+  @Column({
+    name: 'refresh_token',
+    type: 'text',
+    nullable: true,
+    default: null,
+  })
   refreshToken: string | null;
 
   @Column({ name: 'last_login_at', nullable: true })
@@ -66,7 +78,12 @@ export class User {
   @Column({ name: 'otp_code', type: 'text', nullable: true, default: null })
   otpCode: string | null;
 
-  @Column({ name: 'otp_expiry', type: 'timestamptz', nullable: true, default: null })
+  @Column({
+    name: 'otp_expiry',
+    type: 'timestamptz',
+    nullable: true,
+    default: null,
+  })
   otpExpiry: Date | null;
 
   // ─── TOTP (Authenticator App) ─────────────────────────────────────────────

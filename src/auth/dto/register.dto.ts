@@ -32,7 +32,7 @@ export class RegisterDto {
   @MinLength(8)
   password: string;
 
-  @IsEnum(UserRole)
   @IsOptional()
+  @IsEnum(UserRole)
   role?: UserRole;
 }
