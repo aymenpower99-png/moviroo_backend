@@ -6,6 +6,9 @@ const LOGO_URL    = 'https://res.cloudinary.com/dox9rfabz/image/upload/v17748164
 const BRAND_COLOR = '#7C3AED';
 const BRAND_DARK  = '#5B21B6';
 
+
+
+
 const baseTemplate = (content: string) => `
 <!DOCTYPE html>
 <html lang="en">
@@ -127,6 +130,8 @@ const otpTemplate = (
   </p>
 `);
 
+
+
 @Injectable()
 export class MailService {
   private readonly logger = new Logger(MailService.name);
@@ -163,4 +168,25 @@ export class MailService {
 
     this.logger.log(`OTP email sent to ${to} [${purpose}]`);
   }
+  async sendInvitation(email: string, firstName: string, activationLink: string) {
+  await this.transporter.sendMail({
+    to:      email,
+    subject: "You've been invited to Moviroo",
+    html: `
+      <h2>Hello ${firstName},</h2>
+      <p>You've been invited to join Moviroo. Click the button below to set your password and activate your account.</p>
+      <p>
+        <a href="${activationLink}"
+           style="display:inline-block;padding:12px 24px;background:#4F46E5;color:#fff;border-radius:6px;text-decoration:none;font-weight:bold;">
+          Activate Account
+        </a>
+      </p>
+      <p>Or copy this link into your browser:</p>
+      <p>${activationLink}</p>
+      <p><small>This link expires in 72 hours. If you did not expect this invitation, you can ignore this email.</small></p>
+    `,
+  });
+}
+
+  
 }

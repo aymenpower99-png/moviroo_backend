@@ -14,6 +14,12 @@ export enum UserRole {
   PASSENGER = 'passenger',
 }
 
+export enum UserStatus {
+  PENDING = 'pending',
+  ACTIVE = 'active',
+  BLOCKED = 'blocked',
+}
+
 @Entity('users')
 export class User {
   @PrimaryGeneratedColumn('uuid')
@@ -22,18 +28,16 @@ export class User {
   @Column({ unique: true })
   email: string;
 
-  @Column({
-    type: 'enum',
-    enum: UserRole,
-    default: UserRole.PASSENGER,
-  })
-  role: UserRole;
-
   @Column({ unique: true, nullable: true })
   phone: string;
 
-  @Column({ name: 'password_hash' })
-  password: string;
+  @Column({
+    name: 'password_hash',
+    type: 'text',
+    nullable: true,
+    default: null,
+  })
+  password: string | null;
 
   @Column({ name: 'first_name', length: 100 })
   firstName: string;
@@ -69,6 +73,21 @@ export class User {
 
   @Column({ name: 'last_login_at', nullable: true })
   lastLoginAt: Date;
+
+  // ─── Role ──────────────────────────────────────────────────────────────────
+
+  @Column({ type: 'enum', enum: UserRole, default: UserRole.PASSENGER })
+  role: UserRole;
+
+  // ─── Status ────────────────────────────────────────────────────────────────
+
+  @Column({ type: 'enum', enum: UserStatus, default: UserStatus.PENDING })
+  status: UserStatus;
+
+  // ─── Invitation Token ──────────────────────────────────────────────────────
+
+  @Column({ name: 'invite_token', type: 'text', nullable: true, default: null })
+  inviteToken: string | null;
 
   // ─── 2-Step Verification (email OTP) ──────────────────────────────────────
 

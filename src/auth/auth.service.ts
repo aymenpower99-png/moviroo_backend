@@ -2,13 +2,14 @@ import {
   Injectable,
   ConflictException,
   UnauthorizedException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
-import { User } from '../users/entites/user.entity';
+import { User, UserStatus } from '../users/entites/user.entity';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { OtpService } from '../otp/otp.service';
@@ -49,6 +50,7 @@ export class AuthService {
       email:     dto.email,
       phone:     dto.phone,
       password:  hashed,
+      status:    UserStatus.PENDING,
     });
     await this.userRepo.save(user);
 
@@ -66,7 +68,10 @@ export class AuthService {
 
   async verifyEmail(userId: string, code: string) {
     await this.otpService.verifyOtp(userId, code);
-    await this.userRepo.update(userId, { emailVerified: true });
+    await this.userRepo.update(userId, {
+      emailVerified: true,
+      status:        UserStatus.ACTIVE,
+    });
 
     const user   = await this.userRepo.findOneOrFail({ where: { id: userId } });
     const tokens = await this.generateTokens(user);
@@ -81,8 +86,18 @@ export class AuthService {
     const user = await this.userRepo.findOne({ where: { email: dto.email } });
     if (!user) throw new UnauthorizedException('Invalid credentials');
 
+    // Invited users have no password — reject with meaningful message
+    if (!user.password) throw new UnauthorizedException('Invalid credentials');
+
     const valid = await bcrypt.compare(dto.password, user.password);
     if (!valid) throw new UnauthorizedException('Invalid credentials');
+
+    // ─── Status checks ────────────────────────────────────────────────────
+    if (user.status === UserStatus.PENDING)
+      throw new UnauthorizedException('Please activate your account first. Check your invitation email.');
+
+    if (user.status === UserStatus.BLOCKED)
+      throw new ForbiddenException('Your account has been blocked. Please contact support.');
 
     if (!user.emailVerified) {
       const code = await this.otpService.generateOtp(user.id);
@@ -180,7 +195,7 @@ export class AuthService {
     return { message: 'Authenticator app unlinked.', totpEnabled: false };
   }
 
-  // ─── Toggle email 2FA ─────────────────────────────────────────────────────
+  // ─── Toggle email 2FA ────────────────────────────���────────────────────────
 
   async toggle2fa(userId: string, enable: boolean) {
     await this.userRepo.update(userId, { is2faEnabled: enable });
@@ -238,7 +253,7 @@ export class AuthService {
   }
 
   private safeUser(user: User) {
-    const { password, refreshToken, otpCode, totpSecret, ...safe } = user;
+    const { password, refreshToken, otpCode, totpSecret, inviteToken, ...safe } = user;
     return safe;
   }
 }

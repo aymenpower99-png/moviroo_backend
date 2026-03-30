@@ -6,23 +6,24 @@ import { AppService } from './app.service';
 
 import databaseConfig from './config/database.config';
 import jwtConfig from './config/jwt.config';
-import mailConfig from './config/mail.config';          // ← ADD
+import mailConfig from './config/mail.config';
 import { DatabaseModule } from './database/database.module';
 import { AuthModule } from './auth/auth.module';
-import { MailModule } from './mail/mail.module';        // ← ADD
+import { MailModule } from './mail/mail.module';
+import { AdminModule } from './admin/admin.module';   // ← ADD
 
 @Module({
   imports: [
-    
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [databaseConfig, jwtConfig, mailConfig],   // ← ADD mailConfig
+      load: [databaseConfig, jwtConfig, mailConfig],
     }),
     DatabaseModule,
-    MailModule,                                         // ← ADD
+    MailModule,
     AuthModule,
+    AdminModule,   // ← ADD
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers:   [AppService],
 })
 export class AppModule {}
