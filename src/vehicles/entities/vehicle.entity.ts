@@ -8,19 +8,19 @@ import {
 } from 'typeorm';
 
 export enum VehicleType {
-  ECONOMY     = 'Economy',
-  STANDARD    = 'Standard',
-  COMFORT     = 'Comfort',
+  ECONOMY = 'Economy',
+  STANDARD = 'Standard',
+  COMFORT = 'Comfort',
   FIRST_CLASS = 'First Class',
-  VAN         = 'Van',
-  MINI_BUS    = 'Mini Bus',
+  VAN = 'Van',
+  MINI_BUS = 'Mini Bus',
 }
 
 export enum VehicleStatus {
-  PENDING     = 'Pending',
-  APPROVED    = 'Approved',
+  PENDING = 'Pending',
+  APPROVED = 'Approved',
   MAINTENANCE = 'Maintenance',
-  DISPONIBLE  = 'Disponible',
+  DISPONIBLE = 'Disponible',
 }
 
 @Entity('vehicles')
@@ -55,7 +55,13 @@ export class Vehicle {
   @Column({ name: 'license_plate', length: 20, unique: true })
   licensePlate: string;
 
-  @Column({ name: 'vin', length: 17, unique: true, nullable: true })
+  @Column({
+    name: 'vin',
+    type: 'varchar',
+    length: 17,
+    unique: true,
+    nullable: true,
+  })
   vin: string | null;
 
   // ─── Vehicle Config ───────────────────────────────────────────────────────

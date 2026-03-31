@@ -25,13 +25,25 @@ import { VehicleStatus } from './entities/vehicle.entity';
 export class VehiclesController {
   constructor(private readonly vehiclesService: VehiclesService) {}
 
-  // ─── NHTSA: Car Makes (public-ish, jwt required) ──────────────────────────
+  // ─── Makes: full list ─────────────────────────────────────────────────────
+  // IMPORTANT: static routes MUST come before :param routes
 
   @Get('makes')
   @UseGuards(AuthGuard('jwt'))
   getAllMakes() {
     return this.vehiclesService.getAllMakes();
   }
+
+  // ─── Makes: search ?q=toyo ────────────────────────────────────────────────
+
+  @Get('makes/search')
+  @UseGuards(AuthGuard('jwt'))
+  searchMakes(@Query('q') q: string) {
+    if (!q || q.trim().length < 1) return this.vehiclesService.getAllMakes();
+    return this.vehiclesService.searchMakes(q.trim());
+  }
+
+  // ─── Makes: models for a given make ID ───────────────────────────────────
 
   @Get('makes/:makeId/models')
   @UseGuards(AuthGuard('jwt'))

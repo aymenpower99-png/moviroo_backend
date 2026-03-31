@@ -11,11 +11,6 @@ import { Vehicle, VehicleStatus } from './entities/vehicle.entity';
 import { CreateVehicleDto } from './dto/create-vehicle.dto';
 import { UpdateVehicleDto } from './dto/update-vehicle.dto';
 
-interface NhtsaMake {
-  Make_ID:   number;
-  Make_Name: string;
-}
-
 interface NhtsaModel {
   Model_ID:   number;
   Model_Name: string;
@@ -27,28 +22,71 @@ interface NhtsaModel {
 export class VehiclesService {
   private readonly logger = new Logger(VehiclesService.name);
 
+  // ─── Curated makes list (modern cars + vans relevant for ride-sharing) ────
+  private readonly POPULAR_MAKES = [
+    { id: 474,  name: 'Toyota' },
+    { id: 448,  name: 'Honda' },
+    { id: 440,  name: 'Ford' },
+    { id: 460,  name: 'Hyundai' },
+    { id: 461,  name: 'Kia' },
+    { id: 441,  name: 'Chevrolet' },
+    { id: 452,  name: 'Nissan' },
+    { id: 482,  name: 'Volkswagen' },
+    { id: 467,  name: 'Mercedes-Benz' },
+    { id: 449,  name: 'BMW' },
+    { id: 447,  name: 'Audi' },
+    { id: 476,  name: 'Renault' },
+    { id: 492,  name: 'Peugeot' },
+    { id: 451,  name: 'Citroën' },
+    { id: 491,  name: 'Opel' },
+    { id: 466,  name: 'Mazda' },
+    { id: 478,  name: 'Subaru' },
+    { id: 475,  name: 'Suzuki' },
+    { id: 445,  name: 'Mitsubishi' },
+    { id: 444,  name: 'Lexus' },
+    { id: 463,  name: 'Infiniti' },
+    { id: 462,  name: 'Jeep' },
+    { id: 450,  name: 'Dodge' },
+    { id: 469,  name: 'Chrysler' },
+    { id: 480,  name: 'Volvo' },
+    { id: 473,  name: 'Skoda' },
+    { id: 477,  name: 'SEAT' },
+    { id: 464,  name: 'Fiat' },
+    { id: 453,  name: 'Alfa Romeo' },
+    { id: 456,  name: 'Porsche' },
+    { id: 479,  name: 'Tesla' },
+    { id: 471,  name: 'Land Rover' },
+    { id: 465,  name: 'Jaguar' },
+    { id: 468,  name: 'Mini' },
+    { id: 484,  name: 'Dacia' },
+    { id: 459,  name: 'Isuzu' },
+    { id: 470,  name: 'Iveco' },
+    { id: 483,  name: 'Mercedes-Benz Vans' },
+    { id: 558,  name: 'Volkswagen Commercial' },
+    { id: 5463, name: 'Citroën Vans' },
+  ];
+
   constructor(
     @InjectRepository(Vehicle)
     private readonly vehicleRepo: Repository<Vehicle>,
   ) {}
 
-  // ─── NHTSA: All Makes ─────────────────────────────────────────────────────
+  // ─── Makes: return curated list instantly (no HTTP call) ─────────────────
 
-  async getAllMakes(): Promise<{ id: number; name: string }[]> {
-    try {
-      const url  = 'https://vpic.nhtsa.dot.gov/api/vehicles/getallmakes?format=json';
-      const res  = await fetch(url);
-      const json = (await res.json()) as { Results: NhtsaMake[] };
-      return json.Results
-        .map((m) => ({ id: m.Make_ID, name: m.Make_Name }))
-        .sort((a, b) => a.name.localeCompare(b.name));
-    } catch (err) {
-      this.logger.error('Failed to fetch car makes from NHTSA', err);
-      throw new InternalServerErrorException('Could not fetch car makes. Try again later.');
-    }
+  getAllMakes(): { id: number; name: string }[] {
+    return [...this.POPULAR_MAKES].sort((a, b) => a.name.localeCompare(b.name));
   }
 
-  // ─── NHTSA: Models by Make ID ─────────────────────────────────────────────
+  // ─── Makes: search / filter by query string ───────────────────────────────
+
+  searchMakes(q: string): { id: number; name: string }[] {
+    const lower = q.toLowerCase();
+    return this.POPULAR_MAKES
+      .filter((m) => m.name.toLowerCase().includes(lower))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  // ─── NHTSA: Models by Make ID (still uses real NHTSA data) ───────────────
 
   async getModelsByMakeId(makeId: number): Promise<{ id: number; name: string }[]> {
     try {
