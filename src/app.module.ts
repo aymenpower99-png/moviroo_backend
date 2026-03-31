@@ -10,7 +10,8 @@ import mailConfig from './config/mail.config';
 import { DatabaseModule } from './database/database.module';
 import { AuthModule } from './auth/auth.module';
 import { MailModule } from './mail/mail.module';
-import { AdminModule } from './admin/admin.module';   // ← ADD
+import { AdminModule } from './admin/admin.module';
+import { VehiclesModule } from './vehicles/vehicles.module';
 
 @Module({
   imports: [
@@ -21,7 +22,8 @@ import { AdminModule } from './admin/admin.module';   // ← ADD
     DatabaseModule,
     MailModule,
     AuthModule,
-    AdminModule,   // ← ADD
+    AdminModule,
+    VehiclesModule,
   ],
   controllers: [AppController],
   providers:   [AppService],

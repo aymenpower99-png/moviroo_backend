@@ -8,8 +8,12 @@ import {
   Patch,
   Post,
   Query,
+  Res,
   UseGuards,
 } from '@nestjs/common';
+import type { Response } from 'express';
+import * as fs   from 'fs';
+import * as path from 'path';
 import { AuthGuard } from '@nestjs/passport';
 import { AdminService } from './admin.service';
 import { InviteUserDto } from './dto/invite-user.dto';
@@ -23,7 +27,20 @@ import { UserRole, UserStatus } from '../users/entites/user.entity';
 export class AdminController {
   constructor(private adminService: AdminService) {}
 
-  // ─── Public: Activate Account ─────────────────────────────────────────────
+  // ─── Public: Show Activation Form (GET) ───────────────────────────────────
+
+  @Get('activate')
+  showActivationForm(@Query('token') token: string, @Res() res: Response) {
+    const filePath = path.join(__dirname, 'templates', 'activate.html');
+    const html = fs
+      .readFileSync(filePath, 'utf8')
+      .replace('__TOKEN__', token ?? '');
+
+    res.setHeader('Content-Type', 'text/html');
+    return res.send(html);
+  }
+
+  // ─── Public: Activate Account (POST) ──────────────────────────────────────
 
   @Post('activate')
   @HttpCode(200)
@@ -46,9 +63,9 @@ export class AdminController {
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(UserRole.SUPER_ADMIN)
   listUsers(
-    @Query('page')   page:   string  = '1',
-    @Query('limit')  limit:  string  = '20',
-    @Query('role')   role?:  UserRole,
+    @Query('page')   page:    string = '1',
+    @Query('limit')  limit:   string = '20',
+    @Query('role')   role?:   UserRole,
     @Query('status') status?: UserStatus,
   ) {
     return this.adminService.listUsers(+page, +limit, role, status);
@@ -63,7 +80,7 @@ export class AdminController {
     return this.adminService.getUser(id);
   }
 
-  // ─── Admin: Update User ───────────────────────────────────���───────────────
+  // ─── Admin: Update User ───────────────────────────────────────────────────
 
   @Patch(':id')
   @UseGuards(AuthGuard('jwt'), RolesGuard)

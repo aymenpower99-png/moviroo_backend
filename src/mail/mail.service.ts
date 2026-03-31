@@ -6,9 +6,6 @@ const LOGO_URL    = 'https://res.cloudinary.com/dox9rfabz/image/upload/v17748164
 const BRAND_COLOR = '#7C3AED';
 const BRAND_DARK  = '#5B21B6';
 
-
-
-
 const baseTemplate = (content: string) => `
 <!DOCTYPE html>
 <html lang="en">
@@ -23,50 +20,22 @@ const baseTemplate = (content: string) => `
       <td align="center">
         <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
           <tr>
-            <td align="center" style="
-              background:#ffffff;
-              padding:32px 40px 24px;
-              border-radius:16px 16px 0 0;
-              border-left:1px solid #E5E7EB;
-              border-right:1px solid #E5E7EB;
-              border-top:1px solid #E5E7EB;
-            ">
-              <img src="${LOGO_URL}" alt="Moviroo" width="140"
-                style="display:block;height:auto;margin:0 auto;" />
+            <td align="center" style="background:#ffffff;padding:32px 40px 24px;border-radius:16px 16px 0 0;border-left:1px solid #E5E7EB;border-right:1px solid #E5E7EB;border-top:1px solid #E5E7EB;">
+              <img src="${LOGO_URL}" alt="Moviroo" width="140" style="display:block;height:auto;margin:0 auto;" />
             </td>
           </tr>
           <tr>
-            <td style="
-              height:4px;
-              background:linear-gradient(90deg, ${BRAND_COLOR} 0%, ${BRAND_DARK} 100%);
-            "></td>
+            <td style="height:4px;background:linear-gradient(90deg, ${BRAND_COLOR} 0%, ${BRAND_DARK} 100%);"></td>
           </tr>
           <tr>
-            <td style="
-              background:#ffffff;
-              padding:40px;
-              border-left:1px solid #E5E7EB;
-              border-right:1px solid #E5E7EB;
-            ">
+            <td style="background:#ffffff;padding:40px;border-left:1px solid #E5E7EB;border-right:1px solid #E5E7EB;">
               ${content}
             </td>
           </tr>
           <tr>
-            <td style="
-              background:#F9FAFB;
-              padding:24px 40px;
-              border-radius:0 0 16px 16px;
-              border:1px solid #E5E7EB;
-              border-top:none;
-              text-align:center;
-            ">
-              <p style="margin:0 0 8px;font-size:13px;color:#6B7280;">
-                © ${new Date().getFullYear()} Moviroo. All rights reserved.
-              </p>
-              <p style="margin:0;font-size:12px;color:#9CA3AF;">
-                You received this email because you have an account with Moviroo.<br/>
-                If you did not request this, you can safely ignore this email.
-              </p>
+            <td style="background:#F9FAFB;padding:24px 40px;border-radius:0 0 16px 16px;border:1px solid #E5E7EB;border-top:none;text-align:center;">
+              <p style="margin:0 0 8px;font-size:13px;color:#6B7280;">© ${new Date().getFullYear()} Moviroo. All rights reserved.</p>
+              <p style="margin:0;font-size:12px;color:#9CA3AF;">You received this email because you have an account with Moviroo.<br/>If you did not request this, you can safely ignore this email.</p>
             </td>
           </tr>
         </table>
@@ -93,32 +62,11 @@ const otpTemplate = (
       : 'Use the code below to complete your sign-in. This code is valid for a limited time.'}
   </p>
   <hr style="border:none;border-top:1px solid #E5E7EB;margin:0 0 28px;" />
-  <p style="margin:0 0 12px;font-size:11px;font-weight:700;color:#9CA3AF;text-transform:uppercase;letter-spacing:1.5px;">
-    Your verification code
-  </p>
-  <div style="
-    background:#F5F3FF;
-    border:2px dashed ${BRAND_COLOR};
-    border-radius:12px;
-    padding:28px 24px;
-    text-align:center;
-    margin-bottom:28px;
-  ">
-    <span style="
-      font-size:52px;
-      font-weight:800;
-      letter-spacing:18px;
-      color:${BRAND_COLOR};
-      font-family:'Courier New',monospace;
-    ">${code}</span>
+  <p style="margin:0 0 12px;font-size:11px;font-weight:700;color:#9CA3AF;text-transform:uppercase;letter-spacing:1.5px;">Your verification code</p>
+  <div style="background:#F5F3FF;border:2px dashed ${BRAND_COLOR};border-radius:12px;padding:28px 24px;text-align:center;margin-bottom:28px;">
+    <span style="font-size:52px;font-weight:800;letter-spacing:18px;color:${BRAND_COLOR};font-family:'Courier New',monospace;">${code}</span>
   </div>
-  <div style="
-    background:#FFFBEB;
-    border-left:4px solid #F59E0B;
-    border-radius:6px;
-    padding:14px 16px;
-    margin-bottom:28px;
-  ">
+  <div style="background:#FFFBEB;border-left:4px solid #F59E0B;border-radius:6px;padding:14px 16px;margin-bottom:28px;">
     <p style="margin:0;font-size:13px;color:#92400E;line-height:1.5;">
       This code expires in <strong>${expiryMinutes} minutes</strong>.
       Never share this code with anyone — Moviroo will never ask for it.
@@ -130,7 +78,31 @@ const otpTemplate = (
   </p>
 `);
 
-
+// ← NEW: branded invitation template using baseTemplate
+const invitationTemplate = (firstName: string, activationLink: string) => baseTemplate(`
+  <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#111827;">
+    You've been invited to Moviroo
+  </h1>
+  <p style="margin:0 0 28px;font-size:15px;color:#6B7280;line-height:1.6;">
+    Hi <strong style="color:#111827;">${firstName}</strong>,<br/>
+    You've been invited to join Moviroo. Click the button below to set your password and activate your account.
+  </p>
+  <hr style="border:none;border-top:1px solid #E5E7EB;margin:0 0 28px;" />
+  <div style="text-align:center;margin-bottom:28px;">
+    <a href="${activationLink}"
+       style="display:inline-block;padding:14px 32px;background:${BRAND_COLOR};color:#ffffff;border-radius:8px;text-decoration:none;font-weight:700;font-size:15px;">
+      Activate Account
+    </a>
+  </div>
+  <p style="margin:0 0 8px;font-size:13px;color:#6B7280;text-align:center;">Or copy this link into your browser:</p>
+  <p style="margin:0 0 28px;font-size:12px;color:#9CA3AF;text-align:center;word-break:break-all;">${activationLink}</p>
+  <div style="background:#FFFBEB;border-left:4px solid #F59E0B;border-radius:6px;padding:14px 16px;">
+    <p style="margin:0;font-size:13px;color:#92400E;line-height:1.5;">
+      This link expires in <strong>72 hours</strong>.
+      If you did not expect this invitation, you can safely ignore this email.
+    </p>
+  </div>
+`);
 
 @Injectable()
 export class MailService {
@@ -168,25 +140,16 @@ export class MailService {
 
     this.logger.log(`OTP email sent to ${to} [${purpose}]`);
   }
-  async sendInvitation(email: string, firstName: string, activationLink: string) {
-  await this.transporter.sendMail({
-    to:      email,
-    subject: "You've been invited to Moviroo",
-    html: `
-      <h2>Hello ${firstName},</h2>
-      <p>You've been invited to join Moviroo. Click the button below to set your password and activate your account.</p>
-      <p>
-        <a href="${activationLink}"
-           style="display:inline-block;padding:12px 24px;background:#4F46E5;color:#fff;border-radius:6px;text-decoration:none;font-weight:bold;">
-          Activate Account
-        </a>
-      </p>
-      <p>Or copy this link into your browser:</p>
-      <p>${activationLink}</p>
-      <p><small>This link expires in 72 hours. If you did not expect this invitation, you can ignore this email.</small></p>
-    `,
-  });
-}
 
-  
+  // ← FIXED: added `from` field + branded template
+  async sendInvitation(email: string, firstName: string, activationLink: string): Promise<void> {
+    await this.transporter.sendMail({
+      from:    `"Moviroo" <${this.config.get<string>('mail.from')}>`,  // ← THIS was missing
+      to:      email,
+      subject: "You've been invited to Moviroo",
+      html:    invitationTemplate(firstName, activationLink),
+    });
+
+    this.logger.log(`Invitation email sent to ${email}`);
+  }
 }

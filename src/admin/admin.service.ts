@@ -209,8 +209,9 @@ export class AdminService {
         expiresIn: '72h',
       },
     );
-    const frontendUrl = this.config.get<string>('FRONTEND_URL') ?? 'http://localhost:3000';
-    const link = `${frontendUrl}/activate?token=${token}`;
+    // Points to the backend GET route that serves the HTML activation form
+    const backendUrl = this.config.get<string>('BACKEND_URL') ?? 'http://localhost:3000';
+    const link = `${backendUrl}/api/admin/users/activate?token=${token}`;
     return { token, link };
   }
 
