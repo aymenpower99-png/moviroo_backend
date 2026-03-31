@@ -34,8 +34,6 @@ export class VehiclesController {
     return this.vehiclesService.getAllMakes();
   }
 
-  // ─── Makes: search ?q=toyo ────────────────────────────────────────────────
-
   @Get('makes/search')
   @UseGuards(AuthGuard('jwt'))
   searchMakes(@Query('q') q: string) {
@@ -66,14 +64,14 @@ export class VehiclesController {
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(UserRole.SUPER_ADMIN, UserRole.AGENCY)
   findAll(
-    @Query('page')     page?:     string,
-    @Query('limit')    limit?:    string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
     @Query('agencyId') agencyId?: string,
     @Query('driverId') driverId?: string,
-    @Query('status')   status?:   VehicleStatus,
+    @Query('status') status?: VehicleStatus,
   ) {
     return this.vehiclesService.findAll(
-      page  ? +page  : 1,
+      page ? +page : 1,
       limit ? +limit : 20,
       agencyId,
       driverId,

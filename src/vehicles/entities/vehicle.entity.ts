@@ -8,19 +8,19 @@ import {
 } from 'typeorm';
 
 export enum VehicleType {
-  ECONOMY = 'Economy',
-  STANDARD = 'Standard',
-  COMFORT = 'Comfort',
+  ECONOMY     = 'Economy',
+  STANDARD    = 'Standard',
+  COMFORT     = 'Comfort',
   FIRST_CLASS = 'First Class',
-  VAN = 'Van',
-  MINI_BUS = 'Mini Bus',
+  VAN         = 'Van',
+  MINI_BUS    = 'Mini Bus',
 }
 
 export enum VehicleStatus {
-  PENDING = 'Pending',
-  APPROVED = 'Approved',
+  PENDING     = 'Pending',
+  APPROVED    = 'Approved',
   MAINTENANCE = 'Maintenance',
-  DISPONIBLE = 'Disponible',
+  DISPONIBLE  = 'Disponible',
 }
 
 @Entity('vehicles')
@@ -30,13 +30,13 @@ export class Vehicle {
 
   // ─── Relations ────────────────────────────────────────────────────────────
 
-  @Column({ name: 'driver_id', type: 'uuid' })
-  driverId: string;
+  @Column({ name: 'driver_id', type: 'uuid', nullable: true })
+  driverId: string | null;
 
-  @Column({ name: 'agency_id', type: 'uuid' })
-  agencyId: string;
+  @Column({ name: 'agency_id', type: 'uuid', nullable: true })
+  agencyId: string | null;
 
-  // ─── Car Identity (from NHTSA API) ────────────────────────────────────────
+  // ─── Car Identity ─────────────────────────────────────────────────────────
 
   @Column({ name: 'make', length: 50 })
   make: string;
@@ -79,8 +79,11 @@ export class Vehicle {
 
   // ─── Documents ────────────────────────────────────────────────────────────
 
-  @Column({ name: 'registration_document_url', type: 'text' })
-  registrationDocumentUrl: string;
+  @Column({ name: 'registration_document_url', type: 'text', nullable: true })
+  registrationDocumentUrl: string | null;
+
+  @Column({ name: 'registration_expiry', type: 'date', nullable: true })
+  registrationExpiry: Date | null;
 
   @Column({ name: 'insurance_document_url', type: 'text' })
   insuranceDocumentUrl: string;

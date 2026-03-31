@@ -4,7 +4,6 @@ import {
   IsEnum,
   IsOptional,
   IsUUID,
-  IsUrl,
   IsDateString,
   Length,
   Min,
@@ -15,11 +14,13 @@ import { VehicleType } from '../entities/vehicle.entity';
 
 export class CreateVehicleDto {
   // ─── Relations ─────────────────────────────────────────────────────────────
+  @IsOptional()
   @IsUUID()
-  driverId: string;
+  driverId?: string;
 
+  @IsOptional()
   @IsUUID()
-  agencyId: string;
+  agencyId?: string;
 
   // ─── Car Identity ──────────────────────────────────────────────────────────
   @IsString()
@@ -60,10 +61,15 @@ export class CreateVehicleDto {
   @Max(20)
   seats?: number;
 
-  // ─── Documents ─────────────────────────────────────────────────────────────
+  // ──�� Documents ─────────────────────────────────────────────────────────────
+  @IsOptional()
   @IsString()
   @MinLength(1)
-  registrationDocumentUrl: string;
+  registrationDocumentUrl?: string;
+
+  @IsOptional()
+  @IsDateString()
+  registrationExpiry?: string;
 
   @IsString()
   @MinLength(1)
