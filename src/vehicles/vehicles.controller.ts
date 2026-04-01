@@ -12,6 +12,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { IsUUID } from 'class-validator';
 import { AuthGuard } from '@nestjs/passport';
 import { VehiclesService } from './vehicles.service';
 import { CreateVehicleDto } from './dto/create-vehicle.dto';
@@ -20,6 +21,11 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { UserRole } from '../users/entites/user.entity';
 import { VehicleStatus } from './entities/vehicle.entity';
+
+class AssignDriverDto {
+  @IsUUID()
+  driverId!: string;   // ← ! = definite assignment assertion (no constructor needed)
+}
 
 @Controller('vehicles')
 export class VehiclesController {
@@ -40,8 +46,6 @@ export class VehiclesController {
     if (!q || q.trim().length < 1) return this.vehiclesService.getAllMakes();
     return this.vehiclesService.searchMakes(q.trim());
   }
-
-  // ─── Makes: models for a given make ID ───────────────────────────────────
 
   @Get('makes/:makeId/models')
   @UseGuards(AuthGuard('jwt'))
@@ -64,14 +68,14 @@ export class VehiclesController {
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(UserRole.SUPER_ADMIN, UserRole.AGENCY)
   findAll(
-    @Query('page') page?: string,
-    @Query('limit') limit?: string,
+    @Query('page')     page?:     string,
+    @Query('limit')    limit?:    string,
     @Query('agencyId') agencyId?: string,
     @Query('driverId') driverId?: string,
-    @Query('status') status?: VehicleStatus,
+    @Query('status')   status?:   VehicleStatus,
   ) {
     return this.vehiclesService.findAll(
-      page ? +page : 1,
+      page  ? +page  : 1,
       limit ? +limit : 20,
       agencyId,
       driverId,
@@ -88,7 +92,7 @@ export class VehiclesController {
     return this.vehiclesService.findOne(id);
   }
 
-  // ─── UPDATE ───────────────────────────────────────────────────────────────
+  // ─── UPDATE (general fields) ──────────────────────────────────────────────
 
   @Patch(':id')
   @UseGuards(AuthGuard('jwt'), RolesGuard)
@@ -100,14 +104,57 @@ export class VehiclesController {
     return this.vehiclesService.update(id, dto);
   }
 
-  // ─── VERIFY (Admin only) ──────────────────────────────────────────────────
+  // ─── ASSIGN DRIVER (Admin only) ───────────────────────────────────────────
 
-  @Post(':id/verify')
+  @Patch(':id/assign-driver')
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(UserRole.SUPER_ADMIN)
   @HttpCode(200)
-  verify(@Param('id', ParseUUIDPipe) id: string) {
-    return this.vehiclesService.verify(id);
+  assignDriver(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: AssignDriverDto,
+  ) {
+    return this.vehiclesService.assignDriver(id, body.driverId);
+  }
+
+  // ─── SET ON TRIP ──────────────────────────────────────────────────────────
+
+  @Post(':id/trip')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.AGENCY)
+  @HttpCode(200)
+  setOnTrip(@Param('id', ParseUUIDPipe) id: string) {
+    return this.vehiclesService.setOnTrip(id);
+  }
+
+  // ─── END TRIP ─────────────────────────────────────────────────────────────
+
+  @Post(':id/end-trip')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.AGENCY)
+  @HttpCode(200)
+  endTrip(@Param('id', ParseUUIDPipe) id: string) {
+    return this.vehiclesService.endTrip(id);
+  }
+
+  // ─── SET MAINTENANCE ──────────────────────────────────────────────────────
+
+  @Post(':id/maintenance')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN)
+  @HttpCode(200)
+  setMaintenance(@Param('id', ParseUUIDPipe) id: string) {
+    return this.vehiclesService.setMaintenance(id);
+  }
+
+  // ─── COMPLETE MAINTENANCE ─────────────────────────────────────────────────
+
+  @Post(':id/maintenance/complete')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN)
+  @HttpCode(200)
+  completeMaintenance(@Param('id', ParseUUIDPipe) id: string) {
+    return this.vehiclesService.completeMaintenance(id);
   }
 
   // ─── SOFT DELETE ──────────────────────────────────────────────────────────

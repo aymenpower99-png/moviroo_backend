@@ -18,9 +18,9 @@ export enum VehicleType {
 
 export enum VehicleStatus {
   PENDING     = 'Pending',
-  APPROVED    = 'Approved',
+  AVAILABLE   = 'Available',
+  ON_TRIP     = 'On_Trip',
   MAINTENANCE = 'Maintenance',
-  DISPONIBLE  = 'Disponible',
 }
 
 @Entity('vehicles')
@@ -47,22 +47,15 @@ export class Vehicle {
   @Column({ name: 'year', type: 'int' })
   year: number;
 
-  @Column({ name: 'color', length: 30 })
-  color: string;
+  @Column({ name: 'color', type: 'varchar', length: 30, nullable: true })
+  color: string | null;
 
   // ─── Registration ─────────────────────────────────────────────────────────
 
-  // ✅ FIXED: type: 'varchar' must be explicit when TS type is `string | null`
   @Column({ name: 'license_plate', type: 'varchar', length: 20, unique: true, nullable: true })
   licensePlate: string | null;
 
-  @Column({
-    name: 'vin',
-    type: 'varchar',
-    length: 17,
-    unique: true,
-    nullable: true,
-  })
+  @Column({ name: 'vin', type: 'varchar', length: 17, unique: true, nullable: true })
   vin: string | null;
 
   // ─── Vehicle Config ───────────────────────────────────────────────────────
@@ -75,8 +68,8 @@ export class Vehicle {
   })
   vehicleType: VehicleType;
 
-  @Column({ name: 'seats', type: 'int', default: 4 })
-  seats: number;
+  @Column({ name: 'seats', type: 'int', nullable: true })
+  seats: number | null;
 
   // ─── Documents ────────────────────────────────────────────────────────────
 
@@ -86,11 +79,9 @@ export class Vehicle {
   @Column({ name: 'registration_expiry', type: 'date', nullable: true })
   registrationExpiry: Date | null;
 
-  // ✅ FIXED: type: 'text' explicit since nullable
   @Column({ name: 'insurance_document_url', type: 'text', nullable: true })
   insuranceDocumentUrl: string | null;
 
-  // ✅ FIXED: type: 'date' explicit since nullable
   @Column({ name: 'insurance_expiry', type: 'date', nullable: true })
   insuranceExpiry: Date | null;
 

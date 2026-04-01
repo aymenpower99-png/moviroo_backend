@@ -1,0 +1,146 @@
+{
+  "info": {
+    "name": "Moviroo – Vehicles Workflow",
+    "_postman_id": "moviroo-vehicles-v2",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:3000" },
+    { "key": "token",    "value": "YOUR_JWT_TOKEN_HERE" },
+    { "key": "vehicleId","value": "" },
+    { "key": "driverId", "value": "YOUR_DRIVER_UUID_HERE" }
+  ],
+  "item": [
+    {
+      "name": "1️⃣ Create Vehicle (Pending – no photo, no driver)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{token}}" },
+          { "key": "Content-Type",  "value": "application/json" }
+        ],
+        "url": { "raw": "{{base_url}}/vehicles", "host": ["{{base_url}}"], "path": ["vehicles"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"make\": \"Toyota\",\n  \"model\": \"Camry\",\n  \"year\": 2023\n}"
+        }
+      }
+    },
+    {
+      "name": "1️⃣ Create Vehicle (Available – photo + driver)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{token}}" },
+          { "key": "Content-Type",  "value": "application/json" }
+        ],
+        "url": { "raw": "{{base_url}}/vehicles", "host": ["{{base_url}}"], "path": ["vehicles"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"make\": \"Honda\",\n  \"model\": \"Civic\",\n  \"year\": 2022,\n  \"color\": \"White\",\n  \"seats\": 4,\n  \"photos\": [\"https://cdn.example.com/car.jpg\"],\n  \"driverId\": \"{{driverId}}\"\n}"
+        }
+      }
+    },
+    {
+      "name": "2️⃣ List All Vehicles",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+        "url": {
+          "raw": "{{base_url}}/vehicles?page=1&limit=20",
+          "host": ["{{base_url}}"], "path": ["vehicles"],
+          "query": [
+            { "key": "page",  "value": "1" },
+            { "key": "limit", "value": "20" }
+          ]
+        }
+      }
+    },
+    {
+      "name": "2️⃣ Get Vehicle By ID",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+        "url": { "raw": "{{base_url}}/vehicles/{{vehicleId}}", "host": ["{{base_url}}"], "path": ["vehicles", "{{vehicleId}}"] }
+      }
+    },
+    {
+      "name": "2️⃣ Assign Driver → Pending becomes Available (if photos exist)",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{token}}" },
+          { "key": "Content-Type",  "value": "application/json" }
+        ],
+        "url": { "raw": "{{base_url}}/vehicles/{{vehicleId}}/assign-driver", "host": ["{{base_url}}"], "path": ["vehicles", "{{vehicleId}}", "assign-driver"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"driverId\": \"{{driverId}}\"\n}"
+        }
+      }
+    },
+    {
+      "name": "3️⃣ Start Trip  →  Available → On_Trip",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+        "url": { "raw": "{{base_url}}/vehicles/{{vehicleId}}/trip", "host": ["{{base_url}}"], "path": ["vehicles", "{{vehicleId}}", "trip"] }
+      }
+    },
+    {
+      "name": "4️⃣ End Trip  →  On_Trip → Available",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+        "url": { "raw": "{{base_url}}/vehicles/{{vehicleId}}/end-trip", "host": ["{{base_url}}"], "path": ["vehicles", "{{vehicleId}}", "end-trip"] }
+      }
+    },
+    {
+      "name": "5️⃣ Set Maintenance  →  Any → Maintenance + unassign driver",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+        "url": { "raw": "{{base_url}}/vehicles/{{vehicleId}}/maintenance", "host": ["{{base_url}}"], "path": ["vehicles", "{{vehicleId}}", "maintenance"] }
+      }
+    },
+    {
+      "name": "6️⃣ Complete Maintenance  →  Maintenance → Available",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+        "url": { "raw": "{{base_url}}/vehicles/{{vehicleId}}/maintenance/complete", "host": ["{{base_url}}"], "path": ["vehicles", "{{vehicleId}}", "maintenance", "complete"] }
+      }
+    },
+    {
+      "name": "Update Vehicle (General Fields)",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{token}}" },
+          { "key": "Content-Type",  "value": "application/json" }
+        ],
+        "url": { "raw": "{{base_url}}/vehicles/{{vehicleId}}", "host": ["{{base_url}}"], "path": ["vehicles", "{{vehicleId}}"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"color\": \"Black\",\n  \"seats\": 5\n}"
+        }
+      }
+    },
+    {
+      "name": "Deactivate Vehicle (Soft Delete)",
+      "request": {
+        "method": "DELETE",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+        "url": { "raw": "{{base_url}}/vehicles/{{vehicleId}}", "host": ["{{base_url}}"], "path": ["vehicles", "{{vehicleId}}"] }
+      }
+    },
+    {
+      "name": "Hard Delete Vehicle (Admin only)",
+      "request": {
+        "method": "DELETE",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+        "url": { "raw": "{{base_url}}/vehicles/{{vehicleId}}/hard", "host": ["{{base_url}}"], "path": ["vehicles", "{{vehicleId}}", "hard"] }
+      }
+    }
+  ]
+}

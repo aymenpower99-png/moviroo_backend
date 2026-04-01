@@ -11,13 +11,20 @@ import {
   Max,
   MaxLength,
   MinLength,
+  Allow,
 } from 'class-validator';
-import { VehicleType, VehicleStatus } from '../entities/vehicle.entity';
+import { Transform } from 'class-transformer';
+import { VehicleType } from '../entities/vehicle.entity';
 
 export class UpdateVehicleDto {
+  /**
+   * Pass a UUID to reassign driver, or explicitly pass `null` to unassign.
+   * Note: maintenance endpoint auto-unassigns — use this only for manual changes.
+   */
   @IsOptional()
-  @IsUUID()
-  driverId?: string;
+  @Transform(({ value }) => (value === null ? null : value))
+  @Allow()
+  driverId?: string | null;
 
   @IsOptional()
   @IsUUID()
@@ -89,10 +96,6 @@ export class UpdateVehicleDto {
   @IsArray()
   @IsString({ each: true })
   photos?: string[];
-
-  @IsOptional()
-  @IsEnum(VehicleStatus)
-  status?: VehicleStatus;
 
   @IsOptional()
   @IsBoolean()

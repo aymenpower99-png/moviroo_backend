@@ -15,9 +15,9 @@ export class JwtRefreshStrategy extends PassportStrategy(Strategy, 'jwt-refresh'
     @InjectRepository(User) private userRepo: Repository<User>,
   ) {
     super({
-      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(), // reads Authorization: Bearer <token>
       secretOrKey: config.get<string>('jwt.refreshSecret') ?? 'fallback-refresh-secret',
-      passReqToCallback: true as true,  
+      passReqToCallback: true as true,
     });
   }
 
@@ -33,7 +33,7 @@ export class JwtRefreshStrategy extends PassportStrategy(Strategy, 'jwt-refresh'
 
     const isMatch = await bcrypt.compare(incomingToken, user.refreshToken);
     if (!isMatch) {
-     
+      // Token reuse detected → revoke immediately (rotation security)
       await this.userRepo.update(user.id, { refreshToken: null });
       throw new UnauthorizedException('Token reuse detected — please login again');
     }

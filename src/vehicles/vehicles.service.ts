@@ -71,6 +71,23 @@ export class VehiclesService {
     private readonly vehicleRepo: Repository<Vehicle>,
   ) {}
 
+  // ─── Helpers ──────────────────────────────────────────────────────────────
+
+  /**
+   * Determines the initial status when creating a vehicle.
+   * Rules:
+   *  - Available  → photos provided AND driverId provided
+   *  - Pending    → photo OR driver is missing
+   */
+  private resolveInitialStatus(
+    photos: string[] | null | undefined,
+    driverId: string | null | undefined,
+  ): VehicleStatus {
+    const hasPhotos = Array.isArray(photos) && photos.length > 0;
+    const hasDriver = !!driverId;
+    return hasPhotos && hasDriver ? VehicleStatus.AVAILABLE : VehicleStatus.PENDING;
+  }
+
   // ─── Makes: full list ─────────────────────────────────────────────────────
 
   getAllMakes(): { id: number; name: string }[] {
@@ -103,9 +120,15 @@ export class VehiclesService {
   }
 
   // ─── Create ───────────────────────────────────────────────────────────────
-
+  /**
+   * Step 1: Add Vehicle
+   * Required: make, model, year
+   * Optional: color, seats, photos, driverId
+   * Auto-status:
+   *   → Available  if photos + driverId are both provided
+   *   → Pending    otherwise
+   */
   async create(dto: CreateVehicleDto): Promise<Vehicle> {
-    // ✅ only check duplicate plate if one was provided
     if (dto.licensePlate) {
       const existing = await this.vehicleRepo.findOne({
         where: { licensePlate: dto.licensePlate },
@@ -117,29 +140,30 @@ export class VehiclesService {
       }
     }
 
+    const status = this.resolveInitialStatus(dto.photos, dto.driverId);
+
     const vehicle = this.vehicleRepo.create({
-      driverId:                dto.driverId,
-      agencyId:                dto.agencyId,
+      driverId:                dto.driverId                ?? null,
+      agencyId:                dto.agencyId                ?? null,
       make:                    dto.make,
       model:                   dto.model,
       year:                    dto.year,
-      color:                   dto.color,
-      licensePlate:            dto.licensePlate   ?? null,  // ✅ optional
-      vin:                     dto.vin            ?? null,
+      color:                   dto.color                   ?? null,
+      licensePlate:            dto.licensePlate             ?? null,
+      vin:                     dto.vin                     ?? null,
       vehicleType:             dto.vehicleType,
-      seats:                   dto.seats          ?? 4,
+      seats:                   dto.seats                   ?? null,
       registrationDocumentUrl: dto.registrationDocumentUrl ?? null,
-      insuranceDocumentUrl:    dto.insuranceDocumentUrl    ?? null,  // ✅ optional
+      insuranceDocumentUrl:    dto.insuranceDocumentUrl    ?? null,
       insuranceExpiry:         dto.insuranceExpiry
         ? new Date(dto.insuranceExpiry)
-        : null,                                                      // ✅ optional
+        : null,
       technicalControlUrl:     dto.technicalControlUrl     ?? null,
       technicalControlExpiry:  dto.technicalControlExpiry
         ? new Date(dto.technicalControlExpiry)
         : null,
-      photos:                  dto.photos         ?? null,
-      // ✅ use status from frontend if provided, otherwise default to PENDING
-      status:                  dto.status         ?? VehicleStatus.PENDING,
+      photos:                  dto.photos                  ?? null,
+      status,
     });
 
     return this.vehicleRepo.save(vehicle);
@@ -177,7 +201,7 @@ export class VehiclesService {
     return vehicle;
   }
 
-  // ─── Update ───────────────────────────────────────────────────────────────
+  // ─── Update (general fields) ──────────────────────────────────────────────
 
   async update(id: string, dto: UpdateVehicleDto): Promise<Vehicle> {
     const vehicle = await this.findOne(id);
@@ -210,22 +234,113 @@ export class VehiclesService {
       ...(dto.technicalControlUrl      !== undefined && { technicalControlUrl:     dto.technicalControlUrl }),
       ...(dto.technicalControlExpiry   !== undefined && { technicalControlExpiry:  new Date(dto.technicalControlExpiry) }),
       ...(dto.photos                   !== undefined && { photos:                  dto.photos }),
-      ...(dto.status                   !== undefined && { status:                  dto.status }),
       ...(dto.isActive                 !== undefined && { isActive:                dto.isActive }),
     });
 
     return this.vehicleRepo.save(vehicle);
   }
 
-  // ─── Verify ───────────────────────────────────────────────────────────────
-
-  async verify(id: string): Promise<Vehicle> {
+  // ─── Assign Driver (Admin only) ───────────────────────────────────────────
+  /**
+   * Manually assign a driver to a vehicle.
+   * If the vehicle has photos and was Pending, it becomes Available.
+   */
+  async assignDriver(id: string, driverId: string): Promise<Vehicle> {
     const vehicle = await this.findOne(id);
-    if (vehicle.status === VehicleStatus.APPROVED) {
-      throw new BadRequestException('Vehicle is already approved.');
+
+    if (vehicle.status === VehicleStatus.ON_TRIP) {
+      throw new BadRequestException('Cannot reassign driver while vehicle is On Trip.');
     }
-    vehicle.status     = VehicleStatus.APPROVED;
-    vehicle.verifiedAt = new Date();
+    if (vehicle.status === VehicleStatus.MAINTENANCE) {
+      throw new BadRequestException(
+        'Vehicle is under Maintenance. Use completeMaintenance to mark it ready first.',
+      );
+    }
+
+    vehicle.driverId = driverId;
+
+    // Auto-promote Pending → Available if photos are now present
+    if (
+      vehicle.status === VehicleStatus.PENDING &&
+      Array.isArray(vehicle.photos) &&
+      vehicle.photos.length > 0
+    ) {
+      vehicle.status = VehicleStatus.AVAILABLE;
+    }
+
+    return this.vehicleRepo.save(vehicle);
+  }
+
+  // ─── Set On Trip ──────────────────────────────────────────────────────────
+  /**
+   * Step 3: Available → On_Trip
+   * Called when a ride starts using this vehicle.
+   */
+  async setOnTrip(id: string): Promise<Vehicle> {
+    const vehicle = await this.findOne(id);
+
+    if (vehicle.status !== VehicleStatus.AVAILABLE) {
+      throw new BadRequestException(
+        `Vehicle must be Available to start a trip. Current status: ${vehicle.status}`,
+      );
+    }
+
+    vehicle.status = VehicleStatus.ON_TRIP;
+    return this.vehicleRepo.save(vehicle);
+  }
+
+  // ─── End Trip ─────────────────────────────────────────────────────────────
+  /**
+   * Step 4: On_Trip → Available
+   * Called when ride ends. Vehicle is ready for the next trip.
+   */
+  async endTrip(id: string): Promise<Vehicle> {
+    const vehicle = await this.findOne(id);
+
+    if (vehicle.status !== VehicleStatus.ON_TRIP) {
+      throw new BadRequestException(
+        `Vehicle is not currently On Trip. Current status: ${vehicle.status}`,
+      );
+    }
+
+    vehicle.status = VehicleStatus.AVAILABLE;
+    return this.vehicleRepo.save(vehicle);
+  }
+
+  // ─── Set Maintenance ──────────────────────────────────────────────────────
+  /**
+   * Step 5: Any → Maintenance
+   * Auto-unassigns the driver. Driver becomes free (idle).
+   */
+  async setMaintenance(id: string): Promise<Vehicle> {
+    const vehicle = await this.findOne(id);
+
+    if (vehicle.status === VehicleStatus.MAINTENANCE) {
+      throw new BadRequestException('Vehicle is already under Maintenance.');
+    }
+
+    vehicle.status   = VehicleStatus.MAINTENANCE;
+    vehicle.driverId = null;  // ← Auto-unassign driver; driver becomes idle
+
+    return this.vehicleRepo.save(vehicle);
+  }
+
+  // ─── Complete Maintenance ─────────────────────────────────────────────────
+  /**
+   * Step 6: Maintenance → Available
+   * Admin manually decides maintenance is done.
+   * Driver must be reassigned separately via assignDriver.
+   */
+  async completeMaintenance(id: string): Promise<Vehicle> {
+    const vehicle = await this.findOne(id);
+
+    if (vehicle.status !== VehicleStatus.MAINTENANCE) {
+      throw new BadRequestException(
+        `Vehicle is not under Maintenance. Current status: ${vehicle.status}`,
+      );
+    }
+
+    vehicle.status = VehicleStatus.AVAILABLE;
     return this.vehicleRepo.save(vehicle);
   }
 

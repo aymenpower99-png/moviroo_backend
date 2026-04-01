@@ -10,10 +10,11 @@ import {
   Max,
   MinLength,
 } from 'class-validator';
-import { VehicleType, VehicleStatus } from '../entities/vehicle.entity';
+import { VehicleType } from '../entities/vehicle.entity';
 
 export class CreateVehicleDto {
-  // ─── Relations ─────────────────────────────────────────────────────────────
+  // ─── Relations ────────────────────────────────────────────────────────────
+  /** Optional: assign a driver on creation. If provided + photos exist → Available */
   @IsOptional()
   @IsUUID()
   driverId?: string;
@@ -22,7 +23,7 @@ export class CreateVehicleDto {
   @IsUUID()
   agencyId?: string;
 
-  // ─── Car Identity ──────────────────────────────────────────────────────────
+  // ─── Car Identity (Required) ──────────────────────────────────────────────
   @IsString()
   @Length(1, 50)
   make: string;
@@ -36,12 +37,19 @@ export class CreateVehicleDto {
   @Max(new Date().getFullYear() + 1)
   year: number;
 
+  // ─── Car Identity (Optional) ──────────────────────────────────────────────
+  @IsOptional()
   @IsString()
   @Length(1, 30)
-  color: string;
+  color?: string;
 
-  // ─── Registration ──────────────────────────────────────────────────────────
-  // ✅ optional — frontend removed plate number field
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(20)
+  seats?: number;
+
+  // ─── Registration ─────────────────────────────────────────────────────────
   @IsOptional()
   @IsString()
   @Length(1, 20)
@@ -52,24 +60,12 @@ export class CreateVehicleDto {
   @Length(17, 17, { message: 'VIN must be exactly 17 characters' })
   vin?: string;
 
-  // ─── Config ────────────────────────────────────────────────────────────────
+  // ─── Config ───────────────────────────────────────────────────────────────
   @IsOptional()
   @IsEnum(VehicleType)
   vehicleType?: VehicleType;
 
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Max(20)
-  seats?: number;
-
-  // ─── Status ────────────────────────────────────────────────────────────────
-  // ✅ added — frontend has a Status field on creation
-  @IsOptional()
-  @IsEnum(VehicleStatus)
-  status?: VehicleStatus;
-
-  // ─── Documents ─────────────────────────────────────────────────────────────
+  // ─── Documents ────────────────────────────────────────────────────────────
   @IsOptional()
   @IsString()
   @MinLength(1)
@@ -79,7 +75,6 @@ export class CreateVehicleDto {
   @IsDateString()
   registrationExpiry?: string;
 
-  // ✅ optional — no longer required from the frontend form
   @IsOptional()
   @IsString()
   @MinLength(1)
@@ -98,7 +93,8 @@ export class CreateVehicleDto {
   @IsDateString()
   technicalControlExpiry?: string;
 
-  // ─── Photos ────────────────────────────────────────────────────────────────
+  // ─── Photos (Optional) ────────────────────────────────────────────────────
+  /** Provide photo URLs. Status → Available only if photos + driverId both present */
   @IsOptional()
   @IsString({ each: true })
   photos?: string[];

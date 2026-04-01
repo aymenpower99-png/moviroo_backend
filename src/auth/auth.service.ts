@@ -64,7 +64,7 @@ export class AuthService {
     };
   }
 
-  // ─── Verify Email ─────────────────────────────────────────────────────────
+  // ─── Verify Email ──────────────────────────────────────────────────────────
 
   async verifyEmail(userId: string, code: string) {
     await this.otpService.verifyOtp(userId, code);
@@ -86,13 +86,11 @@ export class AuthService {
     const user = await this.userRepo.findOne({ where: { email: dto.email } });
     if (!user) throw new UnauthorizedException('Invalid credentials');
 
-    // Invited users have no password — reject with meaningful message
     if (!user.password) throw new UnauthorizedException('Invalid credentials');
 
     const valid = await bcrypt.compare(dto.password, user.password);
     if (!valid) throw new UnauthorizedException('Invalid credentials');
 
-    // ─── Status checks ────────────────────────────────────────────────────
     if (user.status === UserStatus.PENDING)
       throw new UnauthorizedException('Please activate your account first. Check your invitation email.');
 
@@ -133,14 +131,14 @@ export class AuthService {
       };
     }
 
-    // No 2FA
+    // No 2FA — issue tokens directly
     await this.userRepo.update(user.id, { lastLoginAt: new Date() });
     const tokens = await this.generateTokens(user);
     await this.saveRefreshToken(user.id, tokens.refreshToken);
     return { ...tokens, user: this.safeUser(user) };
   }
 
-  // ─── Verify Login OTP (email or TOTP) ────────────────────────────────────
+  // ─── Verify Login OTP (email or TOTP) ─────────────────────────────────────
 
   async verifyLoginOtp(preAuthToken: string, code: string) {
     let payload: PreAuthPayload;
@@ -195,7 +193,7 @@ export class AuthService {
     return { message: 'Authenticator app unlinked.', totpEnabled: false };
   }
 
-  // ─── Toggle email 2FA ────────────────────────────���────────────────────────
+  // ─── Toggle email 2FA ─────────────────────────────────────────────────────
 
   async toggle2fa(userId: string, enable: boolean) {
     await this.userRepo.update(userId, { is2faEnabled: enable });
@@ -212,7 +210,7 @@ export class AuthService {
   async refresh(user: User) {
     const tokens = await this.generateTokens(user);
     await this.saveRefreshToken(user.id, tokens.refreshToken);
-    return tokens;
+    return tokens;  // returns { accessToken, refreshToken }
   }
 
   async logout(userId: string) {
