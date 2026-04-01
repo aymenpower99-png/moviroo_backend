@@ -22,7 +22,7 @@ interface NhtsaModel {
 export class VehiclesService {
   private readonly logger = new Logger(VehiclesService.name);
 
-  // ─── Curated makes list (modern cars + vans relevant for ride-sharing) ────
+  // ─── Curated makes list ───────────────────────────────────────────────────
   private readonly POPULAR_MAKES = [
     { id: 474,  name: 'Toyota' },
     { id: 448,  name: 'Honda' },
@@ -71,13 +71,13 @@ export class VehiclesService {
     private readonly vehicleRepo: Repository<Vehicle>,
   ) {}
 
-  // ─── Makes: return curated list instantly (no HTTP call) ─────────────────
+  // ─── Makes: full list ─────────────────────────────────────────────────────
 
   getAllMakes(): { id: number; name: string }[] {
     return [...this.POPULAR_MAKES].sort((a, b) => a.name.localeCompare(b.name));
   }
 
-  // ─── Makes: search / filter by query string ───────────────────────────────
+  // ─── Makes: search ────────────────────────────────────────────────────────
 
   searchMakes(q: string): { id: number; name: string }[] {
     const lower = q.toLowerCase();
@@ -86,7 +86,7 @@ export class VehiclesService {
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 
-  // ─── NHTSA: Models by Make ID (still uses real NHTSA data) ───────────────
+  // ─── NHTSA: Models by Make ID ─────────────────────────────────────────────
 
   async getModelsByMakeId(makeId: number): Promise<{ id: number; name: string }[]> {
     try {
@@ -105,11 +105,16 @@ export class VehiclesService {
   // ─── Create ───────────────────────────────────────────────────────────────
 
   async create(dto: CreateVehicleDto): Promise<Vehicle> {
-    const existing = await this.vehicleRepo.findOne({
-      where: { licensePlate: dto.licensePlate },
-    });
-    if (existing) {
-      throw new BadRequestException(`License plate "${dto.licensePlate}" is already registered.`);
+    // ✅ only check duplicate plate if one was provided
+    if (dto.licensePlate) {
+      const existing = await this.vehicleRepo.findOne({
+        where: { licensePlate: dto.licensePlate },
+      });
+      if (existing) {
+        throw new BadRequestException(
+          `License plate "${dto.licensePlate}" is already registered.`,
+        );
+      }
     }
 
     const vehicle = this.vehicleRepo.create({
@@ -119,19 +124,22 @@ export class VehiclesService {
       model:                   dto.model,
       year:                    dto.year,
       color:                   dto.color,
-      licensePlate:            dto.licensePlate,
-      vin:                     dto.vin ?? null,
+      licensePlate:            dto.licensePlate   ?? null,  // ✅ optional
+      vin:                     dto.vin            ?? null,
       vehicleType:             dto.vehicleType,
-      seats:                   dto.seats ?? 4,
-      registrationDocumentUrl: dto.registrationDocumentUrl,
-      insuranceDocumentUrl:    dto.insuranceDocumentUrl,
-      insuranceExpiry:         new Date(dto.insuranceExpiry),
-      technicalControlUrl:     dto.technicalControlUrl ?? null,
+      seats:                   dto.seats          ?? 4,
+      registrationDocumentUrl: dto.registrationDocumentUrl ?? null,
+      insuranceDocumentUrl:    dto.insuranceDocumentUrl    ?? null,  // ✅ optional
+      insuranceExpiry:         dto.insuranceExpiry
+        ? new Date(dto.insuranceExpiry)
+        : null,                                                      // ✅ optional
+      technicalControlUrl:     dto.technicalControlUrl     ?? null,
       technicalControlExpiry:  dto.technicalControlExpiry
         ? new Date(dto.technicalControlExpiry)
         : null,
-      photos:                  dto.photos ?? null,
-      status:                  VehicleStatus.PENDING,
+      photos:                  dto.photos         ?? null,
+      // ✅ use status from frontend if provided, otherwise default to PENDING
+      status:                  dto.status         ?? VehicleStatus.PENDING,
     });
 
     return this.vehicleRepo.save(vehicle);
@@ -221,7 +229,7 @@ export class VehiclesService {
     return this.vehicleRepo.save(vehicle);
   }
 
-  // ─── Soft Remove (deactivate isActive = false) ────────────────────────────
+  // ─── Soft Remove ──────────────────────────────────────────────────────────
 
   async remove(id: string): Promise<{ message: string }> {
     const vehicle = await this.findOne(id);
@@ -230,7 +238,7 @@ export class VehiclesService {
     return { message: `Vehicle "${id}" has been deactivated.` };
   }
 
-  // ─── Hard Delete (TypeORM soft-delete via deletedAt) ─────────────────────
+  // ─── Hard Delete ──────────────────────────────────────────────────────────
 
   async hardDelete(id: string): Promise<{ message: string }> {
     await this.findOne(id);

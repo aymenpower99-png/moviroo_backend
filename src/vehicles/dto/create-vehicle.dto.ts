@@ -10,7 +10,7 @@ import {
   Max,
   MinLength,
 } from 'class-validator';
-import { VehicleType } from '../entities/vehicle.entity';
+import { VehicleType, VehicleStatus } from '../entities/vehicle.entity';
 
 export class CreateVehicleDto {
   // ─── Relations ─────────────────────────────────────────────────────────────
@@ -41,9 +41,11 @@ export class CreateVehicleDto {
   color: string;
 
   // ─── Registration ──────────────────────────────────────────────────────────
+  // ✅ optional — frontend removed plate number field
+  @IsOptional()
   @IsString()
   @Length(1, 20)
-  licensePlate: string;
+  licensePlate?: string;
 
   @IsOptional()
   @IsString()
@@ -61,7 +63,13 @@ export class CreateVehicleDto {
   @Max(20)
   seats?: number;
 
-  // ──�� Documents ─────────────────────────────────────────────────────────────
+  // ─── Status ────────────────────────────────────────────────────────────────
+  // ✅ added — frontend has a Status field on creation
+  @IsOptional()
+  @IsEnum(VehicleStatus)
+  status?: VehicleStatus;
+
+  // ─── Documents ─────────────────────────────────────────────────────────────
   @IsOptional()
   @IsString()
   @MinLength(1)
@@ -71,12 +79,15 @@ export class CreateVehicleDto {
   @IsDateString()
   registrationExpiry?: string;
 
+  // ✅ optional — no longer required from the frontend form
+  @IsOptional()
   @IsString()
   @MinLength(1)
-  insuranceDocumentUrl: string;
+  insuranceDocumentUrl?: string;
 
+  @IsOptional()
   @IsDateString()
-  insuranceExpiry: string;
+  insuranceExpiry?: string;
 
   @IsOptional()
   @IsString()

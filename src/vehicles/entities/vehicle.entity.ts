@@ -52,8 +52,9 @@ export class Vehicle {
 
   // ─── Registration ─────────────────────────────────────────────────────────
 
-  @Column({ name: 'license_plate', length: 20, unique: true })
-  licensePlate: string;
+  // ✅ FIXED: type: 'varchar' must be explicit when TS type is `string | null`
+  @Column({ name: 'license_plate', type: 'varchar', length: 20, unique: true, nullable: true })
+  licensePlate: string | null;
 
   @Column({
     name: 'vin',
@@ -85,11 +86,13 @@ export class Vehicle {
   @Column({ name: 'registration_expiry', type: 'date', nullable: true })
   registrationExpiry: Date | null;
 
-  @Column({ name: 'insurance_document_url', type: 'text' })
-  insuranceDocumentUrl: string;
+  // ✅ FIXED: type: 'text' explicit since nullable
+  @Column({ name: 'insurance_document_url', type: 'text', nullable: true })
+  insuranceDocumentUrl: string | null;
 
-  @Column({ name: 'insurance_expiry', type: 'date' })
-  insuranceExpiry: Date;
+  // ✅ FIXED: type: 'date' explicit since nullable
+  @Column({ name: 'insurance_expiry', type: 'date', nullable: true })
+  insuranceExpiry: Date | null;
 
   @Column({ name: 'technical_control_url', type: 'text', nullable: true })
   technicalControlUrl: string | null;
