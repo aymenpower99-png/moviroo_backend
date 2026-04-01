@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Vehicle, VehicleStatus } from './entities/vehicle.entity';
+import { Vehicle, VehicleStatus, VehicleType } from './entities/vehicle.entity';
 import { CreateVehicleDto } from './dto/create-vehicle.dto';
 import { UpdateVehicleDto } from './dto/update-vehicle.dto';
 
@@ -70,8 +70,6 @@ export class VehiclesService {
     @InjectRepository(Vehicle)
     private readonly vehicleRepo: Repository<Vehicle>,
   ) {}
-
-  // ─── Helpers ──────────────────────────────────────────────────────────────
 
   /**
    * Determines the initial status when creating a vehicle.
@@ -151,9 +149,12 @@ export class VehiclesService {
       color:                   dto.color                   ?? null,
       licensePlate:            dto.licensePlate             ?? null,
       vin:                     dto.vin                     ?? null,
-      vehicleType:             dto.vehicleType,
+      vehicleType:             dto.vehicleType              ?? VehicleType.STANDARD,
       seats:                   dto.seats                   ?? null,
       registrationDocumentUrl: dto.registrationDocumentUrl ?? null,
+      registrationExpiry:      dto.registrationExpiry
+        ? new Date(dto.registrationExpiry)
+        : null,
       insuranceDocumentUrl:    dto.insuranceDocumentUrl    ?? null,
       insuranceExpiry:         dto.insuranceExpiry
         ? new Date(dto.insuranceExpiry)
