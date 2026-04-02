@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Vehicle, VehicleStatus, VehicleType } from './entities/vehicle.entity';
+import { Vehicle, VehicleStatus } from './entities/vehicle.entity';
 import { CreateVehicleDto } from './dto/create-vehicle.dto';
 import { UpdateVehicleDto } from './dto/update-vehicle.dto';
 
@@ -22,7 +22,6 @@ interface NhtsaModel {
 export class VehiclesService {
   private readonly logger = new Logger(VehiclesService.name);
 
-  // ─── Curated makes list ───────────────────────────────────────────────────
   private readonly POPULAR_MAKES = [
     { id: 474,  name: 'Toyota' },
     { id: 448,  name: 'Honda' },
@@ -71,12 +70,6 @@ export class VehiclesService {
     private readonly vehicleRepo: Repository<Vehicle>,
   ) {}
 
-  /**
-   * Determines the initial status when creating a vehicle.
-   * Rules:
-   *  - Available  → photos provided AND driverId provided
-   *  - Pending    → photo OR driver is missing
-   */
   private resolveInitialStatus(
     photos: string[] | null | undefined,
     driverId: string | null | undefined,
@@ -86,22 +79,16 @@ export class VehiclesService {
     return hasPhotos && hasDriver ? VehicleStatus.AVAILABLE : VehicleStatus.PENDING;
   }
 
-  // ─── Makes: full list ─────────────────────────────────────────────────────
-
   getAllMakes(): { id: number; name: string }[] {
     return [...this.POPULAR_MAKES].sort((a, b) => a.name.localeCompare(b.name));
   }
 
-  // ─── Makes: search ────────────────────────────────────────────────────────
-
   searchMakes(q: string): { id: number; name: string }[] {
     const lower = q.toLowerCase();
     return this.POPULAR_MAKES
-      .filter((m) => m.name.toLowerCase().includes(lower))
+      .filter(m => m.name.toLowerCase().includes(lower))
       .sort((a, b) => a.name.localeCompare(b.name));
   }
-
-  // ─── NHTSA: Models by Make ID ─────────────────────────────────────────────
 
   async getModelsByMakeId(makeId: number): Promise<{ id: number; name: string }[]> {
     try {
@@ -109,7 +96,7 @@ export class VehiclesService {
       const res  = await fetch(url);
       const json = (await res.json()) as { Results: NhtsaModel[] };
       return json.Results
-        .map((m) => ({ id: m.Model_ID, name: m.Model_Name }))
+        .map(m => ({ id: m.Model_ID, name: m.Model_Name }))
         .sort((a, b) => a.name.localeCompare(b.name));
     } catch (err) {
       this.logger.error(`Failed to fetch models for makeId=${makeId}`, err);
@@ -117,15 +104,6 @@ export class VehiclesService {
     }
   }
 
-  // ─── Create ───────────────────────────────────────────────────────────────
-  /**
-   * Step 1: Add Vehicle
-   * Required: make, model, year
-   * Optional: color, seats, photos, driverId
-   * Auto-status:
-   *   → Available  if photos + driverId are both provided
-   *   → Pending    otherwise
-   */
   async create(dto: CreateVehicleDto): Promise<Vehicle> {
     if (dto.licensePlate) {
       const existing = await this.vehicleRepo.findOne({
@@ -149,28 +127,20 @@ export class VehiclesService {
       color:                   dto.color                   ?? null,
       licensePlate:            dto.licensePlate             ?? null,
       vin:                     dto.vin                     ?? null,
-      vehicleType:             dto.vehicleType              ?? VehicleType.STANDARD,
+      vehicleType:             dto.vehicleType,
       seats:                   dto.seats                   ?? null,
       registrationDocumentUrl: dto.registrationDocumentUrl ?? null,
-      registrationExpiry:      dto.registrationExpiry
-        ? new Date(dto.registrationExpiry)
-        : null,
       insuranceDocumentUrl:    dto.insuranceDocumentUrl    ?? null,
-      insuranceExpiry:         dto.insuranceExpiry
-        ? new Date(dto.insuranceExpiry)
-        : null,
+      insuranceExpiry:         dto.insuranceExpiry ? new Date(dto.insuranceExpiry) : null,
       technicalControlUrl:     dto.technicalControlUrl     ?? null,
       technicalControlExpiry:  dto.technicalControlExpiry
-        ? new Date(dto.technicalControlExpiry)
-        : null,
-      photos:                  dto.photos                  ?? null,
+        ? new Date(dto.technicalControlExpiry) : null,
+      photos: dto.photos ?? null,
       status,
     });
 
     return this.vehicleRepo.save(vehicle);
   }
-
-  // ─── Find All ─────────────────────────────────────────────────────────────
 
   async findAll(
     page      = 1,
@@ -194,15 +164,11 @@ export class VehiclesService {
     return { data, total, page, limit };
   }
 
-  // ─── Find One ─────────────────────────────────────────────────────────────
-
   async findOne(id: string): Promise<Vehicle> {
     const vehicle = await this.vehicleRepo.findOne({ where: { id } });
     if (!vehicle) throw new NotFoundException(`Vehicle "${id}" not found.`);
     return vehicle;
   }
-
-  // ─── Update (general fields) ──────────────────────────────────────────────
 
   async update(id: string, dto: UpdateVehicleDto): Promise<Vehicle> {
     const vehicle = await this.findOne(id);
@@ -238,14 +204,18 @@ export class VehiclesService {
       ...(dto.isActive                 !== undefined && { isActive:                dto.isActive }),
     });
 
+    // Auto-promote Pending → Available when photos AND driver are both present
+    if (
+      vehicle.status === VehicleStatus.PENDING &&
+      Array.isArray(vehicle.photos) && vehicle.photos.length > 0 &&
+      vehicle.driverId
+    ) {
+      vehicle.status = VehicleStatus.AVAILABLE;
+    }
+
     return this.vehicleRepo.save(vehicle);
   }
 
-  // ─── Assign Driver (Admin only) ───────────────────────────────────────────
-  /**
-   * Manually assign a driver to a vehicle.
-   * If the vehicle has photos and was Pending, it becomes Available.
-   */
   async assignDriver(id: string, driverId: string): Promise<Vehicle> {
     const vehicle = await this.findOne(id);
 
@@ -254,17 +224,15 @@ export class VehiclesService {
     }
     if (vehicle.status === VehicleStatus.MAINTENANCE) {
       throw new BadRequestException(
-        'Vehicle is under Maintenance. Use completeMaintenance to mark it ready first.',
+        'Vehicle is under Maintenance. Complete maintenance first.',
       );
     }
 
     vehicle.driverId = driverId;
 
-    // Auto-promote Pending → Available if photos are now present
     if (
       vehicle.status === VehicleStatus.PENDING &&
-      Array.isArray(vehicle.photos) &&
-      vehicle.photos.length > 0
+      Array.isArray(vehicle.photos) && vehicle.photos.length > 0
     ) {
       vehicle.status = VehicleStatus.AVAILABLE;
     }
@@ -272,93 +240,64 @@ export class VehiclesService {
     return this.vehicleRepo.save(vehicle);
   }
 
-  // ─── Set On Trip ──────────────────────────────────────────────────────────
-  /**
-   * Step 3: Available → On_Trip
-   * Called when a ride starts using this vehicle.
-   */
   async setOnTrip(id: string): Promise<Vehicle> {
     const vehicle = await this.findOne(id);
-
     if (vehicle.status !== VehicleStatus.AVAILABLE) {
       throw new BadRequestException(
-        `Vehicle must be Available to start a trip. Current status: ${vehicle.status}`,
+        `Vehicle must be Available to start a trip. Current: ${vehicle.status}`,
       );
     }
-
     vehicle.status = VehicleStatus.ON_TRIP;
     return this.vehicleRepo.save(vehicle);
   }
 
-  // ─── End Trip ─────────────────────────────────────────────────────────────
-  /**
-   * Step 4: On_Trip → Available
-   * Called when ride ends. Vehicle is ready for the next trip.
-   */
   async endTrip(id: string): Promise<Vehicle> {
     const vehicle = await this.findOne(id);
-
     if (vehicle.status !== VehicleStatus.ON_TRIP) {
       throw new BadRequestException(
-        `Vehicle is not currently On Trip. Current status: ${vehicle.status}`,
+        `Vehicle is not On Trip. Current: ${vehicle.status}`,
       );
     }
-
     vehicle.status = VehicleStatus.AVAILABLE;
     return this.vehicleRepo.save(vehicle);
   }
 
-  // ─── Set Maintenance ──────────────────────────────────────────────────────
-  /**
-   * Step 5: Any → Maintenance
-   * Auto-unassigns the driver. Driver becomes free (idle).
-   */
   async setMaintenance(id: string): Promise<Vehicle> {
     const vehicle = await this.findOne(id);
-
-    if (vehicle.status === VehicleStatus.MAINTENANCE) {
-      throw new BadRequestException('Vehicle is already under Maintenance.');
+    if (vehicle.status !== VehicleStatus.AVAILABLE) {
+      throw new BadRequestException(
+        `Only Available vehicles can be sent to Maintenance. Current: ${vehicle.status}`,
+      );
     }
-
     vehicle.status   = VehicleStatus.MAINTENANCE;
-    vehicle.driverId = null;  // ← Auto-unassign driver; driver becomes idle
-
+    vehicle.driverId = null;
     return this.vehicleRepo.save(vehicle);
   }
 
-  // ─── Complete Maintenance ─────────────────────────────────────────────────
-  /**
-   * Step 6: Maintenance → Available
-   * Admin manually decides maintenance is done.
-   * Driver must be reassigned separately via assignDriver.
-   */
   async completeMaintenance(id: string): Promise<Vehicle> {
     const vehicle = await this.findOne(id);
-
     if (vehicle.status !== VehicleStatus.MAINTENANCE) {
       throw new BadRequestException(
-        `Vehicle is not under Maintenance. Current status: ${vehicle.status}`,
+        `Vehicle is not under Maintenance. Current: ${vehicle.status}`,
       );
     }
-
     vehicle.status = VehicleStatus.AVAILABLE;
     return this.vehicleRepo.save(vehicle);
   }
 
-  // ─── Soft Remove ──────────────────────────────────────────────────────────
-
+  // ─── REMOVE — hard delete, works from ANY status ──────────────────────────
+  // Uses vehicleRepo.delete() which issues a real SQL DELETE FROM vehicles WHERE id = ?
+  // The row is completely removed from the database — no soft-delete confusion.
   async remove(id: string): Promise<{ message: string }> {
-    const vehicle = await this.findOne(id);
-    vehicle.isActive = false;
-    await this.vehicleRepo.save(vehicle);
-    return { message: `Vehicle "${id}" has been deactivated.` };
+    const vehicle = await this.findOne(id); // throws 404 if not found
+    await this.vehicleRepo.delete(vehicle.id);
+    return { message: `Vehicle "${id}" has been deleted.` };
   }
 
-  // ─── Hard Delete ──────────────────────────────────────────────────────────
-
+  // ─── HARD DELETE (kept for backward compat — same as remove now) ───────────
   async hardDelete(id: string): Promise<{ message: string }> {
-    await this.findOne(id);
-    await this.vehicleRepo.softDelete(id);
-    return { message: `Vehicle "${id}" has been deleted.` };
+    const vehicle = await this.findOne(id);
+    await this.vehicleRepo.delete(vehicle.id);
+    return { message: `Vehicle "${id}" has been permanently deleted.` };
   }
 }
