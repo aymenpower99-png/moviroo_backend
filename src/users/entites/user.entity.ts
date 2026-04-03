@@ -9,14 +9,14 @@ import {
 
 export enum UserRole {
   SUPER_ADMIN = 'super_admin',
-  AGENCY = 'agency',
-  DRIVER = 'driver',
-  PASSENGER = 'passenger',
+  AGENCY      = 'agency',
+  DRIVER      = 'driver',
+  PASSENGER   = 'passenger',
 }
 
 export enum UserStatus {
   PENDING = 'pending',
-  ACTIVE = 'active',
+  ACTIVE  = 'active',
   BLOCKED = 'blocked',
 }
 
@@ -31,12 +31,7 @@ export class User {
   @Column({ unique: true, nullable: true })
   phone: string;
 
-  @Column({
-    name: 'password_hash',
-    type: 'text',
-    nullable: true,
-    default: null,
-  })
+  @Column({ name: 'password_hash', type: 'text', nullable: true, default: null })
   password: string | null;
 
   @Column({ name: 'first_name', length: 100 })
@@ -63,33 +58,28 @@ export class User {
   @Column({ name: 'ban_reason', nullable: true })
   banReason: string;
 
-  @Column({
-    name: 'refresh_token',
-    type: 'text',
-    nullable: true,
-    default: null,
-  })
+  @Column({ name: 'refresh_token', type: 'text', nullable: true, default: null })
   refreshToken: string | null;
 
   @Column({ name: 'last_login_at', nullable: true })
   lastLoginAt: Date;
 
-  // ─── Role ──────────────────────────────────────────────────────────────────
+  // ─── Role ─────────────────────────────────────────────────────────────────
 
   @Column({ type: 'enum', enum: UserRole, default: UserRole.PASSENGER })
   role: UserRole;
 
-  // ─── Status ────────────────────────────────────────────────────────────────
+  // ─── Status ───────────────────────────────────────────────────────────────
 
   @Column({ type: 'enum', enum: UserStatus, default: UserStatus.PENDING })
   status: UserStatus;
 
-  // ─── Invitation Token ──────────────────────────────────────────────────────
+  // ─── Invitation Token ─────────────────────────────────────────────────────
 
   @Column({ name: 'invite_token', type: 'text', nullable: true, default: null })
   inviteToken: string | null;
 
-  // ─── 2-Step Verification (email OTP) ──────────────────────────────────────
+  // ─── 2-Step Verification (email OTP) ─────────────────────────────────────
 
   @Column({ name: 'is_2fa_enabled', default: false })
   is2faEnabled: boolean;
@@ -97,12 +87,7 @@ export class User {
   @Column({ name: 'otp_code', type: 'text', nullable: true, default: null })
   otpCode: string | null;
 
-  @Column({
-    name: 'otp_expiry',
-    type: 'timestamptz',
-    nullable: true,
-    default: null,
-  })
+  @Column({ name: 'otp_expiry', type: 'timestamptz', nullable: true, default: null })
   otpExpiry: Date | null;
 
   // ─── TOTP (Authenticator App) ─────────────────────────────────────────────
@@ -112,6 +97,17 @@ export class User {
 
   @Column({ name: 'totp_enabled', default: false })
   totpEnabled: boolean;
+
+  // ─── Email Change ─────────────────────────────────────────────────────────
+
+  @Column({ name: 'pending_email', type: 'text', nullable: true, default: null })
+  pendingEmail: string | null;
+
+  @Column({ name: 'email_change_token', type: 'text', nullable: true, default: null })
+  emailChangeToken: string | null;
+
+  @Column({ name: 'email_change_expiry', type: 'timestamptz', nullable: true, default: null })
+  emailChangeExpiry: Date | null;
 
   // ─── Timestamps ───────────────────────────────────────────────────────────
 
