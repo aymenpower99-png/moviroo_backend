@@ -2,12 +2,10 @@ import { IsEmail, IsEnum, IsString, MinLength } from 'class-validator';
 import { UserRole } from '../../users/entites/user.entity';
 
 export class InviteUserDto {
-  @IsString()
-  @MinLength(1)
+  @IsString() @MinLength(1)
   firstName: string;
 
-  @IsString()
-  @MinLength(1)
+  @IsString() @MinLength(1)
   lastName: string;
 
   @IsEmail()
