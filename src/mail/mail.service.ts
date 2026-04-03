@@ -105,7 +105,6 @@ export class MailService {
     const backendUrl =
       this.config.get<string>('app.backendUrl') ?? 'http://localhost:3000/api';
     const verifyLink = `${backendUrl}/auth/email-change/confirm?token=${token}`;
-    // produces: http://localhost:3000/api/auth/email-change/confirm?token=...
 
     const html = this.loadTemplate('email-change-verify.html', {
       FIRST_NAME: firstName,

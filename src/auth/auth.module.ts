@@ -15,6 +15,7 @@ import { MailModule }         from '../mail/mail.module';
 import { JwtStrategy }        from './strategies/jwt.strategy';
 import { JwtRefreshStrategy } from './strategies/jwt-refresh.strategy';
 import { PassengerGuard }     from '../common/guards/passenger.guard';
+import { HtmlService } from '../common/services/html.service';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { PassengerGuard }     from '../common/guards/passenger.guard';
     PassengerGuard,
     JwtStrategy,
     JwtRefreshStrategy,
+    HtmlService,
   ],
   exports: [AuthService],
 })

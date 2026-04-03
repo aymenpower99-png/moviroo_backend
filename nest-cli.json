@@ -3,7 +3,8 @@
   "sourceRoot": "src",
   "compilerOptions": {
     "assets": [
-      { "include": "mail/templates/*.html", "watchAssets": true }
+      { "include": "mail/templates/**/*", "watchAssets": true },
+      { "include": "admin/templates/**/*", "watchAssets": true }
     ]
   }
 }
