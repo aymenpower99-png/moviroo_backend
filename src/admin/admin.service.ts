@@ -10,7 +10,7 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import { User, UserRole, UserStatus } from '../users/entites/user.entity';
-import { Driver } from '../driver/entities/driver.entity'; // ← NEW
+import { Driver } from '../driver/entities/driver.entity';
 import { MailService } from '../mail/mail.service';
 import { InviteUserDto } from './dto/invite-user.dto';
 import { ActivateAccountDto } from './dto/activate-account.dto';
@@ -26,19 +26,56 @@ interface InviteTokenPayload {
 export class AdminService {
   constructor(
     @InjectRepository(User) private userRepo: Repository<User>,
-    @InjectRepository(Driver) private driverRepo: Repository<Driver>, // ← NEW
+    @InjectRepository(Driver) private driverRepo: Repository<Driver>,
     private jwtService: JwtService,
     private config: ConfigService,
     private mailService: MailService,
   ) {}
 
-  // ─── Invite User ──────────────────────────────────────────────────────────
+  // ─── Invite User ─────────────────────────────────────────────────────────────
 
   async inviteUser(dto: InviteUserDto) {
-    const exists = await this.userRepo.findOne({ where: { email: dto.email } });
-    if (exists)
-      throw new BadRequestException('A user with this email already exists.');
+    // ✅ FIX: withDeleted: true — catches soft-deleted users with the same email
+    // Without this, a previously deleted user is invisible to TypeORM but the
+    // PostgreSQL UNIQUE constraint on email still rejects the INSERT → 500 crash.
+    const exists = await this.userRepo.findOne({
+      where: { email: dto.email },
+      withDeleted: true,
+    });
 
+    if (exists) {
+      // If the user was soft-deleted, restore and re-invite instead of crashing
+      if (exists.deletedAt) {
+        await this.userRepo.restore(exists.id);
+        await this.userRepo.update(exists.id, {
+          firstName: dto.firstName,
+          lastName: dto.lastName,
+          role: dto.role,
+          status: UserStatus.PENDING,
+          password: null,
+          emailVerified: false,
+          inviteToken: null,
+        });
+
+        const restoredUser = await this.userRepo.findOneOrFail({
+          where: { id: exists.id },
+        });
+        const { token, link } = await this.generateInviteLink(restoredUser);
+        const hashed = await bcrypt.hash(token, 10);
+        await this.userRepo.update(restoredUser.id, { inviteToken: hashed });
+        await this.mailService.sendInvitation(restoredUser.email, restoredUser.firstName, link);
+
+        return {
+          message: `Invitation sent to ${restoredUser.email}.`,
+          userId: restoredUser.id,
+        };
+      }
+
+      // Active or pending user — reject as before
+      throw new BadRequestException('A user with this email already exists.');
+    }
+
+    // Normal path — brand new email
     const user = this.userRepo.create({
       firstName: dto.firstName,
       lastName: dto.lastName,
@@ -61,16 +98,14 @@ export class AdminService {
     };
   }
 
-  // ─── Activate Account ─────────────────────────────────────────────────────
+  // ─── Activate Account ─────────────────────────────────────────────────────────
 
   async activateAccount(dto: ActivateAccountDto) {
     let payload: InviteTokenPayload;
     try {
       payload = await this.jwtService.verifyAsync<InviteTokenPayload>(
         dto.token,
-        {
-          secret: this.config.get<string>('jwt.inviteSecret')!,
-        },
+        { secret: this.config.get<string>('jwt.inviteSecret')! },
       );
     } catch {
       throw new UnauthorizedException('Invalid or expired activation link.');
@@ -110,7 +145,7 @@ export class AdminService {
     return { message: 'Account activated successfully. You can now log in.' };
   }
 
-  // ─── Resend Invitation ────────────────────────────────────────────────────
+  // ─── Resend Invitation ────────────────────────────────────────────────────────
 
   async resendInvitation(userId: string) {
     const user = await this.findUserOrFail(userId);
@@ -128,9 +163,7 @@ export class AdminService {
     return { message: `Invitation resent to ${user.email}.` };
   }
 
-  // ─── List Users ───────────────────────────────────────────────────────────
-
-  // ─── List Users ───────────────────────────────────────────────────────────
+  // ─── List Users ───────────────────────────────────────────────────────────────
 
   async listUsers(
     page: number = 1,
@@ -149,8 +182,6 @@ export class AdminService {
       order: { createdAt: 'DESC' },
     });
 
-    // ─── Enrich driver users with profileComplete flag ────────────────────
-    // ─── Enrich driver users with profileComplete flag ────────────────────
     const driverUserIds = data
       .filter((u) => u.role === UserRole.DRIVER)
       .map((u) => u.id);
@@ -158,13 +189,12 @@ export class AdminService {
     const driverProfiles = driverUserIds.length
       ? await this.driverRepo
           .createQueryBuilder('d')
-          .select(['d.id', 'd.userId']) // ← only select what we need
+          .select(['d.id', 'd.userId'])
           .where('d.userId IN (:...ids)', { ids: driverUserIds })
           .getMany()
       : [];
 
     const driverProfileSet = new Set(driverProfiles.map((d) => d.userId));
-    // ─────────────────────────────────────────────────────────────────────
 
     return {
       data: data.map((u) => ({
@@ -179,14 +209,14 @@ export class AdminService {
     };
   }
 
-  // ─── Get Single User ──────────────────────────────────────────────────────
+  // ─── Get Single User ──────────────────────────────────────────────────────────
 
   async getUser(userId: string) {
     const user = await this.findUserOrFail(userId);
     return this.safeUser(user);
   }
 
-  // ─── Update User ──────────────────────────────────────────────────────────
+  // ─── Update User ──────────────────────────────────────────────────────────────
 
   async updateUser(userId: string, dto: UpdateUserDto) {
     const user = await this.findUserOrFail(userId);
@@ -205,37 +235,37 @@ export class AdminService {
       ...(dto.role && { role: dto.role }),
     });
 
-    const updated = await this.userRepo.findOneOrFail({
-      where: { id: userId },
-    });
+    const updated = await this.userRepo.findOneOrFail({ where: { id: userId } });
     return this.safeUser(updated);
   }
 
-  // ─── Block User ───────────────────────────────────────────────────────────
+  // ─── Block / Unblock User ─────────────────────────────────────────────────────
 
   async blockUser(userId: string) {
     const user = await this.findUserOrFail(userId);
-
     if (user.status === UserStatus.BLOCKED)
       throw new BadRequestException('User is already blocked.');
-
     await this.userRepo.update(userId, { status: UserStatus.BLOCKED });
     return { message: 'User has been blocked.' };
   }
 
-  // ─── Unblock User ─────────────────────────────────────────────────────────
-
   async unblockUser(userId: string) {
     const user = await this.findUserOrFail(userId);
-
     if (user.status !== UserStatus.BLOCKED)
       throw new BadRequestException('User is not blocked.');
-
     await this.userRepo.update(userId, { status: UserStatus.ACTIVE });
     return { message: 'User has been unblocked.' };
   }
 
-  // ─── Helpers ──────────────────────────────────────────────────────────────
+  // ─── Delete User ──────────────────────────────────────────────────────────────
+
+  async deleteUser(userId: string) {
+    const user = await this.findUserOrFail(userId);
+    await this.userRepo.softDelete(user.id);
+    return { message: 'User has been deleted.' };
+  }
+
+  // ─── Helpers ──────────────────────────────────────────────────────────────────
 
   private async findUserOrFail(userId: string): Promise<User> {
     const user = await this.userRepo.findOne({ where: { id: userId } });
@@ -245,11 +275,7 @@ export class AdminService {
 
   private async generateInviteLink(user: User) {
     const token = await this.jwtService.signAsync(
-      {
-        sub: user.id,
-        email: user.email,
-        purpose: 'invite',
-      } satisfies InviteTokenPayload,
+      { sub: user.id, email: user.email, purpose: 'invite' } satisfies InviteTokenPayload,
       {
         secret: this.config.get<string>('jwt.inviteSecret')!,
         expiresIn: '72h',
@@ -263,20 +289,7 @@ export class AdminService {
   }
 
   private safeUser(user: User) {
-    const {
-      password,
-      refreshToken,
-      otpCode,
-      totpSecret,
-      inviteToken,
-      ...safe
-    } = user;
+    const { password, refreshToken, otpCode, totpSecret, inviteToken, ...safe } = user;
     return safe;
-  }
-
-  async deleteUser(userId: string) {
-    const user = await this.findUserOrFail(userId);
-    await this.userRepo.softDelete(user.id);
-    return { message: 'User has been deleted.' };
   }
 }
