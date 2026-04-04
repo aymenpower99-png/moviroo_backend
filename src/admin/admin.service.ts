@@ -209,8 +209,10 @@ export class AdminService {
         expiresIn: '72h',
       },
     );
-    // Points to the backend GET route that serves the HTML activation form
-    const backendUrl = this.config.get<string>('BACKEND_URL') ?? 'http://localhost:3000';
+    // BACKEND_URL must be the bare origin e.g. http://localhost:3000 (no /api suffix)
+    // The global prefix 'api' is added by NestJS, so we include it explicitly once here.
+    const backendUrl = (this.config.get<string>('BACKEND_URL') ?? 'http://localhost:3000')
+      .replace(/\/api\/?$/, ''); // strip trailing /api if someone mistakenly set it in .env
     const link = `${backendUrl}/api/admin/users/activate?token=${token}`;
     return { token, link };
   }
