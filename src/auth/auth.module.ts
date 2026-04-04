@@ -10,16 +10,17 @@ import { AuthEmailChangeService } from './auth-email-change.service';
 
 import { User }               from '../users/entites/user.entity';
 import { PassengerEntity }    from '../passenger/entities/passengers.entity';
+import { Driver }             from '../driver/entities/driver.entity';   // ← NEW
 import { OtpService }         from '../otp/otp.service';
 import { MailModule }         from '../mail/mail.module';
 import { JwtStrategy }        from './strategies/jwt.strategy';
 import { JwtRefreshStrategy } from './strategies/jwt-refresh.strategy';
 import { PassengerGuard }     from '../common/guards/passenger.guard';
-import { HtmlService } from '../common/services/html.service';
+import { HtmlService }        from '../common/services/html.service';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, PassengerEntity]),
+    TypeOrmModule.forFeature([User, PassengerEntity, Driver]),  // ← Driver added
     PassportModule,
     JwtModule.register({}),
     MailModule,
@@ -29,7 +30,7 @@ import { HtmlService } from '../common/services/html.service';
     AuthService,
     AuthProfileService,
     AuthEmailChangeService,
-    OtpService,        // ← registered directly, no OtpModule exists
+    OtpService,
     PassengerGuard,
     JwtStrategy,
     JwtRefreshStrategy,

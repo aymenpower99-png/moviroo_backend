@@ -8,14 +8,14 @@ import {
 } from 'typeorm';
 
 export enum DriverAvailabilityStatus {
-  ONLINE  = 'online',
+  ONLINE = 'online',
   OFFLINE = 'offline',
 }
 
 export enum DriverLanguage {
   ENGLISH = 'English',
-  FRENCH  = 'French',
-  ARABIC  = 'Arabic',
+  FRENCH = 'French',
+  ARABIC = 'Arabic',
 }
 
 @Entity('drivers')
@@ -30,21 +30,33 @@ export class Driver {
 
   // ─── Driver License ───────────────────────────────────────────────────────────
 
-  @Column({ name: 'driver_license_number', type: 'varchar', length: 50, unique: true })
-  driverLicenseNumber: string;
+  @Column({
+    name: 'driver_license_number',
+    type: 'varchar',
+    length: 50,
+    unique: true,
+    nullable: true,
+  })
+  driverLicenseNumber: string | null;
 
-  @Column({ name: 'driver_license_expiry', type: 'date' })
-  driverLicenseExpiry: Date;
+  @Column({ name: 'driver_license_expiry', type: 'date', nullable: true })
+  driverLicenseExpiry: Date | null;
 
-  @Column({ name: 'driver_license_front_url', type: 'text' })
-  driverLicenseFrontUrl: string;
+  @Column({ name: 'driver_license_front_url', type: 'text', nullable: true })
+  driverLicenseFrontUrl: string | null;
 
-  @Column({ name: 'driver_license_back_url', type: 'text' })
-  driverLicenseBackUrl: string;
+  @Column({ name: 'driver_license_back_url', type: 'text', nullable: true })
+  driverLicenseBackUrl: string | null;
 
   // ─── Stats ────────────────────────────────────────────────────────────────────
 
-  @Column({ name: 'rating_average', type: 'decimal', precision: 3, scale: 2, default: 5.0 })
+  @Column({
+    name: 'rating_average',
+    type: 'decimal',
+    precision: 3,
+    scale: 2,
+    default: 5.0,
+  })
   ratingAverage: number;
 
   @Column({ name: 'total_ratings', type: 'int', default: 0 })
@@ -63,10 +75,22 @@ export class Driver {
   })
   availabilityStatus: DriverAvailabilityStatus;
 
-  @Column({ name: 'current_latitude', type: 'decimal', precision: 10, scale: 8, nullable: true })
+  @Column({
+    name: 'current_latitude',
+    type: 'decimal',
+    precision: 10,
+    scale: 8,
+    nullable: true,
+  })
   currentLatitude: number | null;
 
-  @Column({ name: 'current_longitude', type: 'decimal', precision: 11, scale: 8, nullable: true })
+  @Column({
+    name: 'current_longitude',
+    type: 'decimal',
+    precision: 11,
+    scale: 8,
+    nullable: true,
+  })
   currentLongitude: number | null;
 
   @Column({ name: 'last_location_update', type: 'timestamp', nullable: true })
@@ -74,7 +98,12 @@ export class Driver {
 
   // ─── Preferences ─────────────────────────────────────────────────────────────
 
-  @Column({ name: 'language', type: 'enum', enum: DriverLanguage, nullable: true })
+  @Column({
+    name: 'language',
+    type: 'enum',
+    enum: DriverLanguage,
+    nullable: true,
+  })
   language: DriverLanguage | null;
 
   // ─── Timestamps ───────────────────────────────────────────────────────────────

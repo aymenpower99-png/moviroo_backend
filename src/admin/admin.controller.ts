@@ -1,5 +1,5 @@
 import {
-  Body, Controller, Get, HttpCode,
+  Body, Controller, Delete, Get, HttpCode,
   Param, ParseUUIDPipe, Patch, Post,
   Query, Res, UseGuards,
 } from '@nestjs/common';
@@ -68,6 +68,13 @@ export class AdminController {
     return this.adminService.updateUser(id, dto);
   }
 
+  // ─── Admin: Delete User (hard delete for driver, forbidden for others) ────
+
+  @Delete(':id') @UseGuards(AuthGuard('jwt'), RolesGuard) @Roles(UserRole.SUPER_ADMIN) @HttpCode(200)
+  deleteUser(@Param('id', ParseUUIDPipe) id: string) {
+    return this.adminService.deleteUser(id);
+  }
+
   // ─── Admin: Block User ────────────────────────────────────────────────────
 
   @Post(':id/block') @UseGuards(AuthGuard('jwt'), RolesGuard) @Roles(UserRole.SUPER_ADMIN) @HttpCode(200)
@@ -75,7 +82,7 @@ export class AdminController {
     return this.adminService.blockUser(id);
   }
 
-  // ─── Admin: Unblock User ──────────────────────────────────────────────────
+  // ─── Admin: Unblock User ─────���────────────────────────────────────────────
 
   @Post(':id/unblock') @UseGuards(AuthGuard('jwt'), RolesGuard) @Roles(UserRole.SUPER_ADMIN) @HttpCode(200)
   unblockUser(@Param('id', ParseUUIDPipe) id: string) {

@@ -5,19 +5,20 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import { User, UserRole, UserStatus } from '../users/entites/user.entity';
+import { Driver } from '../driver/entities/driver.entity'; // ← NEW
 import { MailService } from '../mail/mail.service';
 import { InviteUserDto } from './dto/invite-user.dto';
 import { ActivateAccountDto } from './dto/activate-account.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 
 interface InviteTokenPayload {
-  sub:     string;
-  email:   string;
+  sub: string;
+  email: string;
   purpose: 'invite';
 }
 
@@ -25,8 +26,9 @@ interface InviteTokenPayload {
 export class AdminService {
   constructor(
     @InjectRepository(User) private userRepo: Repository<User>,
-    private jwtService:  JwtService,
-    private config:      ConfigService,
+    @InjectRepository(Driver) private driverRepo: Repository<Driver>, // ← NEW
+    private jwtService: JwtService,
+    private config: ConfigService,
     private mailService: MailService,
   ) {}
 
@@ -34,15 +36,16 @@ export class AdminService {
 
   async inviteUser(dto: InviteUserDto) {
     const exists = await this.userRepo.findOne({ where: { email: dto.email } });
-    if (exists) throw new BadRequestException('A user with this email already exists.');
+    if (exists)
+      throw new BadRequestException('A user with this email already exists.');
 
     const user = this.userRepo.create({
       firstName: dto.firstName,
-      lastName:  dto.lastName,
-      email:     dto.email,
-      role:      dto.role,
-      status:    UserStatus.PENDING,
-      password:  null,
+      lastName: dto.lastName,
+      email: dto.email,
+      role: dto.role,
+      status: UserStatus.PENDING,
+      password: null,
     });
     await this.userRepo.save(user);
 
@@ -54,7 +57,7 @@ export class AdminService {
 
     return {
       message: `Invitation sent to ${user.email}.`,
-      userId:  user.id,
+      userId: user.id,
     };
   }
 
@@ -63,14 +66,18 @@ export class AdminService {
   async activateAccount(dto: ActivateAccountDto) {
     let payload: InviteTokenPayload;
     try {
-      payload = await this.jwtService.verifyAsync<InviteTokenPayload>(dto.token, {
-        secret: this.config.get<string>('jwt.inviteSecret')!,
-      });
+      payload = await this.jwtService.verifyAsync<InviteTokenPayload>(
+        dto.token,
+        {
+          secret: this.config.get<string>('jwt.inviteSecret')!,
+        },
+      );
     } catch {
       throw new UnauthorizedException('Invalid or expired activation link.');
     }
 
-    if (payload.purpose !== 'invite') throw new UnauthorizedException('Invalid token type.');
+    if (payload.purpose !== 'invite')
+      throw new UnauthorizedException('Invalid token type.');
 
     const user = await this.userRepo.findOne({ where: { id: payload.sub } });
     if (!user) throw new NotFoundException('User not found.');
@@ -82,17 +89,22 @@ export class AdminService {
       throw new BadRequestException('Account is blocked. Contact support.');
 
     if (!user.inviteToken)
-      throw new UnauthorizedException('Activation link has already been used or is invalid.');
+      throw new UnauthorizedException(
+        'Activation link has already been used or is invalid.',
+      );
 
     const tokenValid = await bcrypt.compare(dto.token, user.inviteToken);
-    if (!tokenValid) throw new UnauthorizedException('Activation link has expired. Request a new one.');
+    if (!tokenValid)
+      throw new UnauthorizedException(
+        'Activation link has expired. Request a new one.',
+      );
 
     const hashedPassword = await bcrypt.hash(dto.password, 12);
     await this.userRepo.update(user.id, {
-      password:      hashedPassword,
-      status:        UserStatus.ACTIVE,
+      password: hashedPassword,
+      status: UserStatus.ACTIVE,
       emailVerified: true,
-      inviteToken:   null,
+      inviteToken: null,
     });
 
     return { message: 'Account activated successfully. You can now log in.' };
@@ -104,7 +116,9 @@ export class AdminService {
     const user = await this.findUserOrFail(userId);
 
     if (user.status !== UserStatus.PENDING)
-      throw new BadRequestException('Can only resend invitation to pending users.');
+      throw new BadRequestException(
+        'Can only resend invitation to pending users.',
+      );
 
     const { token, link } = await this.generateInviteLink(user);
     const hashed = await bcrypt.hash(token, 10);
@@ -116,25 +130,49 @@ export class AdminService {
 
   // ─── List Users ───────────────────────────────────────────────────────────
 
+  // ─── List Users ───────────────────────────────────────────────────────────
+
   async listUsers(
-    page:    number     = 1,
-    limit:   number     = 20,
-    role?:   UserRole,
+    page: number = 1,
+    limit: number = 20,
+    role?: UserRole,
     status?: UserStatus,
   ) {
     const where: Partial<{ role: UserRole; status: UserStatus }> = {};
-    if (role)   where.role   = role;
+    if (role) where.role = role;
     if (status) where.status = status;
 
     const [data, total] = await this.userRepo.findAndCount({
       where,
-      skip:  (page - 1) * limit,
-      take:  limit,
+      skip: (page - 1) * limit,
+      take: limit,
       order: { createdAt: 'DESC' },
     });
 
+    // ─── Enrich driver users with profileComplete flag ────────────────────
+    // ─── Enrich driver users with profileComplete flag ────────────────────
+    const driverUserIds = data
+      .filter((u) => u.role === UserRole.DRIVER)
+      .map((u) => u.id);
+
+    const driverProfiles = driverUserIds.length
+      ? await this.driverRepo
+          .createQueryBuilder('d')
+          .select(['d.id', 'd.userId']) // ← only select what we need
+          .where('d.userId IN (:...ids)', { ids: driverUserIds })
+          .getMany()
+      : [];
+
+    const driverProfileSet = new Set(driverProfiles.map((d) => d.userId));
+    // ─────────────────────────────────────────────────────────────────────
+
     return {
-      data:  data.map(u => this.safeUser(u)),
+      data: data.map((u) => ({
+        ...this.safeUser(u),
+        ...(u.role === UserRole.DRIVER
+          ? { profileComplete: driverProfileSet.has(u.id) }
+          : {}),
+      })),
       total,
       page,
       limit,
@@ -154,18 +192,22 @@ export class AdminService {
     const user = await this.findUserOrFail(userId);
 
     if (dto.email && dto.email !== user.email) {
-      const exists = await this.userRepo.findOne({ where: { email: dto.email } });
+      const exists = await this.userRepo.findOne({
+        where: { email: dto.email },
+      });
       if (exists) throw new BadRequestException('Email is already in use.');
     }
 
     await this.userRepo.update(userId, {
       ...(dto.firstName && { firstName: dto.firstName }),
-      ...(dto.lastName  && { lastName:  dto.lastName }),
-      ...(dto.email     && { email:     dto.email }),
-      ...(dto.role      && { role:      dto.role }),
+      ...(dto.lastName && { lastName: dto.lastName }),
+      ...(dto.email && { email: dto.email }),
+      ...(dto.role && { role: dto.role }),
     });
 
-    const updated = await this.userRepo.findOneOrFail({ where: { id: userId } });
+    const updated = await this.userRepo.findOneOrFail({
+      where: { id: userId },
+    });
     return this.safeUser(updated);
   }
 
@@ -203,22 +245,38 @@ export class AdminService {
 
   private async generateInviteLink(user: User) {
     const token = await this.jwtService.signAsync(
-      { sub: user.id, email: user.email, purpose: 'invite' } satisfies InviteTokenPayload,
       {
-        secret:    this.config.get<string>('jwt.inviteSecret')!,
+        sub: user.id,
+        email: user.email,
+        purpose: 'invite',
+      } satisfies InviteTokenPayload,
+      {
+        secret: this.config.get<string>('jwt.inviteSecret')!,
         expiresIn: '72h',
       },
     );
-    // BACKEND_URL must be the bare origin e.g. http://localhost:3000 (no /api suffix)
-    // The global prefix 'api' is added by NestJS, so we include it explicitly once here.
-    const backendUrl = (this.config.get<string>('BACKEND_URL') ?? 'http://localhost:3000')
-      .replace(/\/api\/?$/, ''); // strip trailing /api if someone mistakenly set it in .env
+    const backendUrl = (
+      this.config.get<string>('BACKEND_URL') ?? 'http://localhost:3000'
+    ).replace(/\/api\/?$/, '');
     const link = `${backendUrl}/api/admin/users/activate?token=${token}`;
     return { token, link };
   }
 
   private safeUser(user: User) {
-    const { password, refreshToken, otpCode, totpSecret, inviteToken, ...safe } = user;
+    const {
+      password,
+      refreshToken,
+      otpCode,
+      totpSecret,
+      inviteToken,
+      ...safe
+    } = user;
     return safe;
+  }
+
+  async deleteUser(userId: string) {
+    const user = await this.findUserOrFail(userId);
+    await this.userRepo.softDelete(user.id);
+    return { message: 'User has been deleted.' };
   }
 }

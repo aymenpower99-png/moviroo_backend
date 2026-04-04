@@ -94,7 +94,6 @@ export class DriversService {
     const driver = this.driverRepo.create({
       userId:                dto.userId,
       driverLicenseNumber:   dto.driverLicenseNumber,
-      driverLicenseExpiry:   new Date(dto.driverLicenseExpiry),
       driverLicenseFrontUrl: dto.driverLicenseFrontUrl,
       driverLicenseBackUrl:  dto.driverLicenseBackUrl,
       language:              dto.language ?? null,

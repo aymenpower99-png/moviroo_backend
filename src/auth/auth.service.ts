@@ -9,19 +9,21 @@ import { Repository } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
-import { User, UserStatus } from '../users/entites/user.entity';
+import { User, UserRole, UserStatus } from '../users/entites/user.entity';  // ← UserRole added
+import { Driver } from '../driver/entities/driver.entity';                  // ← NEW
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { OtpService } from '../otp/otp.service';
 import { MailService } from '../mail/mail.service';
 
-interface JwtPayload   { sub: string; email: string; }
+interface JwtPayload     { sub: string; email: string; }
 interface PreAuthPayload { sub: string; email: string; preAuth: true; method: 'email' | 'totp'; }
 
 @Injectable()
 export class AuthService {
   constructor(
-    @InjectRepository(User) private userRepo: Repository<User>,
+    @InjectRepository(User)   private userRepo:   Repository<User>,
+    @InjectRepository(Driver) private driverRepo: Repository<Driver>,  // ← NEW
     private jwtService:  JwtService,
     private config:      ConfigService,
     private otpService:  OtpService,
@@ -48,7 +50,7 @@ export class AuthService {
     return { message: 'Registration successful. Check your email for a verification code.', requiresOtp: true, userId: user.id };
   }
 
-  // ─── Verify Email ──────────────────────────────────────────────────────────
+  // ─── Verify Email ─────────────────────────────────────────────────────────
 
   async verifyEmail(userId: string, code: string) {
     await this.otpService.verifyOtp(userId, code);
@@ -60,7 +62,7 @@ export class AuthService {
     return { ...tokens, user: this.safeUser(user) };
   }
 
-  // ─── Login ─────────────────────────────────────────────────────────────────
+  // ─── Login ────────────────────────────────────────────────────────────────
 
   async login(dto: LoginDto) {
     const user = await this.userRepo.findOne({ where: { email: dto.email } });
@@ -73,6 +75,17 @@ export class AuthService {
       throw new UnauthorizedException('Please activate your account first. Check your invitation email.');
     if (user.status === UserStatus.BLOCKED)
       throw new ForbiddenException('Your account has been blocked. Please contact support.');
+
+    // ─── Driver readiness gate ───────────────────────────────────────────────
+    // A driver who has accepted the invitation (ACTIVE) but whose profile has
+    // not yet been created by the agency must not be allowed to log in.
+    if (user.role === UserRole.DRIVER) {
+      const driverProfile = await this.driverRepo.findOne({ where: { userId: user.id } });
+      if (!driverProfile) {
+        throw new ForbiddenException('Your account is being prepared by the agency.');
+      }
+    }
+    // ────────────────────────────────────────────────────────────────────────
 
     if (!user.emailVerified) {
       const code = await this.otpService.generateOtp(user.id);
@@ -136,7 +149,7 @@ export class AuthService {
 
   // ─── TOTP ─────────────────────────────────────────────────────────────────
 
-  async setupTotp(user: User)                        { return this.otpService.generateTotpSecret(user); }
+  async setupTotp(user: User)                         { return this.otpService.generateTotpSecret(user); }
   async confirmTotpSetup(userId: string, code: string) {
     await this.otpService.verifyAndEnableTotp(userId, code);
     return { message: 'Authenticator app linked successfully.', totpEnabled: true };
@@ -158,7 +171,7 @@ export class AuthService {
     };
   }
 
-  // ─── Refresh / Logout ─────────────────────────────────────────────────────
+  // ─── Refresh / Logout ─────────────────────────────────��───────────────────
 
   async refresh(user: User) {
     const tokens = await this.generateTokens(user);
