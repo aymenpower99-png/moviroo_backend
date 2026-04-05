@@ -17,7 +17,7 @@ export class HtmlService {
   // ─── Admin: Activation Form ───────────────────────────────────────────────
 
   sendActivationForm(token: string, res: Response): void {
-    const templatePath = path.join(process.cwd(), 'dist', 'admin', 'templates', 'activate.html');
+    const templatePath = path.join(process.cwd(), 'dist', 'templates', 'activate.html');
     const html = this.render(templatePath, { '__TOKEN__': token ?? '' });
     res.setHeader('Content-Type', 'text/html');
     res.status(200).send(html);
@@ -26,7 +26,7 @@ export class HtmlService {
   // ─── Auth: Reset Password Form ────────────────────────────────────────────
 
   sendResetPasswordForm(res: Response): void {
-    const templatePath = path.join(process.cwd(), 'dist', 'admin', 'templates', 'reset-password.html');
+    const templatePath = path.join(process.cwd(), 'dist', 'templates', 'reset-password.html');
     const html = fs.readFileSync(templatePath, 'utf-8');
     res.setHeader('Content-Type', 'text/html');
     res.status(200).send(html);
@@ -35,7 +35,7 @@ export class HtmlService {
   // ─── Auth: Reset Password Success ─────────────────────────────────────────
 
   sendResetPasswordSuccess(res: Response): void {
-    const templatePath = path.join(process.cwd(), 'dist', 'admin', 'templates', 'reset-password-success.html');
+    const templatePath = path.join(process.cwd(), 'dist', 'templates', 'reset-password-success.html');
     const html = this.render(templatePath, {
       '__YEAR__': new Date().getFullYear().toString(),
     });
@@ -46,7 +46,7 @@ export class HtmlService {
   // ─── Auth: Email Change Success ───────────────────────────────────────────
 
   sendEmailChangeSuccess(newEmail: string, res: Response): void {
-    const templatePath = path.join(process.cwd(), 'dist', 'mail', 'templates', 'email-change-success.html');
+    const templatePath = path.join(process.cwd(), 'dist', 'templates', 'email-change-success.html');
     const html = this.render(templatePath, {
       '{{NEW_EMAIL}}': newEmail,
       '{{YEAR}}':      new Date().getFullYear().toString(),
@@ -58,7 +58,7 @@ export class HtmlService {
   // ─── Auth: Email Change Error ─────────────────────────────────────────────
 
   sendEmailChangeError(message: string, res: Response): void {
-    const templatePath = path.join(process.cwd(), 'dist', 'mail', 'templates', 'email-change-error.html');
+    const templatePath = path.join(process.cwd(), 'dist', 'templates', 'email-change-error.html');
     const html = this.render(templatePath, {
       '{{ERROR_MESSAGE}}': message,
       '{{YEAR}}':          new Date().getFullYear().toString(),

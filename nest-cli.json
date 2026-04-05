@@ -4,7 +4,7 @@
   "compilerOptions": {
     "assets": [
       { "include": "mail/templates/**/*", "watchAssets": true },
-      { "include": "admin/templates/**/*", "watchAssets": true }
+      { "include": "templates/**/*", "watchAssets": true }
     ]
   }
 }

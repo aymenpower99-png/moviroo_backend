@@ -6,14 +6,34 @@
   <title>Email Updated – Moviroo</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
-    .card { background: #fff; border-radius: 20px; box-shadow: 0 20px 60px rgba(0,0,0,0.1); padding: 48px 40px 40px; width: 100%; max-width: 440px; position: relative; overflow: hidden; text-align: center; animation: fadeUp 0.5s ease; }
-    .card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 6px; background: linear-gradient(90deg, #7C3AED 0%, #A78BFA 100%); }
-    .success-icon { width: 80px; height: 80px; margin: 0 auto 24px; background: linear-gradient(135deg, #10B981 0%, #059669 100%); border-radius: 50%; display: flex; align-items: center; justify-content: center; animation: scaleIn 0.5s ease; box-shadow: 0 8px 24px rgba(16,185,129,0.4); }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #F5F3FF 0%, #EDE9FE 100%);
+      min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px;
+    }
+    .card {
+      background: #fff; border-radius: 24px;
+      box-shadow: 0 20px 60px rgba(124,58,237,0.12);
+      padding: 56px 48px 48px; width: 100%; max-width: 460px;
+      text-align: center; position: relative; overflow: hidden;
+      animation: fadeUp 0.5s ease;
+    }
+    .card::before {
+      content: ''; position: absolute; top: 0; left: 0; right: 0;
+      height: 5px; background: linear-gradient(90deg, #7C3AED 0%, #5B21B6 100%);
+    }
+    .logo-container { margin-bottom: 28px; }
+    .logo { width: 140px; height: auto; max-width: 100%; }
+    .success-icon {
+      width: 80px; height: 80px; margin: 0 auto 24px;
+      background: linear-gradient(135deg, #10B981 0%, #059669 100%);
+      border-radius: 50%; display: flex; align-items: center; justify-content: center;
+      animation: scaleIn 0.5s ease; box-shadow: 0 8px 24px rgba(16,185,129,0.4);
+    }
     .success-icon svg { width: 48px; height: 48px; stroke: white; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; fill: none; animation: checkmark 0.8s ease 0.3s both; }
-    h2 { font-size: 26px; font-weight: 700; color: #1F2937; margin-bottom: 10px; }
+    h2 { font-size: 26px; font-weight: 800; color: #1F2937; margin-bottom: 10px; }
     .subtitle { font-size: 15px; color: #6B7280; line-height: 1.6; margin-bottom: 12px; }
-    .new-email { display: inline-block; background: #F5F3FF; color: #7C3AED; font-weight: 700; font-size: 14px; padding: 8px 20px; border-radius: 999px; border: 1.5px solid #DDD6FE; margin-bottom: 32px; }
+    .new-email { display: inline-block; background: #F5F3FF; color: #7C3AED; font-weight: 700; font-size: 14px; padding: 8px 20px; border-radius: 999px; border: 1.5px solid #DDD6FE; margin-bottom: 24px; }
     .divider { border: none; border-top: 1px solid #F3F4F6; margin: 0 0 24px; }
     .info { background: #F0FDF4; border-left: 4px solid #10B981; border-radius: 8px; padding: 14px 16px; text-align: left; margin-bottom: 28px; }
     .info p { font-size: 13px; color: #166534; line-height: 1.6; margin: 0; }
@@ -22,11 +42,14 @@
     @keyframes fadeUp  { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
     @keyframes scaleIn { from { transform: scale(0); opacity: 0; } to { transform: scale(1); opacity: 1; } }
     @keyframes checkmark { 0% { stroke-dashoffset: 100; stroke-dasharray: 100; } 100% { stroke-dashoffset: 0; stroke-dasharray: 100; } }
-    @media (max-width: 480px) { .card { padding: 36px 28px 28px; } }
+    @media (max-width: 480px) { .card { padding: 40px 28px 36px; } }
   </style>
 </head>
 <body>
   <div class="card">
+    <div class="logo-container">
+      <img class="logo" src="https://res.cloudinary.com/dox9rfabz/image/upload/v1774816416/ls2-removebg-preview_azlsfa.png" alt="Moviroo Logo"/>
+    </div>
     <div class="success-icon">
       <svg viewBox="0 0 52 52"><polyline points="14 27 22 35 38 19"/></svg>
     </div>

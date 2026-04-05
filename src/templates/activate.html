@@ -8,33 +8,23 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 20px;
+      background: linear-gradient(135deg, #F5F3FF 0%, #EDE9FE 100%);
+      min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px;
     }
     .card {
-      background: #fff;
-      border-radius: 20px;
-      box-shadow: 0 20px 60px rgba(0,0,0,0.1);
-      padding: 48px 40px 40px;
-      width: 100%;
-      max-width: 440px;
-      position: relative;
-      overflow: hidden;
+      background: #fff; border-radius: 24px;
+      box-shadow: 0 20px 60px rgba(124,58,237,0.12);
+      padding: 48px 40px 40px; width: 100%; max-width: 460px;
+      position: relative; overflow: hidden;
     }
     .card::before {
-      content: '';
-      position: absolute;
-      top: 0; left: 0; right: 0;
-      height: 6px;
-      background: linear-gradient(90deg, #7C3AED 0%, #A78BFA 100%);
+      content: ''; position: absolute; top: 0; left: 0; right: 0;
+      height: 5px; background: linear-gradient(90deg, #7C3AED 0%, #5B21B6 100%);
     }
     .logo-container { text-align: center; margin-bottom: 32px; }
-    .logo { width: 180px; height: auto; max-width: 100%; }
-    h2 { color: #1F2937; font-size: 26px; font-weight: 700; margin-bottom: 10px; text-align: center; }
-    p { color: #6B7280; font-size: 15px; text-align: center; margin-bottom: 32px; line-height: 1.5; }
+    .logo { width: 160px; height: auto; max-width: 100%; }
+    h2 { color: #1F2937; font-size: 26px; font-weight: 800; margin-bottom: 10px; text-align: center; }
+    p { color: #6B7280; font-size: 15px; text-align: center; margin-bottom: 32px; line-height: 1.6; }
     .form-group { margin-bottom: 20px; }
     label { display: block; font-size: 14px; font-weight: 600; color: #374151; margin-bottom: 8px; }
     input[type=password] {
@@ -66,18 +56,14 @@
       border-radius: 50%; display: flex; align-items: center; justify-content: center;
       animation: scaleIn 0.5s ease; box-shadow: 0 8px 24px rgba(16,185,129,0.4);
     }
-    .success-icon svg {
-      width: 48px; height: 48px; stroke: white; stroke-width: 3;
-      stroke-linecap: round; stroke-linejoin: round; fill: none;
-      animation: checkmark 0.8s ease 0.3s both;
-    }
+    .success-icon svg { width: 48px; height: 48px; stroke: white; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; fill: none; animation: checkmark 0.8s ease 0.3s both; }
     .success-title { font-size: 24px; font-weight: 700; color: #1F2937; margin-bottom: 12px; }
     .success-text { font-size: 15px; color: #6B7280; line-height: 1.6; margin-bottom: 0; }
     @keyframes slideIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
     @keyframes fadeIn  { from { opacity: 0; } to { opacity: 1; } }
     @keyframes scaleIn { from { transform: scale(0); opacity: 0; } to { transform: scale(1); opacity: 1; } }
     @keyframes checkmark { 0% { stroke-dashoffset: 100; stroke-dasharray: 100; } 100% { stroke-dashoffset: 0; stroke-dasharray: 100; } }
-    @media (max-width: 480px) { .card { padding: 36px 28px 28px; } .logo { width: 150px; } h2 { font-size: 22px; } }
+    @media (max-width: 480px) { .card { padding: 36px 24px 28px; } .logo { width: 140px; } h2 { font-size: 22px; } }
   </style>
 </head>
 <body>
