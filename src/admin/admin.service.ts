@@ -63,7 +63,11 @@ export class AdminService {
         const { token, link } = await this.generateInviteLink(restoredUser);
         const hashed = await bcrypt.hash(token, 10);
         await this.userRepo.update(restoredUser.id, { inviteToken: hashed });
-        await this.mailService.sendInvitation(restoredUser.email, restoredUser.firstName, link);
+        await this.mailService.sendInvitation(
+          restoredUser.email,
+          restoredUser.firstName,
+          link,
+        );
 
         return {
           message: `Invitation sent to ${restoredUser.email}.`,
@@ -235,7 +239,9 @@ export class AdminService {
       ...(dto.role && { role: dto.role }),
     });
 
-    const updated = await this.userRepo.findOneOrFail({ where: { id: userId } });
+    const updated = await this.userRepo.findOneOrFail({
+      where: { id: userId },
+    });
     return this.safeUser(updated);
   }
 
@@ -261,7 +267,19 @@ export class AdminService {
 
   async deleteUser(userId: string) {
     const user = await this.findUserOrFail(userId);
-    await this.userRepo.softDelete(user.id);
+
+    // 1️⃣ If driver → hard delete driver profile first (FK safety)
+    if (user.role === UserRole.DRIVER) {
+      const driverProfile = await this.driverRepo.findOne({
+        where: { userId: user.id },
+      });
+      if (driverProfile) {
+        await this.driverRepo.delete(driverProfile.id); // ✅ real DELETE from drivers table
+      }
+    }
+
+    // 2️⃣ Hard delete the user
+    await this.userRepo.delete(user.id); // ✅ real DELETE from users table
     return { message: 'User has been deleted.' };
   }
 
@@ -275,7 +293,11 @@ export class AdminService {
 
   private async generateInviteLink(user: User) {
     const token = await this.jwtService.signAsync(
-      { sub: user.id, email: user.email, purpose: 'invite' } satisfies InviteTokenPayload,
+      {
+        sub: user.id,
+        email: user.email,
+        purpose: 'invite',
+      } satisfies InviteTokenPayload,
       {
         secret: this.config.get<string>('jwt.inviteSecret')!,
         expiresIn: '72h',
@@ -289,7 +311,14 @@ export class AdminService {
   }
 
   private safeUser(user: User) {
-    const { password, refreshToken, otpCode, totpSecret, inviteToken, ...safe } = user;
+    const {
+      password,
+      refreshToken,
+      otpCode,
+      totpSecret,
+      inviteToken,
+      ...safe
+    } = user;
     return safe;
   }
 }
