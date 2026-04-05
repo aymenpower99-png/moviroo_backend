@@ -76,7 +76,7 @@ export class AuthController {
     return this.authService.resendOtp(dto.userId, purpose);
   }
 
-  // ─── Forgot / Reset / Update Password ─���───────────────────────────────────
+  // ─── Forgot / Reset / Update Password ────────────────────────────────────
 
   @Post('forgot-password')
   @HttpCode(200)
@@ -85,7 +85,6 @@ export class AuthController {
   }
 
   // GET: render the HTML reset form (link from email opens this)
-  // GET: render reset password form
   @Get('reset-password')
   resetPasswordForm(@Res() res: Response) {
     this.htmlService.sendResetPasswordForm(res);
@@ -97,7 +96,7 @@ export class AuthController {
     this.htmlService.sendResetPasswordSuccess(res);
   }
 
-  // POST: JSON API (Postman / mobile)
+  // POST: JSON API — used by both the React frontend and the backend HTML form
   @Post('reset-password')
   @HttpCode(200)
   resetPassword(@Body() dto: ResetPasswordDto) {
@@ -117,6 +116,18 @@ export class AuthController {
   @HttpCode(200)
   updateProfile(@CurrentUser() user: User, @Body() dto: UpdateProfileDto) {
     return this.profileService.updateProfile(user.id, dto);
+  }
+
+  // ── ✅ NEW: Update password from Settings panel ──────────────────────────
+  @Patch('me/password')
+  @UseGuards(AuthGuard('jwt'))
+  @HttpCode(200)
+  updatePassword(@CurrentUser() user: User, @Body() dto: UpdatePasswordDto) {
+    return this.passwordService.updatePassword(
+      user.id,
+      dto.currentPassword,
+      dto.newPassword,
+    );
   }
 
   // ─── Email Change ─────────────────────────────────────────────────────────
@@ -152,7 +163,7 @@ export class AuthController {
     return this.emailChangeService.cancelEmailChange(user.id);
   }
 
-  // ─── TOTP ───────────────��─────────────────────────────────────────────────
+  // ─── TOTP ─────────────────────────────────────────────────────────────────
 
   @Post('2fa/totp/setup')
   @UseGuards(AuthGuard('jwt'), PassengerGuard)
