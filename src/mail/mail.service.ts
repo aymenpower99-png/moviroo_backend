@@ -21,8 +21,6 @@ export class MailService {
     } as any);
   }
 
-  // ─── Helper: load and hydrate an HTML template ────────────────────────────
-
   private loadTemplate(
     templateName: string,
     variables: Record<string, string>,
@@ -34,8 +32,6 @@ export class MailService {
     }
     return html;
   }
-
-  // ─── Send OTP ─────────────────────────────────────────────────────────────
 
   async sendOtp(
     to: string,
@@ -73,8 +69,6 @@ export class MailService {
     this.logger.log(`OTP sent to ${to} [${purpose}]`);
   }
 
-  // ─── Send Invitation ──────────────────────────────────────────────────────
-
   async sendInvitation(
     email: string,
     firstName: string,
@@ -94,8 +88,6 @@ export class MailService {
     });
     this.logger.log(`Invitation sent to ${email}`);
   }
-
-  // ─── Send Email Change Verification ──────────────────────────────────────
 
   async sendEmailChangeVerification(
     to: string,
@@ -121,8 +113,6 @@ export class MailService {
     this.logger.log(`Email-change verification sent to ${to}`);
   }
 
-  // ─── Send Email Change Alert ──────────────────────────────────────────────
-
   async sendEmailChangeAlert(
     to: string,
     firstName: string,
@@ -141,5 +131,34 @@ export class MailService {
       html,
     });
     this.logger.log(`Email-change alert sent to ${to}`);
+  }
+
+  // ─── Send Forgot Password ─────────────────────────────────────────────────
+
+  // ─── Send Forgot Password ─────────────────────────────────────────────────
+
+  async sendForgotPassword(
+    to: string,
+    firstName: string,
+    token: string,
+  ): Promise<void> {
+    const backendUrl =
+      this.config.get<string>('app.backendUrl') ?? 'http://localhost:3000/api';
+    const resetLink = `${backendUrl}/auth/reset-password?token=${token}`;
+
+    const html = this.loadTemplate('forgot-password.html', {
+      FIRST_NAME: firstName,
+      RESET_LINK: resetLink,
+      EXPIRY_MINUTES: '30',
+      YEAR: new Date().getFullYear().toString(),
+    });
+
+    await this.transporter.sendMail({
+      from: `"Moviroo" <${this.config.get<string>('mail.from')}>`,
+      to,
+      subject: 'Moviroo – Reset your password',
+      html,
+    });
+    this.logger.log(`Forgot-password email sent to ${to}`);
   }
 }

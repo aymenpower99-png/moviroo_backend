@@ -17,6 +17,11 @@ export class AuthPasswordService {
     private mailService: MailService,
   ) {}
 
+  /** Deterministic SHA-256 hash for reset tokens (enables direct DB lookup). */
+  private hashToken(raw: string): string {
+    return crypto.createHash('sha256').update(raw).digest('hex');
+  }
+
   /**
    * Security: always return success even if user not found.
    */
@@ -30,9 +35,10 @@ export class AuthPasswordService {
       };
     }
 
-    // Generate raw token for the email, store only hashed token in DB
+    // Generate raw token for the email; store only the SHA-256 hash in DB.
+    // SHA-256 is deterministic so we can look it up directly on reset.
     const rawToken = crypto.randomBytes(32).toString('hex');
-    const tokenHash = await bcrypt.hash(rawToken, 12);
+    const tokenHash = this.hashToken(rawToken);
     const expiry = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
 
     await this.userRepo.update(user.id, {
@@ -40,8 +46,6 @@ export class AuthPasswordService {
       passwordResetExpiry: expiry,
     });
 
-    // If you already have a mail method, use it.
-    // Otherwise you must add one in MailService (see note below).
     await this.mailService.sendForgotPassword(user.email, user.firstName, rawToken);
 
     return {
@@ -51,35 +55,20 @@ export class AuthPasswordService {
   }
 
   async resetPassword(token: string, newPassword: string) {
-    // Find candidate users that currently have a reset token not expired.
-    // (We can't query by hash easily because bcrypt uses random salts.)
-    const candidates = await this.userRepo.find({
-      where: {},
-      select: ['id', 'passwordResetToken', 'passwordResetExpiry'] as any,
+    // Hash the incoming token the same way it was stored — direct DB lookup.
+    const tokenHash = this.hashToken(token);
+
+    const user = await this.userRepo.findOne({
+      where: { passwordResetToken: tokenHash },
     });
 
-    const now = new Date();
-    const validCandidate = candidates.find(
-      (u: any) =>
-        u.passwordResetToken &&
-        u.passwordResetExpiry &&
-        u.passwordResetExpiry > now,
-    );
-
-    // NOTE: The above is a fallback if you cannot query properly.
-    // The correct approach is to store a SHA256 token hash (deterministic) instead of bcrypt.
-    // See “Important improvement” section below.
-
-    if (!validCandidate) {
+    if (!user || !user.passwordResetExpiry || user.passwordResetExpiry < new Date()) {
       throw new BadRequestException('Invalid or expired reset token');
     }
 
-    const ok = await bcrypt.compare(token, validCandidate.passwordResetToken);
-    if (!ok) throw new BadRequestException('Invalid or expired reset token');
-
     const passwordHash = await bcrypt.hash(newPassword, 12);
 
-    await this.userRepo.update(validCandidate.id, {
+    await this.userRepo.update(user.id, {
       password: passwordHash,
       passwordResetToken: null,
       passwordResetExpiry: null,

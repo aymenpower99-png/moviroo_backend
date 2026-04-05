@@ -23,6 +23,26 @@ export class HtmlService {
     res.status(200).send(html);
   }
 
+  // ─── Auth: Reset Password Form ────────────────────────────────────────────
+
+  sendResetPasswordForm(res: Response): void {
+    const templatePath = path.join(process.cwd(), 'dist', 'admin', 'templates', 'reset-password.html');
+    const html = fs.readFileSync(templatePath, 'utf-8');
+    res.setHeader('Content-Type', 'text/html');
+    res.status(200).send(html);
+  }
+
+  // ─── Auth: Reset Password Success ─────────────────────────────────────────
+
+  sendResetPasswordSuccess(res: Response): void {
+    const templatePath = path.join(process.cwd(), 'dist', 'admin', 'templates', 'reset-password-success.html');
+    const html = this.render(templatePath, {
+      '__YEAR__': new Date().getFullYear().toString(),
+    });
+    res.setHeader('Content-Type', 'text/html');
+    res.status(200).send(html);
+  }
+
   // ─── Auth: Email Change Success ───────────────────────────────────────────
 
   sendEmailChangeSuccess(newEmail: string, res: Response): void {

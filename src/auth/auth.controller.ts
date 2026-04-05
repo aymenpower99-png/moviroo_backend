@@ -76,7 +76,7 @@ export class AuthController {
     return this.authService.resendOtp(dto.userId, purpose);
   }
 
-  // ─── Forgot / Reset / Update Password ─────────────────────────────────────
+  // ─── Forgot / Reset / Update Password ─���───────────────────────────────────
 
   @Post('forgot-password')
   @HttpCode(200)
@@ -84,21 +84,24 @@ export class AuthController {
     return this.passwordService.forgotPassword(dto.email);
   }
 
+  // GET: render the HTML reset form (link from email opens this)
+  // GET: render reset password form
+  @Get('reset-password')
+  resetPasswordForm(@Res() res: Response) {
+    this.htmlService.sendResetPasswordForm(res);
+  }
+
+  // GET: success page (redirected to after JS fetch succeeds)
+  @Get('reset-password/success')
+  resetPasswordSuccess(@Res() res: Response) {
+    this.htmlService.sendResetPasswordSuccess(res);
+  }
+
+  // POST: JSON API (Postman / mobile)
   @Post('reset-password')
   @HttpCode(200)
   resetPassword(@Body() dto: ResetPasswordDto) {
     return this.passwordService.resetPassword(dto.token, dto.newPassword);
-  }
-
-  @Patch('password')
-  @UseGuards(AuthGuard('jwt'))
-  @HttpCode(200)
-  updatePassword(@CurrentUser() user: User, @Body() dto: UpdatePasswordDto) {
-    return this.passwordService.updatePassword(
-      user.id,
-      dto.currentPassword,
-      dto.newPassword,
-    );
   }
 
   // ─── Me / Profile ─────────────────────────────────────────────────────────

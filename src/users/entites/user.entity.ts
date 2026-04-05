@@ -84,10 +84,15 @@ export class User {
   @Column({ type: 'enum', enum: UserStatus, default: UserStatus.PENDING })
   status: UserStatus;
 
-  // ─── Invitation Token ─────────────────────────────────────────────────────
+  // ─── Invitation Token ────────��────────────────────────────────────────────
 
   @Column({ name: 'invite_token', type: 'text', nullable: true, default: null })
   inviteToken: string | null;
+
+  // ─── Agency ───────────────────────────────────────────────────────────────
+
+  @Column({ name: 'agency_id', type: 'uuid', nullable: true, default: null })
+  agencyId: string | null;
 
   // ─── 2-Step Verification (email OTP) ─────────────────────────────────────
 
@@ -105,14 +110,25 @@ export class User {
   })
   otpExpiry: Date | null;
 
-  // in User entity
-  @Column({ type: 'varchar', nullable: true })
+  // ─── Password Reset ───────────────────────────────────────────────────────
+
+  @Column({
+    name: 'password_reset_token', // ← explicit snake_case name
+    type: 'varchar',
+    nullable: true,
+    default: null,
+  })
   passwordResetToken: string | null;
 
-  @Column({ type: 'timestamp', nullable: true })
+  @Column({
+    name: 'password_reset_expiry', // ← explicit snake_case name
+    type: 'timestamp',
+    nullable: true,
+    default: null,
+  })
   passwordResetExpiry: Date | null;
 
-  // ─── TOTP (Authenticator App) ─────────────────────────────────────────────
+  // ─── TOTP (Authenticator App) ─────────────────���───────────────────────────
 
   @Column({ name: 'totp_secret', type: 'text', nullable: true, default: null })
   totpSecret: string | null;
