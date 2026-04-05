@@ -31,194 +31,84 @@
       height: 6px;
       background: linear-gradient(90deg, #7C3AED 0%, #A78BFA 100%);
     }
-    .logo-container {
-      text-align: center;
-      margin-bottom: 32px;
-    }
-    .logo {
-      width: 180px;
-      height: auto;
-      max-width: 100%;
-    }
-    h2 {
-      color: #1F2937;
-      font-size: 26px;
-      font-weight: 700;
-      margin-bottom: 10px;
-      text-align: center;
-    }
-    p {
-      color: #6B7280;
-      font-size: 15px;
-      text-align: center;
-      margin-bottom: 32px;
-      line-height: 1.5;
-    }
+    .logo-container { text-align: center; margin-bottom: 32px; }
+    .logo { width: 180px; height: auto; max-width: 100%; }
+    h2 { color: #1F2937; font-size: 26px; font-weight: 700; margin-bottom: 10px; text-align: center; }
+    p { color: #6B7280; font-size: 15px; text-align: center; margin-bottom: 32px; line-height: 1.5; }
     .form-group { margin-bottom: 20px; }
-    label {
-      display: block;
-      font-size: 14px;
-      font-weight: 600;
-      color: #374151;
-      margin-bottom: 8px;
-    }
+    label { display: block; font-size: 14px; font-weight: 600; color: #374151; margin-bottom: 8px; }
     input[type=password] {
-      width: 100%;
-      padding: 13px 16px;
-      border: 2px solid #E5E7EB;
-      border-radius: 10px;
-      font-size: 15px;
-      outline: none;
-      transition: all .3s ease;
-      font-family: inherit;
+      width: 100%; padding: 13px 16px; border: 2px solid #E5E7EB;
+      border-radius: 10px; font-size: 15px; outline: none;
+      transition: all .3s ease; font-family: inherit;
     }
-    input[type=password]:focus {
-      border-color: #7C3AED;
-      box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
-    }
+    input[type=password]:focus { border-color: #7C3AED; box-shadow: 0 0 0 3px rgba(124,58,237,0.1); }
     button {
-      width: 100%;
-      padding: 15px;
+      width: 100%; padding: 15px;
       background: linear-gradient(135deg, #7C3AED 0%, #6D28D9 100%);
-      color: #fff;
-      border: none;
-      border-radius: 10px;
-      font-size: 16px;
-      font-weight: 700;
-      cursor: pointer;
-      transition: all .3s ease;
-      margin-top: 8px;
-      box-shadow: 0 4px 14px rgba(124, 58, 237, 0.4);
+      color: #fff; border: none; border-radius: 10px; font-size: 16px;
+      font-weight: 700; cursor: pointer; transition: all .3s ease;
+      margin-top: 8px; box-shadow: 0 4px 14px rgba(124,58,237,0.4);
     }
-    button:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 6px 20px rgba(124, 58, 237, 0.5);
-    }
+    button:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(124,58,237,0.5); }
     button:active { transform: translateY(0); }
     button:disabled {
       background: linear-gradient(135deg, #A78BFA 0%, #C4B5FD 100%);
-      cursor: not-allowed;
-      transform: none;
-      box-shadow: none;
+      cursor: not-allowed; transform: none; box-shadow: none;
     }
-    .msg {
-      margin-top: 20px;
-      padding: 14px 16px;
-      border-radius: 10px;
-      font-size: 14px;
-      display: none;
-      animation: slideIn 0.3s ease;
-    }
-    .msg.error {
-      background: #FEE2E2;
-      color: #B91C1C;
-      border-left: 4px solid #DC2626;
-    }
-
-    /* Success State */
-    .success-state {
-      display: none;
-      text-align: center;
-      animation: fadeIn 0.5s ease;
-    }
+    .msg { margin-top: 20px; padding: 14px 16px; border-radius: 10px; font-size: 14px; display: none; animation: slideIn 0.3s ease; }
+    .msg.error { background: #FEE2E2; color: #B91C1C; border-left: 4px solid #DC2626; }
+    .success-state { display: none; text-align: center; animation: fadeIn 0.5s ease; }
     .success-state.active { display: block; }
     .success-icon {
-      width: 80px;
-      height: 80px;
-      margin: 0 auto 24px;
+      width: 80px; height: 80px; margin: 0 auto 24px;
       background: linear-gradient(135deg, #10B981 0%, #059669 100%);
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      animation: scaleIn 0.5s ease;
+      border-radius: 50%; display: flex; align-items: center; justify-content: center;
+      animation: scaleIn 0.5s ease; box-shadow: 0 8px 24px rgba(16,185,129,0.4);
     }
     .success-icon svg {
-      width: 48px;
-      height: 48px;
-      stroke: white;
-      stroke-width: 3;
-      stroke-linecap: round;
-      stroke-linejoin: round;
-      fill: none;
+      width: 48px; height: 48px; stroke: white; stroke-width: 3;
+      stroke-linecap: round; stroke-linejoin: round; fill: none;
       animation: checkmark 0.8s ease 0.3s both;
     }
-    .success-title {
-      font-size: 24px;
-      font-weight: 700;
-      color: #1F2937;
-      margin-bottom: 12px;
-    }
-    .success-text {
-      font-size: 15px;
-      color: #6B7280;
-      line-height: 1.6;
-      margin-bottom: 0;
-    }
-
-    @keyframes slideIn {
-      from { opacity: 0; transform: translateY(-10px); }
-      to   { opacity: 1; transform: translateY(0); }
-    }
-    @keyframes fadeIn {
-      from { opacity: 0; }
-      to   { opacity: 1; }
-    }
-    @keyframes scaleIn {
-      from { transform: scale(0); opacity: 0; }
-      to   { transform: scale(1); opacity: 1; }
-    }
-    @keyframes checkmark {
-      0%   { stroke-dashoffset: 100; stroke-dasharray: 100; }
-      100% { stroke-dashoffset: 0;   stroke-dasharray: 100; }
-    }
-
-    @media (max-width: 480px) {
-      .card  { padding: 36px 28px 28px; }
-      .logo  { width: 150px; }
-      h2     { font-size: 22px; }
-    }
+    .success-title { font-size: 24px; font-weight: 700; color: #1F2937; margin-bottom: 12px; }
+    .success-text { font-size: 15px; color: #6B7280; line-height: 1.6; margin-bottom: 0; }
+    @keyframes slideIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes fadeIn  { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes scaleIn { from { transform: scale(0); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+    @keyframes checkmark { 0% { stroke-dashoffset: 100; stroke-dasharray: 100; } 100% { stroke-dashoffset: 0; stroke-dasharray: 100; } }
+    @media (max-width: 480px) { .card { padding: 36px 28px 28px; } .logo { width: 150px; } h2 { font-size: 22px; } }
   </style>
 </head>
 <body>
   <div class="card">
-
-    <!-- Form State -->
     <div id="formState">
       <div class="logo-container">
-        <img class="logo"
-             src="https://res.cloudinary.com/dox9rfabz/image/upload/v1774816416/ls2-removebg-preview_azlsfa.png"
-             alt="Moviroo Logo" />
+        <img class="logo" src="https://res.cloudinary.com/dox9rfabz/image/upload/v1774816416/ls2-removebg-preview_azlsfa.png" alt="Moviroo Logo"/>
       </div>
       <h2>Activate Your Account</h2>
       <p>Set your password to complete account activation and start using Moviroo.</p>
       <form id="form">
         <div class="form-group">
           <label for="password">New Password</label>
-          <input type="password" id="password" placeholder="Minimum 8 characters" required minlength="8" />
+          <input type="password" id="password" placeholder="Minimum 8 characters" required minlength="8"/>
         </div>
         <div class="form-group">
           <label for="confirm">Confirm Password</label>
-          <input type="password" id="confirm" placeholder="Repeat your password" required />
+          <input type="password" id="confirm" placeholder="Repeat your password" required/>
         </div>
         <button type="submit" id="btn">Activate Account</button>
         <div class="msg error" id="errMsg"></div>
       </form>
     </div>
-
-    <!-- Success State -->
     <div class="success-state" id="successState">
       <div class="success-icon">
-        <svg viewBox="0 0 52 52">
-          <polyline points="14 27 22 35 38 19"/>
-        </svg>
+        <svg viewBox="0 0 52 52"><polyline points="14 27 22 35 38 19"/></svg>
       </div>
       <h2 class="success-title">Account Activated!</h2>
       <p class="success-text">Your Moviroo account has been successfully activated. You can now log in using your email and the password you just set.</p>
     </div>
-
   </div>
-
   <script>
     document.getElementById('form').addEventListener('submit', async function(e) {
       e.preventDefault();
@@ -226,42 +116,19 @@
       var pw2 = document.getElementById('confirm').value;
       var err = document.getElementById('errMsg');
       var btn = document.getElementById('btn');
-
       err.style.display = 'none';
-
-      if (pw !== pw2) {
-        err.textContent = 'Passwords do not match.';
-        err.style.display = 'block';
-        return;
-      }
-
-      if (pw.length < 8) {
-        err.textContent = 'Password must be at least 8 characters long.';
-        err.style.display = 'block';
-        return;
-      }
-
-      btn.disabled    = true;
-      btn.textContent = 'Activating...';
-
+      if (pw !== pw2) { err.textContent = 'Passwords do not match.'; err.style.display = 'block'; return; }
+      if (pw.length < 8) { err.textContent = 'Password must be at least 8 characters long.'; err.style.display = 'block'; return; }
+      btn.disabled = true; btn.textContent = 'Activating...';
       try {
-        var res = await fetch('/api/admin/users/activate', {
-          method:  'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ token: '__TOKEN__', password: pw }),
-        });
+        var res  = await fetch('/api/admin/users/activate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: '__TOKEN__', password: pw }) });
         var data = await res.json();
-
         if (!res.ok) throw new Error(data.message || 'Activation failed.');
-
         document.getElementById('formState').style.display = 'none';
         document.getElementById('successState').classList.add('active');
-
       } catch (ex) {
-        err.textContent = ex.message;
-        err.style.display  = 'block';
-        btn.disabled       = false;
-        btn.textContent    = 'Activate Account';
+        err.textContent = ex.message; err.style.display = 'block';
+        btn.disabled = false; btn.textContent = 'Activate Account';
       }
     });
   </script>
