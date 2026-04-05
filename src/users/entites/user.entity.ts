@@ -9,14 +9,14 @@ import {
 
 export enum UserRole {
   SUPER_ADMIN = 'super_admin',
-  AGENCY      = 'agency',
-  DRIVER      = 'driver',
-  PASSENGER   = 'passenger',
+  AGENCY = 'agency',
+  DRIVER = 'driver',
+  PASSENGER = 'passenger',
 }
 
 export enum UserStatus {
   PENDING = 'pending',
-  ACTIVE  = 'active',
+  ACTIVE = 'active',
   BLOCKED = 'blocked',
 }
 
@@ -31,7 +31,12 @@ export class User {
   @Column({ unique: true, nullable: true })
   phone: string;
 
-  @Column({ name: 'password_hash', type: 'text', nullable: true, default: null })
+  @Column({
+    name: 'password_hash',
+    type: 'text',
+    nullable: true,
+    default: null,
+  })
   password: string | null;
 
   @Column({ name: 'first_name', length: 100 })
@@ -58,7 +63,12 @@ export class User {
   @Column({ name: 'ban_reason', nullable: true })
   banReason: string;
 
-  @Column({ name: 'refresh_token', type: 'text', nullable: true, default: null })
+  @Column({
+    name: 'refresh_token',
+    type: 'text',
+    nullable: true,
+    default: null,
+  })
   refreshToken: string | null;
 
   @Column({ name: 'last_login_at', nullable: true })
@@ -87,8 +97,20 @@ export class User {
   @Column({ name: 'otp_code', type: 'text', nullable: true, default: null })
   otpCode: string | null;
 
-  @Column({ name: 'otp_expiry', type: 'timestamptz', nullable: true, default: null })
+  @Column({
+    name: 'otp_expiry',
+    type: 'timestamptz',
+    nullable: true,
+    default: null,
+  })
   otpExpiry: Date | null;
+
+  // in User entity
+  @Column({ type: 'varchar', nullable: true })
+  passwordResetToken: string | null;
+
+  @Column({ type: 'timestamp', nullable: true })
+  passwordResetExpiry: Date | null;
 
   // ─── TOTP (Authenticator App) ─────────────────────────────────────────────
 
@@ -100,13 +122,28 @@ export class User {
 
   // ─── Email Change ─────────────────────────────────────────────────────────
 
-  @Column({ name: 'pending_email', type: 'text', nullable: true, default: null })
+  @Column({
+    name: 'pending_email',
+    type: 'text',
+    nullable: true,
+    default: null,
+  })
   pendingEmail: string | null;
 
-  @Column({ name: 'email_change_token', type: 'text', nullable: true, default: null })
+  @Column({
+    name: 'email_change_token',
+    type: 'text',
+    nullable: true,
+    default: null,
+  })
   emailChangeToken: string | null;
 
-  @Column({ name: 'email_change_expiry', type: 'timestamptz', nullable: true, default: null })
+  @Column({
+    name: 'email_change_expiry',
+    type: 'timestamptz',
+    nullable: true,
+    default: null,
+  })
   emailChangeExpiry: Date | null;
 
   // ─── Timestamps ───────────────────────────────────────────────────────────

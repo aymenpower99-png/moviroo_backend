@@ -12,14 +12,22 @@ import {
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { AuthGuard } from '@nestjs/passport';
+
 import { AuthService } from './auth.service';
 import { AuthProfileService } from './auth-profile.service';
 import { AuthEmailChangeService } from './auth-email-change.service';
+import { AuthPasswordService } from './auth-password.service';
+
 import { HtmlService } from '../common/services/html.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { VerifyOtpDto, ResendOtpDto, Toggle2faDto } from './dto/verify-otp.dto';
+
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
+import { UpdatePasswordDto } from './dto/update-password.dto';
+
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { User } from '../users/entites/user.entity';
 import { PassengerGuard } from '../common/guards/passenger.guard';
@@ -30,6 +38,7 @@ export class AuthController {
     private authService: AuthService,
     private profileService: AuthProfileService,
     private emailChangeService: AuthEmailChangeService,
+    private passwordService: AuthPasswordService,
     private htmlService: HtmlService,
   ) {}
 
@@ -65,6 +74,31 @@ export class AuthController {
     @Query('purpose') purpose: 'verify-email' | 'login' = 'verify-email',
   ) {
     return this.authService.resendOtp(dto.userId, purpose);
+  }
+
+  // ─── Forgot / Reset / Update Password ─────────────────────────────────────
+
+  @Post('forgot-password')
+  @HttpCode(200)
+  forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return this.passwordService.forgotPassword(dto.email);
+  }
+
+  @Post('reset-password')
+  @HttpCode(200)
+  resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.passwordService.resetPassword(dto.token, dto.newPassword);
+  }
+
+  @Patch('password')
+  @UseGuards(AuthGuard('jwt'))
+  @HttpCode(200)
+  updatePassword(@CurrentUser() user: User, @Body() dto: UpdatePasswordDto) {
+    return this.passwordService.updatePassword(
+      user.id,
+      dto.currentPassword,
+      dto.newPassword,
+    );
   }
 
   // ─── Me / Profile ─────────────────────────────────────────────────────────
@@ -115,7 +149,7 @@ export class AuthController {
     return this.emailChangeService.cancelEmailChange(user.id);
   }
 
-  // ─── TOTP ─────────────────────────────────────────────────────────────────
+  // ─── TOTP ───────────────��─────────────────────────────────────────────────
 
   @Post('2fa/totp/setup')
   @UseGuards(AuthGuard('jwt'), PassengerGuard)
