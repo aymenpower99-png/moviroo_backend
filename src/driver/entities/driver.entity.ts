@@ -8,14 +8,14 @@ import {
 } from 'typeorm';
 
 export enum DriverAvailabilityStatus {
-  ONLINE = 'online',
+  ONLINE  = 'online',
   OFFLINE = 'offline',
 }
 
 export enum DriverLanguage {
   ENGLISH = 'English',
-  FRENCH = 'French',
-  ARABIC = 'Arabic',
+  FRENCH  = 'French',
+  ARABIC  = 'Arabic',
 }
 
 @Entity('drivers')
@@ -67,10 +67,10 @@ export class Driver {
 
   // ─── Availability & Location ──────────────────────────────────────────────────
 
+  // varchar in DB (no PostgreSQL enum type) — use plain varchar + default
   @Column({
     name: 'availability_status',
-    type: 'enum',
-    enum: DriverAvailabilityStatus,
+    type: 'varchar',
     default: DriverAvailabilityStatus.OFFLINE,
   })
   availabilityStatus: DriverAvailabilityStatus;
@@ -98,6 +98,7 @@ export class Driver {
 
   // ─── Preferences ─────────────────────────────────────────────────────────────
 
+  // driver_language IS a real PostgreSQL enum — keep type: 'enum'
   @Column({
     name: 'language',
     type: 'enum',
