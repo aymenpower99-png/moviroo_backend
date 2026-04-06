@@ -141,9 +141,9 @@ export class MailService {
     token: string,
   ): Promise<void> {
     // ✅ Points to the React frontend /reset-password page
-    const frontendUrl =
-      this.config.get<string>('app.frontendUrl') ?? 'http://localhost:5173';
-    const resetLink = `${frontendUrl}/reset-password?token=${token}`;
+    const backendUrl =
+      this.config.get<string>('app.backendUrl') ?? 'http://localhost:3000/api';
+    const resetLink = `${backendUrl}/auth/reset-password?token=${token}`;
 
     const html = this.loadTemplate('forgot-password.html', {
       FIRST_NAME: firstName,
