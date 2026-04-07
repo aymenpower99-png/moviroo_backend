@@ -11,6 +11,7 @@ import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import { User, UserRole, UserStatus } from '../users/entites/user.entity';
 import { Driver } from '../driver/entities/driver.entity';
+import { PassengerEntity, MembershipLevel, VehicleType } from '../passenger/entities/passengers.entity';
 import { MailService } from '../mail/mail.service';
 import { InviteUserDto } from './dto/invite-user.dto';
 import { ActivateAccountDto } from './dto/activate-account.dto';
@@ -27,6 +28,7 @@ export class AdminService {
   constructor(
     @InjectRepository(User) private userRepo: Repository<User>,
     @InjectRepository(Driver) private driverRepo: Repository<Driver>,
+    @InjectRepository(PassengerEntity) private passengerRepo: Repository<PassengerEntity>,
     private jwtService: JwtService,
     private config: ConfigService,
     private mailService: MailService,
@@ -145,6 +147,25 @@ export class AdminService {
       emailVerified: true,
       inviteToken: null,
     });
+
+    // ─── Auto-create profile based on role ───────────────────────────────────
+    if (user.role === UserRole.PASSENGER) {
+      const exists = await this.passengerRepo.findOne({ where: { userId: user.id } });
+      if (!exists) {
+        const profile = this.passengerRepo.create({
+          userId:               user.id,
+          preferredVehicleType: VehicleType.STANDARD,
+          membershipLevel:      MembershipLevel.GO,
+          membershipPoints:     0,
+          totalBookings:        0,
+          ratingAverage:        5.0,
+          totalRatings:         0,
+          newsletterOptIn:      false,
+        });
+        await this.passengerRepo.save(profile);
+      }
+    }
+    // ─────────────────────────────────────────────────────────────────────────
 
     return { message: 'Account activated successfully. You can now log in.' };
   }
