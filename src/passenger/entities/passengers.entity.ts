@@ -9,21 +9,17 @@ import {
   DeleteDateColumn,
 } from 'typeorm';
 import { User } from '../../users/entites/user.entity';
+import { VehicleType } from '../../vehicles/entities/vehicle.entity';
+
 
 export enum MembershipLevel {
   GO    = 'Moviroo Go',
   MAX   = 'Moviroo Max',
   ELITE = 'Moviroo Elite',
-  VIP   = 'Moviroo Vip',  // ← lowercase p
+  VIP   = 'Moviroo Vip',  // ✅ lowercase 'p' — must match the DB enum exactly
 }
 
 
-export enum VehicleType {
-  STANDARD = 'standard',
-  COMFORT  = 'comfort',
-  VAN      = 'van',
-  MOTO     = 'moto',
-}
 
 export enum PaymentMethod {
   CARD = 'card',

@@ -12,7 +12,8 @@ import {
   IsPhoneNumber,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { VehicleType, PaymentMethod } from '../entities/passengers.entity';
+import {  PaymentMethod } from '../entities/passengers.entity';
+import { VehicleType } from '../../vehicles/entities/vehicle.entity'; // ✅ import from the source of truth
 
 // ─── Payment AddressDto ────────────────────────────────────────────────────────
 

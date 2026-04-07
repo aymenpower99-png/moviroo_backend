@@ -11,7 +11,8 @@ import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import { User, UserRole, UserStatus } from '../users/entites/user.entity';
 import { Driver } from '../driver/entities/driver.entity';
-import { PassengerEntity, MembershipLevel, VehicleType } from '../passenger/entities/passengers.entity';
+import { PassengerEntity, MembershipLevel } from '../passenger/entities/passengers.entity';
+import { VehicleType } from '../vehicles/entities/vehicle.entity'; // ✅ import from the source of truth
 import { MailService } from '../mail/mail.service';
 import { InviteUserDto } from './dto/invite-user.dto';
 import { ActivateAccountDto } from './dto/activate-account.dto';
