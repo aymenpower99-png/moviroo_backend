@@ -14,7 +14,8 @@ import { AuthModule }      from './auth/auth.module';
 import { MailModule }      from './mail/mail.module';
 import { AdminModule }     from './admin/admin.module';
 import { VehiclesModule }  from './vehicles/vehicles.module';
-import { DriversModule }   from './driver/drivers.module';   // ← ADD THIS
+import { DriversModule }   from './driver/drivers.module';
+import { SupportModule }   from './support/support.module';
 
 @Module({
   imports: [
@@ -27,7 +28,8 @@ import { DriversModule }   from './driver/drivers.module';   // ← ADD THIS
     AuthModule,
     AdminModule,
     VehiclesModule,
-    DriversModule,   // ← ADD THIS
+    DriversModule,
+    SupportModule,
   ],
   controllers: [AppController],
   providers:   [AppService],

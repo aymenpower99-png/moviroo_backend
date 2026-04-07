@@ -10,7 +10,8 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import { User, UserRole, UserStatus } from '../users/entites/user.entity'; // ← UserRole added
-import { Driver } from '../driver/entities/driver.entity'; // ← NEW
+import { Driver, DriverAvailabilityStatus } from '../driver/entities/driver.entity'; // ← NEW
+import { PassengerEntity, MembershipLevel, VehicleType } from '../passenger/entities/passengers.entity';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { OtpService } from '../otp/otp.service';
@@ -33,6 +34,7 @@ export class AuthService {
   constructor(
     @InjectRepository(User) private userRepo: Repository<User>,
     @InjectRepository(Driver) private driverRepo: Repository<Driver>, // ← NEW
+    @InjectRepository(PassengerEntity) private passengerRepo: Repository<PassengerEntity>,
     private jwtService: JwtService,
     private config: ConfigService,
     private otpService: OtpService,
@@ -82,6 +84,38 @@ export class AuthService {
     });
 
     const user = await this.userRepo.findOneOrFail({ where: { id: userId } });
+
+    // ─── Auto-create profile based on role ───────────────────────────────────
+    if (user.role === UserRole.PASSENGER) {
+      const exists = await this.passengerRepo.findOne({ where: { userId: user.id } });
+      if (!exists) {
+        const profile = this.passengerRepo.create({
+          userId:               user.id,
+          preferredVehicleType: VehicleType.STANDARD,
+          membershipLevel:      MembershipLevel.GO,
+          membershipPoints:     0,
+          totalBookings:        0,
+          ratingAverage:        5.0,
+          totalRatings:         0,
+          newsletterOptIn:      false,
+        });
+        await this.passengerRepo.save(profile);
+      }
+    } else if (user.role === UserRole.DRIVER) {
+      const exists = await this.driverRepo.findOne({ where: { userId: user.id } });
+      if (!exists) {
+        const driverProfile = this.driverRepo.create({
+          userId:             user.id,
+          availabilityStatus: DriverAvailabilityStatus.OFFLINE,
+          ratingAverage:      5.0,
+          totalRatings:       0,
+          totalTrips:         0,
+        });
+        await this.driverRepo.save(driverProfile);
+      }
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
     const tokens = await this.generateTokens(user);
     await this.saveRefreshToken(user.id, tokens.refreshToken);
     return { ...tokens, user: this.safeUser(user) };
