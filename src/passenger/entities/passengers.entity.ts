@@ -16,7 +16,7 @@ export enum MembershipLevel {
   GO    = 'Moviroo Go',
   MAX   = 'Moviroo Max',
   ELITE = 'Moviroo Elite',
-  VIP   = 'Moviroo Vip',  // ✅ lowercase 'p' — must match the DB enum exactly
+  VIP   = 'Moviroo Vip',  
 }
 
 
