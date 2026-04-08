@@ -8,8 +8,10 @@ import {
 } from 'typeorm';
 
 export enum DriverAvailabilityStatus {
-  ONLINE  = 'online',
-  OFFLINE = 'offline',
+  PENDING        = 'pending',          // invited but not yet activated
+  SETUP_REQUIRED = 'setup_required',   // activated but no vehicle/work area
+  OFFLINE        = 'offline',
+  ONLINE         = 'online',
 }
 
 export enum DriverLanguage {
@@ -23,13 +25,11 @@ export class Driver {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  // ─── Relations ────────────────────────────────────────────────────────────────
-
+  // ─── Relations ───────────────────────────────────────────────────────────
   @Column({ name: 'user_id', type: 'uuid', unique: true })
   userId: string;
 
-  // ─── Driver License ───────────────────────────────────────────────────────────
-
+  // ─── Driver License ───────────────────────────────────────────────────────
   @Column({
     name: 'driver_license_number',
     type: 'varchar',
@@ -48,8 +48,7 @@ export class Driver {
   @Column({ name: 'driver_license_back_url', type: 'text', nullable: true })
   driverLicenseBackUrl: string | null;
 
-  // ─── Stats ────────────────────────────────────────────────────────────────────
-
+  // ─── Stats ───────────────────────────────────────────────────────────────
   @Column({
     name: 'rating_average',
     type: 'decimal',
@@ -65,13 +64,11 @@ export class Driver {
   @Column({ name: 'total_trips', type: 'int', default: 0 })
   totalTrips: number;
 
-  // ─── Availability & Location ──────────────────────────────────────────────────
-
-  // varchar in DB (no PostgreSQL enum type) — use plain varchar + default
+  // ─── Availability & Location ──────────────────────────────────────────────
   @Column({
     name: 'availability_status',
     type: 'varchar',
-    default: DriverAvailabilityStatus.OFFLINE,
+    default: DriverAvailabilityStatus.PENDING,  // ← default is now PENDING
   })
   availabilityStatus: DriverAvailabilityStatus;
 
@@ -96,9 +93,7 @@ export class Driver {
   @Column({ name: 'last_location_update', type: 'timestamp', nullable: true })
   lastLocationUpdate: Date | null;
 
-  // ─── Preferences ─────────────────────────────────────────────────────────────
-
-  // driver_language IS a real PostgreSQL enum — keep type: 'enum'
+  // ─── Preferences ─────────────────────────────────────────────────────────
   @Column({
     name: 'language',
     type: 'enum',
@@ -107,8 +102,7 @@ export class Driver {
   })
   language: DriverLanguage | null;
 
-  // ─── Timestamps ───────────────────────────────────────────────────────────────
-
+  // ─── Timestamps ───────────────────────────────────────────────────────────
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

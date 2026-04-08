@@ -5,11 +5,19 @@ import { Vehicle }           from '../vehicles/entities/vehicle.entity';
 import { User }              from '../users/entites/user.entity';
 import { DriversService }    from './drivers.service';
 import { DriversController } from './drivers.controller';
+import { DriverProfileService }      from './services/driver-profile.service';
+import { DriverAvailabilityService } from './services/driver-availability.service';
+import { DriverAdminService }        from './services/driver-admin.service';
 
 @Module({
   imports:     [TypeOrmModule.forFeature([Driver, Vehicle, User])],
   controllers: [DriversController],
-  providers:   [DriversService],
-  exports:     [DriversService],
+  providers: [
+    DriversService,
+    DriverProfileService,
+    DriverAvailabilityService,
+    DriverAdminService,
+  ],
+  exports: [DriversService, DriverAvailabilityService],
 })
 export class DriversModule {}

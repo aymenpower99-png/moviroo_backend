@@ -29,7 +29,7 @@ import { DriverAvailabilityStatus } from './entities/driver.entity';
 export class DriversController {
   constructor(private readonly driversService: DriversService) {}
 
-  // ─── Driver: Complete Own Profile (after activation) ─────────────────────────
+  // ─── Driver: Complete Own Profile ────────────────────────────────────────────
 
   @Post('me/complete-profile')
   @UseGuards(RolesGuard)
@@ -49,7 +49,7 @@ export class DriversController {
     return this.driversService.getMyProfile(userId);
   }
 
-  // ─── Driver: Set Own Availability ────────────────────────────────────────────
+  // ─── Driver: Set Own Availability (online / offline only) ────────────��───────
 
   @Patch('me/availability')
   @UseGuards(RolesGuard)
@@ -57,10 +57,16 @@ export class DriversController {
   @HttpCode(200)
   setMyAvailability(@Req() req: Request, @Body() dto: SetAvailabilityDto) {
     const userId = (req.user as any).sub as string;
-    return this.driversService.setMyAvailability(userId, dto.status);
+    // Cast is safe: DriverToggleStatus values are a subset of DriverAvailabilityStatus
+    return this.driversService.setMyAvailability(
+      userId,
+      dto.status as unknown as
+        | DriverAvailabilityStatus.ONLINE
+        | DriverAvailabilityStatus.OFFLINE,
+    );
   }
 
-  // ─── Admin/Agency: Create Driver ─────────────────────────────────────────────
+  // ─── Admin / Agency: Create Driver ───────────────────────────────────────────
 
   @Post()
   @UseGuards(RolesGuard)
@@ -69,24 +75,24 @@ export class DriversController {
     return this.driversService.create(dto);
   }
 
-  // ─── Admin/Agency: List All Drivers ──────────────────────────────────────────
+  // ─── Admin / Agency: List All Drivers ────────────────────────────────────────
 
   @Get()
   @UseGuards(RolesGuard)
   @Roles(UserRole.SUPER_ADMIN, UserRole.AGENCY)
   findAll(
-    @Query('page') page?: string,
-    @Query('limit') limit?: string,
+    @Query('page')               page?:               string,
+    @Query('limit')              limit?:              string,
     @Query('availabilityStatus') availabilityStatus?: DriverAvailabilityStatus,
   ) {
     return this.driversService.findAll(
-      page ? +page : 1,
+      page  ? +page  : 1,
       limit ? +limit : 20,
       availabilityStatus,
     );
   }
 
-  // ─── Admin/Agency: Get One Driver ─────────────────────────────────────────────
+  // ─── Admin / Agency: Get One Driver ──────────────────────────────────────────
 
   @Get(':id')
   @UseGuards(RolesGuard)
@@ -95,7 +101,7 @@ export class DriversController {
     return this.driversService.findOne(id);
   }
 
-  // ─── Admin/Agency: Update Driver ─────────────────────────────────���───────────
+  // ─── Admin / Agency: Update Driver ───────────────────────────────────────────
 
   @Patch(':id')
   @UseGuards(RolesGuard)
