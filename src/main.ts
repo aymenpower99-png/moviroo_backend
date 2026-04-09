@@ -1,12 +1,27 @@
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory }    from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule }      from './app.module';
 import * as bodyParser    from 'body-parser';
+import { join }           from 'path';
+import { existsSync, mkdirSync } from 'fs';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
-  // ─── Increase JSON body size limit to handle base64 photo uploads ──────────
+  // ─── Ensure upload folders exist ─────────────────────────────
+  const uploadDirs = [
+    join(process.cwd(), 'uploads', 'classes'),
+  ];
+  for (const dir of uploadDirs) {
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  }
+
+  // ─── Serve uploaded files as static assets ────────────────────
+  // Accessible at: /uploads/classes/filename.jpg
+  app.useStaticAssets(join(process.cwd(), 'uploads'), { prefix: '/uploads' });
+
+  // ─── Increase JSON body size limit ───────────────────────────
   app.use(bodyParser.json({ limit: '10mb' }));
   app.use(bodyParser.urlencoded({ extended: true, limit: '10mb' }));
 
