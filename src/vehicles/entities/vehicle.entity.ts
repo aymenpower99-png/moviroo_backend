@@ -1,10 +1,6 @@
 import {
-  Entity,
-  PrimaryGeneratedColumn,
-  Column,
-  CreateDateColumn,
-  UpdateDateColumn,
-  DeleteDateColumn,
+  Entity, PrimaryGeneratedColumn, Column,
+  CreateDateColumn, UpdateDateColumn, DeleteDateColumn,
 } from 'typeorm';
 
 export enum VehicleType {
@@ -28,91 +24,77 @@ export class Vehicle {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  // ─── Relations ────────────────────────────────────────────────────────────
-
-  @Column({ name: 'driver_id', type: 'uuid', nullable: true })
+  @Column({ name: 'driver_id', type: 'uuid', nullable: true, default: null })
   driverId: string | null;
 
-  @Column({ name: 'agency_id', type: 'uuid', nullable: true })
+  @Column({ name: 'agency_id', type: 'uuid', nullable: true, default: null })
   agencyId: string | null;
 
-  // ─── Car Identity ─────────────────────────────────────────────────────────
-
-  @Column({ name: 'make', length: 50 })
+  @Column({ name: 'make', type: 'varchar', length: 50 })
   make: string;
 
-  @Column({ name: 'model', length: 50 })
+  @Column({ name: 'model', type: 'varchar', length: 50 })
   model: string;
 
   @Column({ name: 'year', type: 'int' })
   year: number;
 
-  @Column({ name: 'color', type: 'varchar', length: 30, nullable: true })
+  @Column({ name: 'color', type: 'varchar', length: 30, nullable: true, default: null })
   color: string | null;
 
-  // ─── Registration ─────────────────────────────────────────────────────────
-
-  @Column({ name: 'license_plate', type: 'varchar', length: 20, unique: true, nullable: true })
+  @Column({ name: 'license_plate', type: 'varchar', length: 20, unique: true, nullable: true, default: null })
   licensePlate: string | null;
 
-  @Column({ name: 'vin', type: 'varchar', length: 17, unique: true, nullable: true })
+  @Column({ name: 'vin', type: 'varchar', length: 17, unique: true, nullable: true, default: null })
   vin: string | null;
-
-  // ─── Vehicle Config ───────────────────────────────────────────────────────
 
   @Column({
     name: 'vehicle_type',
     type: 'enum',
     enum: VehicleType,
+    enumName: 'vehicle_type',
     default: VehicleType.STANDARD,
   })
   vehicleType: VehicleType;
 
-  @Column({ name: 'seats', type: 'int', nullable: true })
+  @Column({ name: 'seats', type: 'int', nullable: true, default: null })
   seats: number | null;
 
-  // ─── Documents ────────────────────────────────────────────────────────────
-
-  @Column({ name: 'registration_document_url', type: 'text', nullable: true })
+  @Column({ name: 'registration_document_url', type: 'text', nullable: true, default: null })
   registrationDocumentUrl: string | null;
 
-  @Column({ name: 'registration_expiry', type: 'date', nullable: true })
+  @Column({ name: 'registration_expiry', type: 'date', nullable: true, default: null })
   registrationExpiry: Date | null;
 
-  @Column({ name: 'insurance_document_url', type: 'text', nullable: true })
+  @Column({ name: 'insurance_document_url', type: 'text', nullable: true, default: null })
   insuranceDocumentUrl: string | null;
 
-  @Column({ name: 'insurance_expiry', type: 'date', nullable: true })
+  @Column({ name: 'insurance_expiry', type: 'date', nullable: true, default: null })
   insuranceExpiry: Date | null;
 
-  @Column({ name: 'technical_control_url', type: 'text', nullable: true })
+  @Column({ name: 'technical_control_url', type: 'text', nullable: true, default: null })
   technicalControlUrl: string | null;
 
-  @Column({ name: 'technical_control_expiry', type: 'date', nullable: true })
+  @Column({ name: 'technical_control_expiry', type: 'date', nullable: true, default: null })
   technicalControlExpiry: Date | null;
 
-  // ─── Photos ───────────────────────────────────────────────────────────────
-
-  @Column({ name: 'photos', type: 'jsonb', nullable: true })
+  @Column({ name: 'photos', type: 'jsonb', nullable: true, default: null })
   photos: string[] | null;
-
-  // ─── Status ───────────────────────────────────────────────────────────────
 
   @Column({
     name: 'status',
     type: 'enum',
     enum: VehicleStatus,
+    enumName: 'vehicle_status',
     default: VehicleStatus.PENDING,
   })
   status: VehicleStatus;
 
-  @Column({ name: 'verified_at', type: 'timestamp', nullable: true })
+  @Column({ name: 'verified_at', type: 'timestamp', nullable: true, default: null })
   verifiedAt: Date | null;
 
   @Column({ name: 'is_active', type: 'boolean', default: true })
   isActive: boolean;
-
-  // ─── Timestamps ───────────────────────────────────────────────────────────
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

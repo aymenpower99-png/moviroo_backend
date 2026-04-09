@@ -9,14 +9,14 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
         type: 'postgres' as const,
-        host: config.get<string>('database.host'),
-        port: config.get<number>('database.port'),
+        host:     config.get<string>('database.host'),
+        port:     config.get<number>('database.port'),
         username: config.get<string>('database.username'),
         password: config.get<string>('database.password'),
         database: config.get<string>('database.name'),
         autoLoadEntities: true,
-        synchronize: false,  
-        logging: true,        
+        synchronize: true,   // ← ON for fresh DB creation
+        logging: false,
       }),
     }),
   ],

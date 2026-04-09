@@ -64,24 +64,37 @@ export class SupportService {
   }
 
   // ── Admin: list all tickets (with optional status filter) ─────────────────
+  // FIX: use QueryBuilder to join author manually — avoids the
+  // "Property 'author' was not found in SupportTicket" TypeORM bug
+  // that occurs when the FK column name (author_id) differs from the
+  // relation property name (author) in older TypeORM versions.
   async adminListTickets(page = 1, limit = 20, status?: TicketStatus) {
-    const where = status ? { status } : {};
-    const [data, total] = await this.ticketRepo.findAndCount({
-      where,
-      relations: ['author'],
-      order: { createdAt: 'DESC' },
-      skip: (page - 1) * limit,
-      take: limit,
-    });
+    const qb = this.ticketRepo
+      .createQueryBuilder('ticket')
+      .leftJoinAndSelect('ticket.author', 'author')
+      .orderBy('ticket.createdAt', 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit);
+
+    if (status) {
+      qb.where('ticket.status = :status', { status });
+    }
+
+    const [data, total] = await qb.getManyAndCount();
     return { data, total, page, limit };
   }
 
   // ── Admin: get full ticket with messages ──────────────────────────────────
   async adminGetTicket(ticketId: string): Promise<SupportTicket> {
-    const ticket = await this.ticketRepo.findOne({
-      where: { id: ticketId },
-      relations: ['author', 'messages', 'messages.sender', 'assignedAdmin'],
-    });
+    const ticket = await this.ticketRepo
+      .createQueryBuilder('ticket')
+      .leftJoinAndSelect('ticket.author', 'author')
+      .leftJoinAndSelect('ticket.assignedAdmin', 'assignedAdmin')
+      .leftJoinAndSelect('ticket.messages', 'messages')
+      .leftJoinAndSelect('messages.sender', 'sender')
+      .where('ticket.id = :id', { id: ticketId })
+      .getOne();
+
     if (!ticket) throw new NotFoundException('Ticket not found');
     return ticket;
   }

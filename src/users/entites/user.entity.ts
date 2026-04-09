@@ -1,22 +1,18 @@
 import {
-  Entity,
-  PrimaryGeneratedColumn,
-  Column,
-  CreateDateColumn,
-  UpdateDateColumn,
-  DeleteDateColumn,
+  Entity, PrimaryGeneratedColumn, Column,
+  CreateDateColumn, UpdateDateColumn, DeleteDateColumn,
 } from 'typeorm';
 
 export enum UserRole {
   SUPER_ADMIN = 'super_admin',
-  AGENCY = 'agency',
-  DRIVER = 'driver',
-  PASSENGER = 'passenger',
+  AGENCY      = 'agency',
+  DRIVER      = 'driver',
+  PASSENGER   = 'passenger',
 }
 
 export enum UserStatus {
   PENDING = 'pending',
-  ACTIVE = 'active',
+  ACTIVE  = 'active',
   BLOCKED = 'blocked',
 }
 
@@ -25,144 +21,96 @@ export class User {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ unique: true })
+  @Column({ type: 'varchar', unique: true })
   email: string;
 
-  @Column({ unique: true, nullable: true })
-  phone: string;
+  @Column({ type: 'varchar', unique: true, nullable: true, default: null })
+  phone: string | null;
 
-  @Column({
-    name: 'password_hash',
-    type: 'text',
-    nullable: true,
-    default: null,
-  })
+  @Column({ name: 'password_hash', type: 'text', nullable: true, default: null })
   password: string | null;
 
-  @Column({ name: 'first_name', length: 100 })
+  @Column({ name: 'first_name', type: 'varchar', length: 100 })
   firstName: string;
 
-  @Column({ name: 'last_name', length: 100 })
+  @Column({ name: 'last_name', type: 'varchar', length: 100 })
   lastName: string;
 
-  @Column({ name: 'avatar_url', nullable: true })
-  avatarUrl: string;
+  @Column({ name: 'avatar_url', type: 'text', nullable: true, default: null })
+  avatarUrl: string | null;
 
-  @Column({ name: 'email_verified', default: false })
+  @Column({ name: 'email_verified', type: 'boolean', default: false })
   emailVerified: boolean;
 
-  @Column({ name: 'phone_verified', default: false })
+  @Column({ name: 'phone_verified', type: 'boolean', default: false })
   phoneVerified: boolean;
 
-  @Column({ name: 'is_active', default: true })
+  @Column({ name: 'is_active', type: 'boolean', default: true })
   isActive: boolean;
 
-  @Column({ name: 'is_banned', default: false })
+  @Column({ name: 'is_banned', type: 'boolean', default: false })
   isBanned: boolean;
 
-  @Column({ name: 'ban_reason', nullable: true })
-  banReason: string;
+  @Column({ name: 'ban_reason', type: 'text', nullable: true, default: null })
+  banReason: string | null;
 
-  @Column({
-    name: 'refresh_token',
-    type: 'text',
-    nullable: true,
-    default: null,
-  })
+  @Column({ name: 'refresh_token', type: 'text', nullable: true, default: null })
   refreshToken: string | null;
 
-  @Column({ name: 'last_login_at', nullable: true })
-  lastLoginAt: Date;
+  @Column({ name: 'last_login_at', type: 'timestamp', nullable: true, default: null })
+  lastLoginAt: Date | null;
 
-  // ─── Role ─────────────────────────────────────────────────────────────────
-
-  @Column({ type: 'enum', enum: UserRole, default: UserRole.PASSENGER })
+  @Column({
+    type: 'enum',
+    enum: UserRole,
+    enumName: 'users_role_enum',
+    default: UserRole.PASSENGER,
+  })
   role: UserRole;
 
-  // ─── Status ───────────────────────────────────────────────────────────────
-
-  @Column({ type: 'enum', enum: UserStatus, default: UserStatus.PENDING })
+  @Column({
+    type: 'enum',
+    enum: UserStatus,
+    enumName: 'users_status_enum',
+    default: UserStatus.PENDING,
+  })
   status: UserStatus;
-
-  // ─── Invitation Token ────────��────────────────────────────────────────────
 
   @Column({ name: 'invite_token', type: 'text', nullable: true, default: null })
   inviteToken: string | null;
 
-  // ─── Agency ───────────────────────────────────────────────────────────────
-
   @Column({ name: 'agency_id', type: 'uuid', nullable: true, default: null })
   agencyId: string | null;
 
-  // ─── 2-Step Verification (email OTP) ─────────────────────────────────────
-
-  @Column({ name: 'is_2fa_enabled', default: false })
+  @Column({ name: 'is_2fa_enabled', type: 'boolean', default: false })
   is2faEnabled: boolean;
 
   @Column({ name: 'otp_code', type: 'text', nullable: true, default: null })
   otpCode: string | null;
 
-  @Column({
-    name: 'otp_expiry',
-    type: 'timestamptz',
-    nullable: true,
-    default: null,
-  })
+  @Column({ name: 'otp_expiry', type: 'timestamptz', nullable: true, default: null })
   otpExpiry: Date | null;
 
-  // ─── Password Reset ───────────────────────────────────────────────────────
-
-  @Column({
-    name: 'password_reset_token', // ← explicit snake_case name
-    type: 'varchar',
-    nullable: true,
-    default: null,
-  })
+  @Column({ name: 'password_reset_token', type: 'varchar', nullable: true, default: null })
   passwordResetToken: string | null;
 
-  @Column({
-    name: 'password_reset_expiry', // ← explicit snake_case name
-    type: 'timestamp',
-    nullable: true,
-    default: null,
-  })
+  @Column({ name: 'password_reset_expiry', type: 'timestamp', nullable: true, default: null })
   passwordResetExpiry: Date | null;
-
-  // ─── TOTP (Authenticator App) ─────────────────���───────────────────────────
 
   @Column({ name: 'totp_secret', type: 'text', nullable: true, default: null })
   totpSecret: string | null;
 
-  @Column({ name: 'totp_enabled', default: false })
+  @Column({ name: 'totp_enabled', type: 'boolean', default: false })
   totpEnabled: boolean;
 
-  // ─── Email Change ─────────────────────────────────────────────────────────
-
-  @Column({
-    name: 'pending_email',
-    type: 'text',
-    nullable: true,
-    default: null,
-  })
+  @Column({ name: 'pending_email', type: 'text', nullable: true, default: null })
   pendingEmail: string | null;
 
-  @Column({
-    name: 'email_change_token',
-    type: 'text',
-    nullable: true,
-    default: null,
-  })
+  @Column({ name: 'email_change_token', type: 'text', nullable: true, default: null })
   emailChangeToken: string | null;
 
-  @Column({
-    name: 'email_change_expiry',
-    type: 'timestamptz',
-    nullable: true,
-    default: null,
-  })
+  @Column({ name: 'email_change_expiry', type: 'timestamptz', nullable: true, default: null })
   emailChangeExpiry: Date | null;
-
-  // ─── Timestamps ───────────────────────────────────────────────────────────
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
@@ -171,5 +119,5 @@ export class User {
   updatedAt: Date;
 
   @DeleteDateColumn({ name: 'deleted_at', nullable: true })
-  deletedAt: Date;
+  deletedAt: Date | null;
 }

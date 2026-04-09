@@ -1,10 +1,6 @@
 import {
-  Entity,
-  PrimaryGeneratedColumn,
-  Column,
-  CreateDateColumn,
-  UpdateDateColumn,
-  DeleteDateColumn,
+  Entity, PrimaryGeneratedColumn, Column,
+  CreateDateColumn, UpdateDateColumn, DeleteDateColumn,
 } from 'typeorm';
 
 export enum DriverAvailabilityStatus {
@@ -22,33 +18,19 @@ export class Driver {
   @Column({ name: 'user_id', type: 'uuid', unique: true })
   userId: string;
 
-  // ─── Driver License ───────────────────────────────────────────────────────
-  @Column({
-    name: 'driver_license_number',
-    type: 'varchar',
-    length: 50,
-    unique: true,
-    nullable: true,
-  })
+  @Column({ name: 'driver_license_number', type: 'varchar', length: 50, unique: true, nullable: true, default: null })
   driverLicenseNumber: string | null;
 
-  @Column({ name: 'driver_license_expiry', type: 'date', nullable: true })
+  @Column({ name: 'driver_license_expiry', type: 'date', nullable: true, default: null })
   driverLicenseExpiry: Date | null;
 
-  @Column({ name: 'driver_license_front_url', type: 'text', nullable: true })
+  @Column({ name: 'driver_license_front_url', type: 'text', nullable: true, default: null })
   driverLicenseFrontUrl: string | null;
 
-  @Column({ name: 'driver_license_back_url', type: 'text', nullable: true })
+  @Column({ name: 'driver_license_back_url', type: 'text', nullable: true, default: null })
   driverLicenseBackUrl: string | null;
 
-  // ─── Stats ────────────────────────────────────────────────────────────────
-  @Column({
-    name: 'rating_average',
-    type: 'decimal',
-    precision: 3,
-    scale: 2,
-    default: 5.0,
-  })
+  @Column({ name: 'rating_average', type: 'numeric', precision: 3, scale: 2, default: 5.0 })
   ratingAverage: number;
 
   @Column({ name: 'total_ratings', type: 'int', default: 0 })
@@ -57,36 +39,27 @@ export class Driver {
   @Column({ name: 'total_trips', type: 'int', default: 0 })
   totalTrips: number;
 
-  // ─── Availability & Location ──────────────────────────────────────────────
   @Column({
     name: 'availability_status',
-    type: 'varchar',
+    type: 'enum',
+    enum: DriverAvailabilityStatus,
+    enumName: 'driver_availability_status',
     default: DriverAvailabilityStatus.PENDING,
   })
   availabilityStatus: DriverAvailabilityStatus;
 
-  @Column({
-    name: 'current_latitude',
-    type: 'decimal',
-    precision: 10,
-    scale: 8,
-    nullable: true,
-  })
+  @Column({ name: 'work_area_id', type: 'uuid', nullable: true, default: null })
+  workAreaId: string | null;
+
+  @Column({ name: 'current_latitude', type: 'numeric', precision: 10, scale: 8, nullable: true, default: null })
   currentLatitude: number | null;
 
-  @Column({
-    name: 'current_longitude',
-    type: 'decimal',
-    precision: 11,
-    scale: 8,
-    nullable: true,
-  })
+  @Column({ name: 'current_longitude', type: 'numeric', precision: 11, scale: 8, nullable: true, default: null })
   currentLongitude: number | null;
 
-  @Column({ name: 'last_location_update', type: 'timestamp', nullable: true })
+  @Column({ name: 'last_location_update', type: 'timestamp', nullable: true, default: null })
   lastLocationUpdate: Date | null;
 
-  // ─── Timestamps ───────────────────────────────────────────────────────────
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

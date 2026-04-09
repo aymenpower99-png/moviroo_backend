@@ -1,28 +1,20 @@
 import {
-  Entity,
-  PrimaryGeneratedColumn,
-  Column,
-  OneToOne,
-  JoinColumn,
-  CreateDateColumn,
-  UpdateDateColumn,
-  DeleteDateColumn,
+  Entity, PrimaryGeneratedColumn, Column,
+  CreateDateColumn, UpdateDateColumn, DeleteDateColumn,
 } from 'typeorm';
-import { User } from '../../users/entites/user.entity';
-import { VehicleType } from '../../vehicles/entities/vehicle.entity';
-
 
 export enum MembershipLevel {
   GO    = 'Moviroo Go',
   MAX   = 'Moviroo Max',
   ELITE = 'Moviroo Elite',
-  VIP   = 'Moviroo Vip',  
+  VIP   = 'Moviroo Vip',
 }
 
-
-
 export enum PaymentMethod {
-  CARD = 'card',
+  CARD          = 'card',
+  CASH          = 'cash',
+  WALLET        = 'wallet',
+  BANK_TRANSFER = 'bank_transfer',
 }
 
 export interface PaymentAddress {
@@ -43,37 +35,32 @@ export class PassengerEntity {
   @Column({ name: 'user_id', type: 'uuid', unique: true })
   userId: string;
 
-  @OneToOne(() => User, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'user_id' })
-  user: User;
-
-  // ─── Vehicle Preference ───────────────────────────────────────────────────
   @Column({
     name: 'preferred_vehicle_type',
     type: 'enum',
-    enum: VehicleType,
-    default: VehicleType.STANDARD,
+    enum: ['Economy', 'Standard', 'Comfort', 'First Class', 'Van', 'Mini Bus'],
+    enumName: 'vehicle_type',
+    nullable: true,
+    default: null,
   })
-  preferredVehicleType: VehicleType;
+  preferredVehicleType: string | null;
 
-  // ─── Payment ──────────────────────────────────────────────────────────────
   @Column({
     name: 'default_payment_method',
     type: 'enum',
     enum: PaymentMethod,
+    enumName: 'payment_method_enum',
     nullable: true,
+    default: null,
   })
   defaultPaymentMethod: PaymentMethod | null;
 
-  // ─── Payment Addresses ────────────────────────────────────────────────────
-  @Column({ name: 'payment_addresses', type: 'jsonb', nullable: true })
+  @Column({ name: 'payment_addresses', type: 'jsonb', nullable: true, default: null })
   paymentAddresses: PaymentAddress[] | null;
 
-  // ─── Stripe ───────────────────────────────────────────────────────────────
-  @Column({ name: 'stripe_customer_id', type: 'varchar', length: 255, unique: true, nullable: true })
+  @Column({ name: 'stripe_customer_id', type: 'varchar', length: 255, unique: true, nullable: true, default: null })
   stripeCustomerId: string | null;
 
-  // ─── Loyalty & Membership ─────────────────────────────────────────────────
   @Column({ name: 'membership_points', type: 'int', default: 0 })
   membershipPoints: number;
 
@@ -81,11 +68,11 @@ export class PassengerEntity {
     name: 'membership_level',
     type: 'enum',
     enum: MembershipLevel,
+    enumName: 'membership_level',
     default: MembershipLevel.GO,
   })
   membershipLevel: MembershipLevel;
 
-  // ─── Stats ────────────────────────────────────────────────────────────────
   @Column({ name: 'total_bookings', type: 'int', default: 0 })
   totalBookings: number;
 
@@ -95,25 +82,21 @@ export class PassengerEntity {
   @Column({ name: 'total_ratings', type: 'int', default: 0 })
   totalRatings: number;
 
-  // ─── Emergency Contact ────────────────────────────────────────────────────
-  @Column({ name: 'emergency_contact_name', type: 'varchar', length: 100, nullable: true })
+  @Column({ name: 'emergency_contact_name', type: 'varchar', length: 100, nullable: true, default: null })
   emergencyContactName: string | null;
 
-  @Column({ name: 'emergency_contact_phone', type: 'varchar', length: 20, nullable: true })
+  @Column({ name: 'emergency_contact_phone', type: 'varchar', length: 20, nullable: true, default: null })
   emergencyContactPhone: string | null;
 
-  // ─── Misc ─────────────────────────────────────────────────────────────────
   @Column({ name: 'newsletter_opt_in', type: 'boolean', default: false })
   newsletterOptIn: boolean;
 
-  // ─── Referral ─────────────────────────────────────────────────────────────
-  @Column({ name: 'referral_code', type: 'varchar', length: 20, unique: true, nullable: true })
+  @Column({ name: 'referral_code', type: 'varchar', length: 20, unique: true, nullable: true, default: null })
   referralCode: string | null;
 
-  @Column({ name: 'referred_by', type: 'uuid', nullable: true })
+  @Column({ name: 'referred_by', type: 'uuid', nullable: true, default: null })
   referredBy: string | null;
 
-  // ─── Timestamps ───────────────────────────────────────────────────────────
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 
