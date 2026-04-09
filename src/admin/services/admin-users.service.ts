@@ -12,7 +12,7 @@ import { UpdateUserDto } from '../dto/update-user.dto';
 @Injectable()
 export class AdminUsersService {
   constructor(
-    @InjectRepository(User)   private userRepo: Repository<User>,
+    @InjectRepository(User) private userRepo: Repository<User>,
     @InjectRepository(Driver) private driverRepo: Repository<Driver>,
   ) {}
 
@@ -20,13 +20,13 @@ export class AdminUsersService {
 
   async listUsers(page = 1, limit = 20, role?: UserRole, status?: UserStatus) {
     const where: Partial<{ role: UserRole; status: UserStatus }> = {};
-    if (role)   where.role   = role;
+    if (role) where.role = role;
     if (status) where.status = status;
 
     const [data, total] = await this.userRepo.findAndCount({
       where,
-      skip:  (page - 1) * limit,
-      take:  limit,
+      skip: (page - 1) * limit,
+      take: limit,
       order: { createdAt: 'DESC' },
     });
 
@@ -49,8 +49,9 @@ export class AdminUsersService {
         ...this.safeUser(u),
         ...(u.role === UserRole.DRIVER
           ? {
-              profileComplete:    driverByUserId.has(u.id),
-              driverStatus:       driverByUserId.get(u.id)?.availabilityStatus ?? null,
+              profileComplete: driverByUserId.has(u.id),
+              driverStatus:
+                driverByUserId.get(u.id)?.availabilityStatus ?? null,
             }
           : {}),
       })),
@@ -73,18 +74,23 @@ export class AdminUsersService {
     const user = await this.findUserOrFail(userId);
 
     if (dto.email && dto.email !== user.email) {
-      const exists = await this.userRepo.findOne({ where: { email: dto.email } });
+      const exists = await this.userRepo.findOne({
+        where: { email: dto.email },
+      });
       if (exists) throw new BadRequestException('Email is already in use.');
     }
 
     await this.userRepo.update(userId, {
-      ...(dto.firstName && { firstName: dto.firstName }),
-      ...(dto.lastName  && { lastName:  dto.lastName  }),
-      ...(dto.email     && { email:     dto.email     }),
-      ...(dto.role      && { role:      dto.role      }),
+      ...(dto.firstName !== undefined && { firstName: dto.firstName }),
+      ...(dto.lastName !== undefined && { lastName: dto.lastName }),
+      ...(dto.email !== undefined && { email: dto.email }),
+      ...(dto.role !== undefined && { role: dto.role }),
+      ...(dto.phone !== undefined && { phone: dto.phone }),
     });
 
-    const updated = await this.userRepo.findOneOrFail({ where: { id: userId } });
+    const updated = await this.userRepo.findOneOrFail({
+      where: { id: userId },
+    });
     return this.safeUser(updated);
   }
 
@@ -112,7 +118,9 @@ export class AdminUsersService {
     const user = await this.findUserOrFail(userId);
 
     if (user.role === UserRole.DRIVER) {
-      const driverProfile = await this.driverRepo.findOne({ where: { userId: user.id } });
+      const driverProfile = await this.driverRepo.findOne({
+        where: { userId: user.id },
+      });
       if (driverProfile) {
         await this.driverRepo.delete(driverProfile.id);
       }
@@ -131,7 +139,14 @@ export class AdminUsersService {
   }
 
   safeUser(user: User) {
-    const { password, refreshToken, otpCode, totpSecret, inviteToken, ...safe } = user;
+    const {
+      password,
+      refreshToken,
+      otpCode,
+      totpSecret,
+      inviteToken,
+      ...safe
+    } = user;
     return safe;
   }
 }

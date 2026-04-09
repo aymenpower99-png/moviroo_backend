@@ -14,9 +14,9 @@ import { UpdateDriverDto } from '../dto/update-driver.dto';
 @Injectable()
 export class DriverAdminService {
   constructor(
-    @InjectRepository(Driver)  private driverRepo: Repository<Driver>,
+    @InjectRepository(Driver) private driverRepo: Repository<Driver>,
     @InjectRepository(Vehicle) private vehicleRepo: Repository<Vehicle>,
-    @InjectRepository(User)    private userRepo: Repository<User>,
+    @InjectRepository(User) private userRepo: Repository<User>,
   ) {}
 
   // ─── Create Driver (on invite) ────────────────────────────────────────────────
@@ -27,23 +27,29 @@ export class DriverAdminService {
         where: { driverLicenseNumber: dto.driverLicenseNumber },
       });
       if (dup)
-        throw new BadRequestException(`License "${dto.driverLicenseNumber}" already registered.`);
+        throw new BadRequestException(
+          `License "${dto.driverLicenseNumber}" already registered.`,
+        );
     }
 
-    const userExists = await this.driverRepo.findOne({ where: { userId: dto.userId } });
+    const userExists = await this.driverRepo.findOne({
+      where: { userId: dto.userId },
+    });
     if (userExists)
-      throw new BadRequestException('A driver profile already exists for this user.');
+      throw new BadRequestException(
+        'A driver profile already exists for this user.',
+      );
 
     if (dto.phone) {
       await this.userRepo.update(dto.userId, { phone: dto.phone });
     }
 
     const driver = this.driverRepo.create({
-      userId:                dto.userId,
-      driverLicenseNumber:   dto.driverLicenseNumber,
+      userId: dto.userId,
+      driverLicenseNumber: dto.driverLicenseNumber,
       driverLicenseFrontUrl: dto.driverLicenseFrontUrl,
-      driverLicenseBackUrl:  dto.driverLicenseBackUrl,
-      availabilityStatus:    DriverAvailabilityStatus.PENDING,
+      driverLicenseBackUrl: dto.driverLicenseBackUrl,
+      availabilityStatus: DriverAvailabilityStatus.PENDING,
     });
 
     return this.driverRepo.save(driver);
@@ -51,21 +57,25 @@ export class DriverAdminService {
 
   // ─── List All Drivers ─────────────────────────────────────────────────────────
 
-  async findAll(page = 1, limit = 20, availabilityStatus?: DriverAvailabilityStatus) {
+  async findAll(
+    page = 1,
+    limit = 20,
+    availabilityStatus?: DriverAvailabilityStatus,
+  ) {
     const where: Record<string, unknown> = {};
     if (availabilityStatus) where['availabilityStatus'] = availabilityStatus;
 
     const [drivers, total] = await this.driverRepo.findAndCount({
       where,
-      skip:  (page - 1) * limit,
-      take:  limit,
+      skip: (page - 1) * limit,
+      take: limit,
       order: { createdAt: 'DESC' },
     });
 
     if (drivers.length === 0) return { data: [], total, page, limit };
 
     const driverIds = drivers.map((d) => d.id);
-    const userIds   = drivers.map((d) => d.userId);
+    const userIds = drivers.map((d) => d.userId);
 
     const vehicles = await this.vehicleRepo
       .createQueryBuilder('v')
@@ -82,15 +92,21 @@ export class DriverAdminService {
 
     const data = drivers.map((d) => {
       const user = userById.get(d.userId);
-      const v    = vehicleByDriverId.get(d.id);
+      const v = vehicleByDriverId.get(d.id);
       return {
         ...d,
         firstName: user?.firstName ?? null,
-        lastName:  user?.lastName  ?? null,
-        email:     user?.email     ?? null,
-        phone:     user?.phone     ?? null,
+        lastName: user?.lastName ?? null,
+        email: user?.email ?? null,
+        phone: user?.phone ?? null,
         vehicle: v
-          ? { id: v.id, make: v.make, model: v.model, year: v.year, licensePlate: v.licensePlate }
+          ? {
+              id: v.id,
+              make: v.make,
+              model: v.model,
+              year: v.year,
+              licensePlate: v.licensePlate,
+            }
           : null,
       };
     });
@@ -111,37 +127,117 @@ export class DriverAdminService {
     return {
       ...driver,
       firstName: user?.firstName ?? null,
-      lastName:  user?.lastName  ?? null,
-      email:     user?.email     ?? null,
-      phone:     user?.phone     ?? null,
+      lastName: user?.lastName ?? null,
+      email: user?.email ?? null,
+      phone: user?.phone ?? null,
       vehicle: vehicle
-        ? { id: vehicle.id, make: vehicle.make, model: vehicle.model, year: vehicle.year, licensePlate: vehicle.licensePlate }
+        ? {
+            id: vehicle.id,
+            make: vehicle.make,
+            model: vehicle.model,
+            year: vehicle.year,
+            licensePlate: vehicle.licensePlate,
+          }
         : null,
     };
   }
 
   // ─── Update ───────────────────────────────────────────────────────────────────
 
-  async update(id: string, dto: UpdateDriverDto): Promise<Driver> {
+  async update(id: string, dto: UpdateDriverDto): Promise<any> {
     const driver = await this.findDriverOrFail(id);
 
-    if (dto.driverLicenseNumber && dto.driverLicenseNumber !== driver.driverLicenseNumber) {
+    if (
+      dto.driverLicenseNumber &&
+      dto.driverLicenseNumber !== driver.driverLicenseNumber
+    ) {
       const dup = await this.driverRepo.findOne({
         where: { driverLicenseNumber: dto.driverLicenseNumber },
       });
       if (dup)
-        throw new BadRequestException(`License "${dto.driverLicenseNumber}" already in use.`);
+        throw new BadRequestException(
+          `License "${dto.driverLicenseNumber}" already in use.`,
+        );
     }
 
     Object.assign(driver, {
-      ...(dto.driverLicenseNumber   !== undefined && { driverLicenseNumber:   dto.driverLicenseNumber }),
-      ...(dto.driverLicenseExpiry   !== undefined && { driverLicenseExpiry:   new Date(dto.driverLicenseExpiry) }),
-      ...(dto.driverLicenseFrontUrl !== undefined && { driverLicenseFrontUrl: dto.driverLicenseFrontUrl }),
-      ...(dto.driverLicenseBackUrl  !== undefined && { driverLicenseBackUrl:  dto.driverLicenseBackUrl }),
-      ...(dto.availabilityStatus    !== undefined && { availabilityStatus:    dto.availabilityStatus }),
+      ...(dto.driverLicenseNumber !== undefined && {
+        driverLicenseNumber: dto.driverLicenseNumber,
+      }),
+      ...(dto.driverLicenseExpiry !== undefined && {
+        driverLicenseExpiry: new Date(dto.driverLicenseExpiry),
+      }),
+      ...(dto.driverLicenseFrontUrl !== undefined && {
+        driverLicenseFrontUrl: dto.driverLicenseFrontUrl,
+      }),
+      ...(dto.driverLicenseBackUrl !== undefined && {
+        driverLicenseBackUrl: dto.driverLicenseBackUrl,
+      }),
+      ...(dto.availabilityStatus !== undefined && {
+        availabilityStatus: dto.availabilityStatus,
+      }),
     });
 
-    return this.driverRepo.save(driver);
+    await this.driverRepo.save(driver);
+
+    // ── Assign vehicle if provided ────────────────────────────────────────────
+    if (dto.vehicleId) {
+      const vehicle = await this.vehicleRepo.findOne({
+        where: { id: dto.vehicleId },
+      });
+      if (!vehicle)
+        throw new NotFoundException(`Vehicle "${dto.vehicleId}" not found.`);
+      vehicle.driverId = driver.id;
+      await this.vehicleRepo.save(vehicle);
+    }
+
+    // ── Auto-promote: setup_required → offline when vehicle assigned ──────────
+    // A driver moves to offline (ready to work) when:
+    //   1. They have a vehicle
+    //   2. They have a work area assigned
+    const vehicle = await this.vehicleRepo.findOne({
+      where: { driverId: driver.id },
+    });
+    const hasVehicle = !!vehicle;
+    const hasWorkArea = !!(driver as any).workAreaId; // adjust if you add workAreaId column
+
+    if (
+      driver.availabilityStatus === DriverAvailabilityStatus.SETUP_REQUIRED &&
+      hasVehicle &&
+      hasWorkArea
+    ) {
+      driver.availabilityStatus = DriverAvailabilityStatus.OFFLINE;
+      await this.driverRepo.save(driver);
+    } else if (
+      driver.availabilityStatus === DriverAvailabilityStatus.PENDING &&
+      hasVehicle
+    ) {
+      // At minimum, move from pending → setup_required once they have a vehicle
+      // (work area still missing)
+      driver.availabilityStatus = DriverAvailabilityStatus.SETUP_REQUIRED;
+      await this.driverRepo.save(driver);
+    }
+
+    // Return enriched response
+    const [user] = await Promise.all([
+      this.userRepo.findOne({ where: { id: driver.userId } }),
+    ]);
+    return {
+      ...driver,
+      firstName: user?.firstName ?? null,
+      lastName: user?.lastName ?? null,
+      email: user?.email ?? null,
+      phone: user?.phone ?? null,
+      vehicle: vehicle
+        ? {
+            id: vehicle.id,
+            make: vehicle.make,
+            model: vehicle.model,
+            year: vehicle.year,
+            licensePlate: vehicle.licensePlate,
+          }
+        : null,
+    };
   }
 
   // ─── Remove ───────────────────────────────────────────────────────────────────
