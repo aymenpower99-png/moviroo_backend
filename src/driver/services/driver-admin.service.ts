@@ -43,7 +43,6 @@ export class DriverAdminService {
       driverLicenseNumber:   dto.driverLicenseNumber,
       driverLicenseFrontUrl: dto.driverLicenseFrontUrl,
       driverLicenseBackUrl:  dto.driverLicenseBackUrl,
-      language:              dto.language ?? null,
       availabilityStatus:    DriverAvailabilityStatus.PENDING,
     });
 
@@ -139,7 +138,6 @@ export class DriverAdminService {
       ...(dto.driverLicenseExpiry   !== undefined && { driverLicenseExpiry:   new Date(dto.driverLicenseExpiry) }),
       ...(dto.driverLicenseFrontUrl !== undefined && { driverLicenseFrontUrl: dto.driverLicenseFrontUrl }),
       ...(dto.driverLicenseBackUrl  !== undefined && { driverLicenseBackUrl:  dto.driverLicenseBackUrl }),
-      ...(dto.language              !== undefined && { language:              dto.language }),
       ...(dto.availabilityStatus    !== undefined && { availabilityStatus:    dto.availabilityStatus }),
     });
 

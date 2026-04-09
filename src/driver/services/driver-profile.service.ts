@@ -19,8 +19,6 @@ export class DriverProfileService {
     @InjectRepository(User)    private userRepo: Repository<User>,
   ) {}
 
-  // ─── Complete Own Profile ─────────────────────────────────────────────────────
-
   async completeProfile(userId: string, dto: CompleteDriverProfileDto): Promise<Driver> {
     const user = await this.userRepo.findOne({ where: { id: userId } });
     if (!user) throw new NotFoundException('User not found.');
@@ -44,14 +42,12 @@ export class DriverProfileService {
       driverLicenseExpiry:   new Date(dto.driverLicenseExpiry),
       driverLicenseFrontUrl: dto.driverLicenseFrontUrl,
       driverLicenseBackUrl:  dto.driverLicenseBackUrl,
-      language:              dto.language,
       availabilityStatus:    DriverAvailabilityStatus.SETUP_REQUIRED,
+      // language removed
     });
 
     return this.driverRepo.save(driver);
   }
-
-  // ─── Get Own Profile ──────────────────────────────────────────────────────────
 
   async getMyProfile(userId: string) {
     const driver = await this.driverRepo.findOne({ where: { userId } });

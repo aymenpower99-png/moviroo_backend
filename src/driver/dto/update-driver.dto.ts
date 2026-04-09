@@ -5,7 +5,7 @@ import {
   IsString,
   MaxLength,
 } from 'class-validator';
-import { DriverAvailabilityStatus, DriverLanguage } from '../entities/driver.entity';
+import { DriverAvailabilityStatus } from '../entities/driver.entity';
 
 export class UpdateDriverDto {
   @IsString() @IsOptional() @MaxLength(50)
@@ -19,9 +19,6 @@ export class UpdateDriverDto {
 
   @IsString() @IsOptional()
   driverLicenseBackUrl?: string;
-
-  @IsEnum(DriverLanguage) @IsOptional()
-  language?: DriverLanguage;
 
   @IsEnum(DriverAvailabilityStatus) @IsOptional()
   availabilityStatus?: DriverAvailabilityStatus;

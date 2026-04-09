@@ -1,11 +1,9 @@
 import {
   IsDateString,
-  IsEnum,
   IsNotEmpty,
   IsString,
   MaxLength,
 } from 'class-validator';
-import { DriverLanguage } from '../entities/driver.entity';
 
 export class CompleteDriverProfileDto {
   @IsString() @IsNotEmpty() @MaxLength(50)
@@ -19,9 +17,6 @@ export class CompleteDriverProfileDto {
 
   @IsString() @IsNotEmpty()
   driverLicenseBackUrl: string;
-
-  @IsEnum(DriverLanguage) @IsNotEmpty()
-  language: DriverLanguage;
 
   @IsString() @IsNotEmpty() @MaxLength(20)
   phone: string;

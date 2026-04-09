@@ -1,4 +1,4 @@
-import { IsEmail, IsEnum, IsString, MinLength } from 'class-validator';
+import { IsEmail, IsEnum, IsString, MinLength, IsPhoneNumber, IsNotEmpty } from 'class-validator';
 import { UserRole } from '../../users/entites/user.entity';
 
 export class InviteUserDto {
@@ -10,6 +10,9 @@ export class InviteUserDto {
 
   @IsEmail()
   email: string;
+
+  @IsString() @IsNotEmpty()
+  phone: string;
 
   @IsEnum([UserRole.DRIVER, UserRole.PASSENGER], {
     message: 'role must be driver or passenger',

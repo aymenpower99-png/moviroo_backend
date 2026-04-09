@@ -8,16 +8,10 @@ import {
 } from 'typeorm';
 
 export enum DriverAvailabilityStatus {
-  PENDING        = 'pending',          // invited but not yet activated
-  SETUP_REQUIRED = 'setup_required',   // activated but no vehicle/work area
+  PENDING        = 'pending',
+  SETUP_REQUIRED = 'setup_required',
   OFFLINE        = 'offline',
   ONLINE         = 'online',
-}
-
-export enum DriverLanguage {
-  ENGLISH = 'English',
-  FRENCH  = 'French',
-  ARABIC  = 'Arabic',
 }
 
 @Entity('drivers')
@@ -25,7 +19,6 @@ export class Driver {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  // ─── Relations ───────────────────────────────────────────────────────────
   @Column({ name: 'user_id', type: 'uuid', unique: true })
   userId: string;
 
@@ -48,7 +41,7 @@ export class Driver {
   @Column({ name: 'driver_license_back_url', type: 'text', nullable: true })
   driverLicenseBackUrl: string | null;
 
-  // ─── Stats ───────────────────────────────────────────────────────────────
+  // ─── Stats ────────────────────────────────────────────────────────────────
   @Column({
     name: 'rating_average',
     type: 'decimal',
@@ -68,7 +61,7 @@ export class Driver {
   @Column({
     name: 'availability_status',
     type: 'varchar',
-    default: DriverAvailabilityStatus.PENDING,  // ← default is now PENDING
+    default: DriverAvailabilityStatus.PENDING,
   })
   availabilityStatus: DriverAvailabilityStatus;
 
@@ -92,15 +85,6 @@ export class Driver {
 
   @Column({ name: 'last_location_update', type: 'timestamp', nullable: true })
   lastLocationUpdate: Date | null;
-
-  // ─── Preferences ─────────────────────────────────────────────────────────
-  @Column({
-    name: 'language',
-    type: 'enum',
-    enum: DriverLanguage,
-    nullable: true,
-  })
-  language: DriverLanguage | null;
 
   // ─── Timestamps ───────────────────────────────────────────────────────────
   @CreateDateColumn({ name: 'created_at' })

@@ -48,6 +48,7 @@ export class AdminInviteService {
         await this.userRepo.update(exists.id, {
           firstName:     dto.firstName,
           lastName:      dto.lastName,
+          phone:         dto.phone,        // ← save phone
           role:          dto.role,
           status:        UserStatus.PENDING,
           password:      null,
@@ -61,7 +62,6 @@ export class AdminInviteService {
         await this.userRepo.update(restoredUser.id, { inviteToken: hashed });
         await this.mailService.sendInvitation(restoredUser.email, restoredUser.firstName, link);
 
-        // Pre-create driver row so it shows as PENDING in driver page
         if (restoredUser.role === UserRole.DRIVER) {
           await this.ensureDriverPending(restoredUser.id);
         }
@@ -75,6 +75,7 @@ export class AdminInviteService {
       firstName: dto.firstName,
       lastName:  dto.lastName,
       email:     dto.email,
+      phone:     dto.phone,          // ← save phone
       role:      dto.role,
       status:    UserStatus.PENDING,
       password:  null,
@@ -86,7 +87,6 @@ export class AdminInviteService {
     await this.userRepo.update(user.id, { inviteToken: hashed });
     await this.mailService.sendInvitation(user.email, user.firstName, link);
 
-    // Pre-create driver row so it shows as PENDING in driver page
     if (user.role === UserRole.DRIVER) {
       await this.ensureDriverPending(user.id);
     }
@@ -94,7 +94,7 @@ export class AdminInviteService {
     return { message: `Invitation sent to ${user.email}.`, userId: user.id };
   }
 
-  // ─── Activate Account ────────────────────────────────────────────────────────
+  // ─── Activate Account ─────────────────────────────────────────────────────────
 
   async activateAccount(dto: ActivateAccountDto) {
     let payload: InviteTokenPayload;
@@ -132,7 +132,6 @@ export class AdminInviteService {
       inviteToken:   null,
     });
 
-    // Auto-create passenger profile
     if (user.role === UserRole.PASSENGER) {
       const exists = await this.passengerRepo.findOne({ where: { userId: user.id } });
       if (!exists) {
@@ -151,7 +150,6 @@ export class AdminInviteService {
       }
     }
 
-    // Transition driver: PENDING → SETUP_REQUIRED
     if (user.role === UserRole.DRIVER) {
       await this.driverRepo.update(
         { userId: user.id, availabilityStatus: DriverAvailabilityStatus.PENDING },
@@ -176,7 +174,7 @@ export class AdminInviteService {
     return { message: `Invitation resent to ${user.email}.` };
   }
 
-  // ─── Private helpers ─────────────────────────────────────────────────────────
+  // ─── Private helpers ──────────────────────────────────────────────────────────
 
   private async ensureDriverPending(userId: string): Promise<void> {
     const existing = await this.driverRepo.findOne({ where: { userId } });
