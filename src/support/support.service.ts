@@ -39,7 +39,7 @@ export class SupportService {
   async getMyTicket(ticketId: string, userId: string): Promise<SupportTicket> {
     const ticket = await this.ticketRepo.findOne({
       where: { id: ticketId },
-      relations: ['messages', 'messages.sender'],
+      relations: ['messages'],
     });
     if (!ticket) throw new NotFoundException('Ticket not found');
     if (ticket.authorId !== userId) throw new ForbiddenException();
@@ -56,45 +56,34 @@ export class SupportService {
     const message = this.messageRepo.create({ body: dto.body, senderId, ticketId });
     const saved = await this.messageRepo.save(message);
 
-    // user replied → move back to IN_PROGRESS if was waiting
     if (ticket.status === TicketStatus.WAITING_FOR_USER) {
       await this.ticketRepo.update(ticketId, { status: TicketStatus.IN_PROGRESS });
     }
     return saved;
   }
 
-  // ── Admin: list all tickets (with optional status filter) ─────────────────
-  // FIX: use QueryBuilder to join author manually — avoids the
-  // "Property 'author' was not found in SupportTicket" TypeORM bug
-  // that occurs when the FK column name (author_id) differs from the
-  // relation property name (author) in older TypeORM versions.
+  // ── Admin: list all tickets ───────────────────────────────────────────────
+  // Uses findAndCount (no relation join) — avoids TypeORMError because
+  // SupportTicket has no @ManyToOne 'author' relation, only an authorId column.
   async adminListTickets(page = 1, limit = 20, status?: TicketStatus) {
-    const qb = this.ticketRepo
-      .createQueryBuilder('ticket')
-      .leftJoinAndSelect('ticket.author', 'author')
-      .orderBy('ticket.createdAt', 'DESC')
-      .skip((page - 1) * limit)
-      .take(limit);
+    const where: any = {};
+    if (status) where.status = status;
 
-    if (status) {
-      qb.where('ticket.status = :status', { status });
-    }
-
-    const [data, total] = await qb.getManyAndCount();
+    const [data, total] = await this.ticketRepo.findAndCount({
+      where,
+      order: { createdAt: 'DESC' },
+      skip: (page - 1) * limit,
+      take: limit,
+    });
     return { data, total, page, limit };
   }
 
   // ── Admin: get full ticket with messages ──────────────────────────────────
   async adminGetTicket(ticketId: string): Promise<SupportTicket> {
-    const ticket = await this.ticketRepo
-      .createQueryBuilder('ticket')
-      .leftJoinAndSelect('ticket.author', 'author')
-      .leftJoinAndSelect('ticket.assignedAdmin', 'assignedAdmin')
-      .leftJoinAndSelect('ticket.messages', 'messages')
-      .leftJoinAndSelect('messages.sender', 'sender')
-      .where('ticket.id = :id', { id: ticketId })
-      .getOne();
-
+    const ticket = await this.ticketRepo.findOne({
+      where: { id: ticketId },
+      relations: ['messages'],
+    });
     if (!ticket) throw new NotFoundException('Ticket not found');
     return ticket;
   }
@@ -108,7 +97,6 @@ export class SupportService {
     const message = this.messageRepo.create({ body: dto.body, senderId: adminId, ticketId });
     const saved = await this.messageRepo.save(message);
 
-    // first admin reply → IN_PROGRESS; subsequent → WAITING_FOR_USER
     const newStatus =
       ticket.status === TicketStatus.OPEN ? TicketStatus.IN_PROGRESS : TicketStatus.WAITING_FOR_USER;
     await this.ticketRepo.update(ticketId, {
@@ -131,7 +119,7 @@ export class SupportService {
     return this.ticketRepo.findOneOrFail({ where: { id: ticketId } });
   }
 
-  // ── Admin: assign ticket to self ──────────────────────────────────────────
+  // ── Admin: assign ticket to self ───────────────────────────��──────────────
   async adminAssign(ticketId: string, adminId: string): Promise<SupportTicket> {
     const ticket = await this.ticketRepo.findOne({ where: { id: ticketId } });
     if (!ticket) throw new NotFoundException('Ticket not found');

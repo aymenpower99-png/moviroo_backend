@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { WorkArea } from './entities/work-area.entity';
 import { Driver, DriverAvailabilityStatus } from '../driver/entities/driver.entity';
 import { Vehicle } from '../vehicles/entities/vehicle.entity';
+import { User } from '../users/entites/user.entity';
 import { CreateWorkAreaDto } from './dto/create-work-area.dto';
 
 @Injectable()
@@ -12,6 +13,7 @@ export class WorkAreaService {
     @InjectRepository(WorkArea)  private workAreaRepo: Repository<WorkArea>,
     @InjectRepository(Driver)    private driverRepo:   Repository<Driver>,
     @InjectRepository(Vehicle)   private vehicleRepo:  Repository<Vehicle>,
+    @InjectRepository(User)      private userRepo:     Repository<User>,
   ) {}
 
   async create(dto: CreateWorkAreaDto): Promise<WorkArea> {
@@ -58,15 +60,29 @@ export class WorkAreaService {
     const areas    = await this.workAreaRepo.find();
     const vehicles = await this.vehicleRepo.find();
 
+    // Fetch user names for all drivers
+    const userIds = drivers.map(d => d.userId).filter(Boolean);
+    const users = userIds.length
+      ? await this.userRepo
+          .createQueryBuilder('u')
+          .select(['u.id', 'u.firstName', 'u.lastName'])
+          .where('u.id IN (:...ids)', { ids: userIds })
+          .getMany()
+      : [];
+
+    const userById    = new Map(users.map(u => [u.id, u]));
     const areaById    = new Map(areas.map(a => [a.id, a]));
     const vehByDriver = new Map(vehicles.map(v => [v.driverId ?? '', v]));
 
     return drivers.map(d => {
       const area = d.workAreaId ? areaById.get(d.workAreaId) ?? null : null;
       const veh  = vehByDriver.get(d.id) ?? null;
+      const user = userById.get(d.userId) ?? null;
+      const firstName = (user as any)?.firstName ?? '';
+      const lastName  = (user as any)?.lastName  ?? '';
       return {
         id:                 d.id,
-        name:               `${(d as any).firstName ?? ''} ${(d as any).lastName ?? ''}`.trim(),
+        name:               `${firstName} ${lastName}`.trim() || '—',
         vehicle:            veh ? `${veh.make} ${veh.model}` : null,
         availabilityStatus: d.availabilityStatus,
         workAreaId:         d.workAreaId ?? null,
