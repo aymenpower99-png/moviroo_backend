@@ -1,12 +1,6 @@
 import {
-  IsString,
-  IsOptional,
-  IsBoolean,
-  IsInt,
-  MinLength,
-  MaxLength,
-  Min,
-  Max,
+  IsString, IsOptional, IsBoolean, IsInt,
+  MinLength, MaxLength, Min, Max,
 } from 'class-validator';
 
 export class CreateClassDto {
@@ -20,41 +14,27 @@ export class CreateClassDto {
   @MaxLength(500)
   imageUrl?: string;
 
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Max(50)
+  @IsOptional() @IsInt() @Min(1) @Max(50)
   seats?: number;
 
-  @IsOptional()
-  @IsInt()
-  @Min(0)
-  @Max(20)
+  @IsOptional() @IsInt() @Min(0) @Max(20)
   bags?: number;
 
-  @IsOptional()
-  @IsBoolean()
+  @IsOptional() @IsBoolean()
   wifi?: boolean;
 
-  @IsOptional()
-  @IsBoolean()
+  @IsOptional() @IsBoolean()
   ac?: boolean;
 
-  @IsOptional()
-  @IsBoolean()
+  @IsOptional() @IsBoolean()
   water?: boolean;
 
-  @IsOptional()
-  @IsInt()
-  @Min(0)
-  @Max(120)
+  @IsOptional() @IsInt() @Min(0) @Max(120)
   freeWaitingTime?: number;
 
-  @IsOptional()
-  @IsBoolean()
+  @IsOptional() @IsBoolean()
   doorToDoor?: boolean;
 
-  @IsOptional()
-  @IsBoolean()
+  @IsOptional() @IsBoolean()
   meetAndGreet?: boolean;
 }

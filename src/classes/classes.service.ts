@@ -27,13 +27,32 @@ export class ClassesService {
     return this.classRepo.save(newClass);
   }
 
-  async findAll(): Promise<VehicleClass[]> {
-    return this.classRepo.find({
-      where: { isActive: true, deletedAt: IsNull() },
-      order: { createdAt: 'DESC' },
-    });
+  /**
+   * GET /admin/classes
+   * Returns all active classes WITH vehicleCount per class.
+   * Used by the classes list page and sidebar badges.
+   */
+  async findAll(): Promise<(VehicleClass & { vehicleCount: number })[]> {
+    const result = await this.classRepo
+      .createQueryBuilder('cls')
+      .leftJoin('cls.vehicles', 'v', 'v.deleted_at IS NULL')
+      .addSelect('COUNT(v.id)', 'vehicleCount')
+      .where('cls.is_active = true AND cls.deleted_at IS NULL')
+      .groupBy('cls.id')
+      .orderBy('cls.created_at', 'DESC')
+      .getRawAndEntities();
+
+    return result.entities.map((cls, i) => ({
+      ...cls,
+      vehicleCount: parseInt(result.raw[i]?.vehicleCount ?? '0', 10),
+    }));
   }
 
+  /**
+   * GET /admin/classes/:id
+   * Returns class info only — no vehicles list.
+   * Also used internally to validate class existence.
+   */
   async findOne(id: string): Promise<VehicleClass> {
     const vehicleClass = await this.classRepo.findOne({
       where: { id, deletedAt: IsNull() },
@@ -42,6 +61,44 @@ export class ClassesService {
       throw new NotFoundException(`Class with id "${id}" not found.`);
     }
     return vehicleClass;
+  }
+
+  /**
+   * GET /admin/classes/:id/detail
+   * Returns class info + features + ALL vehicles assigned to it.
+   * This is the class detail / hub page endpoint.
+   */
+  async findOneWithVehicles(id: string) {
+    const vehicleClass = await this.classRepo.findOne({
+      where: { id, deletedAt: IsNull() },
+      relations: ['vehicles'],
+    });
+    if (!vehicleClass) {
+      throw new NotFoundException(`Class with id "${id}" not found.`);
+    }
+
+    const vehicles = await vehicleClass.vehicles;
+
+    return {
+      id:        vehicleClass.id,
+      name:      vehicleClass.name,
+      imageUrl:  vehicleClass.imageUrl,
+      isActive:  vehicleClass.isActive,
+      createdAt: vehicleClass.createdAt,
+      updatedAt: vehicleClass.updatedAt,
+      features: {
+        seats:           vehicleClass.seats,
+        bags:            vehicleClass.bags,
+        wifi:            vehicleClass.wifi,
+        ac:              vehicleClass.ac,
+        water:           vehicleClass.water,
+        freeWaitingTime: vehicleClass.freeWaitingTime,
+        doorToDoor:      vehicleClass.doorToDoor,
+        meetAndGreet:    vehicleClass.meetAndGreet,
+      },
+      vehicleCount: vehicles.length,
+      vehicles,
+    };
   }
 
   async update(id: string, dto: UpdateClassDto): Promise<VehicleClass> {
@@ -65,16 +122,16 @@ export class ClassesService {
   }
 
   async getFeatures(id: string) {
-    const vehicleClass = await this.findOne(id);
+    const c = await this.findOne(id);
     return {
-      seats:           vehicleClass.seats,
-      bags:            vehicleClass.bags,
-      wifi:            vehicleClass.wifi,
-      ac:              vehicleClass.ac,
-      water:           vehicleClass.water,
-      freeWaitingTime: vehicleClass.freeWaitingTime,
-      doorToDoor:      vehicleClass.doorToDoor,
-      meetAndGreet:    vehicleClass.meetAndGreet,
+      seats:           c.seats,
+      bags:            c.bags,
+      wifi:            c.wifi,
+      ac:              c.ac,
+      water:           c.water,
+      freeWaitingTime: c.freeWaitingTime,
+      doorToDoor:      c.doorToDoor,
+      meetAndGreet:    c.meetAndGreet,
     };
   }
 }

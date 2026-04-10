@@ -12,10 +12,11 @@ import * as bcrypt from 'bcrypt';
 import { User, UserRole, UserStatus } from '../../users/entites/user.entity';
 import { Driver, DriverAvailabilityStatus } from '../../driver/entities/driver.entity';
 import { PassengerEntity, MembershipLevel } from '../../passenger/entities/passengers.entity';
-import { VehicleType } from '../../vehicles/entities/vehicle.entity';
 import { MailService } from '../../mail/mail.service';
 import { InviteUserDto } from '../dto/invite-user.dto';
 import { ActivateAccountDto } from '../dto/activate-account.dto';
+
+// ── No VehicleType import — fully removed ────────────────────────────────────
 
 interface InviteTokenPayload {
   sub: string;
@@ -34,8 +35,6 @@ export class AdminInviteService {
     private mailService: MailService,
   ) {}
 
-  // ─── Invite User ─────────────────────────────────────────────────────────────
-
   async inviteUser(dto: InviteUserDto) {
     const exists = await this.userRepo.findOne({
       where: { email: dto.email },
@@ -48,7 +47,7 @@ export class AdminInviteService {
         await this.userRepo.update(exists.id, {
           firstName:     dto.firstName,
           lastName:      dto.lastName,
-          phone:         dto.phone,        // ← save phone
+          phone:         dto.phone,
           role:          dto.role,
           status:        UserStatus.PENDING,
           password:      null,
@@ -75,7 +74,7 @@ export class AdminInviteService {
       firstName: dto.firstName,
       lastName:  dto.lastName,
       email:     dto.email,
-      phone:     dto.phone,          // ← save phone
+      phone:     dto.phone,
       role:      dto.role,
       status:    UserStatus.PENDING,
       password:  null,
@@ -94,15 +93,12 @@ export class AdminInviteService {
     return { message: `Invitation sent to ${user.email}.`, userId: user.id };
   }
 
-  // ─── Activate Account ─────────────────────────────────────────────────────────
-
   async activateAccount(dto: ActivateAccountDto) {
     let payload: InviteTokenPayload;
     try {
-      payload = await this.jwtService.verifyAsync<InviteTokenPayload>(
-        dto.token,
-        { secret: this.config.get<string>('jwt.inviteSecret')! },
-      );
+      payload = await this.jwtService.verifyAsync<InviteTokenPayload>(dto.token, {
+        secret: this.config.get<string>('jwt.inviteSecret')!,
+      });
     } catch {
       throw new UnauthorizedException('Invalid or expired activation link.');
     }
@@ -137,14 +133,14 @@ export class AdminInviteService {
       if (!exists) {
         await this.passengerRepo.save(
           this.passengerRepo.create({
-            userId:               user.id,
-            preferredVehicleType: VehicleType.STANDARD,
-            membershipLevel:      MembershipLevel.GO,
-            membershipPoints:     0,
-            totalBookings:        0,
-            ratingAverage:        5.0,
-            totalRatings:         0,
-            newsletterOptIn:      false,
+            userId:           user.id,
+            preferredClassId: null,          // ← passenger picks class at booking time
+            membershipLevel:  MembershipLevel.GO,
+            membershipPoints: 0,
+            totalBookings:    0,
+            ratingAverage:    5.0,
+            totalRatings:     0,
+            newsletterOptIn:  false,
           }),
         );
       }
@@ -160,8 +156,6 @@ export class AdminInviteService {
     return { message: 'Account activated successfully. You can now log in.' };
   }
 
-  // ─── Resend Invitation ────────────────────────────────────────────────────────
-
   async resendInvitation(userId: string) {
     const user = await this.findUserOrFail(userId);
     if (user.status !== UserStatus.PENDING)
@@ -173,8 +167,6 @@ export class AdminInviteService {
     await this.mailService.sendInvitation(user.email, user.firstName, link);
     return { message: `Invitation resent to ${user.email}.` };
   }
-
-  // ─── Private helpers ──────────────────────────────────────────────────────────
 
   private async ensureDriverPending(userId: string): Promise<void> {
     const existing = await this.driverRepo.findOne({ where: { userId } });

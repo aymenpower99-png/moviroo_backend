@@ -35,15 +35,13 @@ export class PassengerEntity {
   @Column({ name: 'user_id', type: 'uuid', unique: true })
   userId: string;
 
-  @Column({
-    name: 'preferred_vehicle_type',
-    type: 'enum',
-    enum: ['Economy', 'Standard', 'Comfort', 'First Class', 'Van', 'Mini Bus'],
-    enumName: 'vehicle_type',
-    nullable: true,
-    default: null,
-  })
-  preferredVehicleType: string | null;
+  /**
+   * Optional: preferred class UUID (FK to classes table).
+   * NULL = no preference yet — passenger always picks class at booking time.
+   * Set automatically after first booking, or manually from profile settings.
+   */
+  @Column({ name: 'preferred_class_id', type: 'uuid', nullable: true, default: null })
+  preferredClassId: string | null;
 
   @Column({
     name: 'default_payment_method',

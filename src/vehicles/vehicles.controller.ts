@@ -1,16 +1,7 @@
 import {
-  Body,
-  Controller,
-  Delete,
-  Get,
-  HttpCode,
-  Param,
-  ParseIntPipe,
-  ParseUUIDPipe,
-  Patch,
-  Post,
-  Query,
-  UseGuards,
+  Body, Controller, Delete, Get, HttpCode,
+  Param, ParseIntPipe, ParseUUIDPipe,
+  Patch, Post, Query, UseGuards,
 } from '@nestjs/common';
 import { IsUUID } from 'class-validator';
 import { AuthGuard } from '@nestjs/passport';
@@ -24,15 +15,14 @@ import { VehicleStatus } from './entities/vehicle.entity';
 
 class AssignDriverDto {
   @IsUUID()
-  driverId!: string;   // ← ! = definite assignment assertion (no constructor needed)
+  driverId!: string;
 }
 
 @Controller('vehicles')
 export class VehiclesController {
   constructor(private readonly vehiclesService: VehiclesService) {}
 
-  // ─── Makes: full list ─────────────────────────────────────────────────────
-  // IMPORTANT: static routes MUST come before :param routes
+  // ─── Makes (static routes BEFORE :param routes) ───────────────────────────
 
   @Get('makes')
   @UseGuards(AuthGuard('jwt'))
@@ -53,6 +43,23 @@ export class VehiclesController {
     return this.vehiclesService.getModelsByMakeId(makeId);
   }
 
+  // ─── Dispatch: first available vehicle in a class ─────────────────────────
+  // Booking system: passenger picks class → GET /vehicles/dispatch/:classId
+  @Get('dispatch/:classId')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.AGENCY)
+  getAvailableInClass(@Param('classId', ParseUUIDPipe) classId: string) {
+    return this.vehiclesService.findAvailableInClass(classId);
+  }
+
+  // ─── All vehicles in a class (class detail page) ──────────────────────────
+  @Get('by-class/:classId')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.AGENCY)
+  findByClass(@Param('classId', ParseUUIDPipe) classId: string) {
+    return this.vehiclesService.findByClass(classId);
+  }
+
   // ─── CREATE ───────────────────────────────────────────────────────────────
 
   @Post()
@@ -62,7 +69,7 @@ export class VehiclesController {
     return this.vehiclesService.create(dto);
   }
 
-  // ─── LIST ALL ─────────────────────────────────────────────────────────────
+  // ─── LIST (filterable by classId, agencyId, driverId, status) ────────────
 
   @Get()
   @UseGuards(AuthGuard('jwt'), RolesGuard)
@@ -70,6 +77,7 @@ export class VehiclesController {
   findAll(
     @Query('page')     page?:     string,
     @Query('limit')    limit?:    string,
+    @Query('classId')  classId?:  string,
     @Query('agencyId') agencyId?: string,
     @Query('driverId') driverId?: string,
     @Query('status')   status?:   VehicleStatus,
@@ -77,6 +85,7 @@ export class VehiclesController {
     return this.vehiclesService.findAll(
       page  ? +page  : 1,
       limit ? +limit : 20,
+      classId,
       agencyId,
       driverId,
       status,
@@ -92,7 +101,7 @@ export class VehiclesController {
     return this.vehiclesService.findOne(id);
   }
 
-  // ─── UPDATE (general fields) ──────────────────────────────────────────────
+  // ─── UPDATE ───────────────────────────────────────────────────────────────
 
   @Patch(':id')
   @UseGuards(AuthGuard('jwt'), RolesGuard)
@@ -104,7 +113,7 @@ export class VehiclesController {
     return this.vehiclesService.update(id, dto);
   }
 
-  // ─── ASSIGN DRIVER (Admin only) ───────────────────────────────────────────
+  // ─── ASSIGN DRIVER ────────────────────────────────────────────────────────
 
   @Patch(':id/assign-driver')
   @UseGuards(AuthGuard('jwt'), RolesGuard)
@@ -117,7 +126,7 @@ export class VehiclesController {
     return this.vehiclesService.assignDriver(id, body.driverId);
   }
 
-  // ─── SET ON TRIP ──────────────────────────────────────────────────────────
+  // ─── TRIP LIFECYCLE ───────────────────────────────────────────────────────
 
   @Post(':id/trip')
   @UseGuards(AuthGuard('jwt'), RolesGuard)
@@ -127,8 +136,6 @@ export class VehiclesController {
     return this.vehiclesService.setOnTrip(id);
   }
 
-  // ─── END TRIP ─────────────────────────────────────────────────────────────
-
   @Post(':id/end-trip')
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(UserRole.SUPER_ADMIN, UserRole.AGENCY)
@@ -137,7 +144,7 @@ export class VehiclesController {
     return this.vehiclesService.endTrip(id);
   }
 
-  // ─── SET MAINTENANCE ──────────────────────────────────────────────────────
+  // ─── MAINTENANCE ──────────────────────────────────────────────────────────
 
   @Post(':id/maintenance')
   @UseGuards(AuthGuard('jwt'), RolesGuard)
@@ -147,8 +154,6 @@ export class VehiclesController {
     return this.vehiclesService.setMaintenance(id);
   }
 
-  // ─── COMPLETE MAINTENANCE ─────────────────────────────────────────────────
-
   @Post(':id/maintenance/complete')
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(UserRole.SUPER_ADMIN)
@@ -157,7 +162,7 @@ export class VehiclesController {
     return this.vehiclesService.completeMaintenance(id);
   }
 
-  // ─── SOFT DELETE ──────────────────────────────────────────────────────────
+  // ─── DELETE ───────────────────────────────────────────────────────────────
 
   @Delete(':id')
   @UseGuards(AuthGuard('jwt'), RolesGuard)
@@ -166,8 +171,6 @@ export class VehiclesController {
   remove(@Param('id', ParseUUIDPipe) id: string) {
     return this.vehiclesService.remove(id);
   }
-
-  // ─── HARD DELETE (Admin only) ─────────────────────────────────────────────
 
   @Delete(':id/hard')
   @UseGuards(AuthGuard('jwt'), RolesGuard)

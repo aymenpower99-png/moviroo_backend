@@ -1,7 +1,6 @@
 import {
   IsString,
   IsInt,
-  IsEnum,
   IsOptional,
   IsDateString,
   IsArray,
@@ -14,13 +13,14 @@ import {
   Allow,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
-import { VehicleType } from '../entities/vehicle.entity';
 
 export class UpdateVehicleDto {
-  /**
-   * Pass a UUID to reassign driver, or explicitly pass `null` to unassign.
-   * Note: maintenance endpoint auto-unassigns — use this only for manual changes.
-   */
+  // ─── Class reassignment ───────────────────────────────────────────────────
+  @IsOptional()
+  @IsUUID()
+  classId?: string;
+
+  // ─── Driver (pass null to unassign) ──────────────────────────────────────
   @IsOptional()
   @Transform(({ value }) => (value === null ? null : value))
   @Allow()
@@ -30,6 +30,7 @@ export class UpdateVehicleDto {
   @IsUUID()
   agencyId?: string;
 
+  // ─── Car Identity ─────────────────────────────────────────────────────────
   @IsOptional()
   @IsString()
   @MinLength(1)
@@ -45,6 +46,7 @@ export class UpdateVehicleDto {
   @IsOptional()
   @IsInt()
   @Min(1980)
+  @Max(new Date().getFullYear() + 1)
   year?: number;
 
   @IsOptional()
@@ -62,19 +64,14 @@ export class UpdateVehicleDto {
   @MaxLength(17)
   vin?: string;
 
-  @IsOptional()
-  @IsEnum(VehicleType)
-  vehicleType?: VehicleType;
-
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Max(20)
-  seats?: number;
-
+  // ─── Documents ────────────────────────────────────────────────────────────
   @IsOptional()
   @IsString()
   registrationDocumentUrl?: string;
+
+  @IsOptional()
+  @IsDateString()
+  registrationExpiry?: string;
 
   @IsOptional()
   @IsString()
@@ -92,6 +89,7 @@ export class UpdateVehicleDto {
   @IsDateString()
   technicalControlExpiry?: string;
 
+  // ─── Photos ──────���────────────────────────────────────────────────────────
   @IsOptional()
   @IsArray()
   @IsString({ each: true })

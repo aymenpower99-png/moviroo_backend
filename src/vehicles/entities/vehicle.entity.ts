@@ -1,16 +1,14 @@
 import {
-  Entity, PrimaryGeneratedColumn, Column,
-  CreateDateColumn, UpdateDateColumn, DeleteDateColumn,
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  UpdateDateColumn,
+  DeleteDateColumn,
+  ManyToOne,
+  JoinColumn,
 } from 'typeorm';
-
-export enum VehicleType {
-  ECONOMY     = 'Economy',
-  STANDARD    = 'Standard',
-  COMFORT     = 'Comfort',
-  FIRST_CLASS = 'First Class',
-  VAN         = 'Van',
-  MINI_BUS    = 'Mini Bus',
-}
+import { VehicleClass } from '../../classes/entities/class.entity';
 
 export enum VehicleStatus {
   PENDING     = 'Pending',
@@ -24,12 +22,25 @@ export class Vehicle {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
+  // ─── Class FK (MANDATORY — vehicle belongs to ONE class) ──────────────────
+  @Column({ name: 'class_id', type: 'uuid' })
+  classId: string;
+
+  @ManyToOne(() => VehicleClass, (cls) => cls.vehicles, {
+    eager: true,
+    onDelete: 'RESTRICT',
+  })
+  @JoinColumn({ name: 'class_id' })
+  vehicleClass: VehicleClass;
+
+  // ─── Driver & Agency ──────────────────────────────────────────────────────
   @Column({ name: 'driver_id', type: 'uuid', nullable: true, default: null })
   driverId: string | null;
 
   @Column({ name: 'agency_id', type: 'uuid', nullable: true, default: null })
   agencyId: string | null;
 
+  // ─── Physical Car Identity ────────────────────────────────────────────────
   @Column({ name: 'make', type: 'varchar', length: 50 })
   make: string;
 
@@ -48,18 +59,7 @@ export class Vehicle {
   @Column({ name: 'vin', type: 'varchar', length: 17, unique: true, nullable: true, default: null })
   vin: string | null;
 
-  @Column({
-    name: 'vehicle_type',
-    type: 'enum',
-    enum: VehicleType,
-    enumName: 'vehicle_type',
-    default: VehicleType.STANDARD,
-  })
-  vehicleType: VehicleType;
-
-  @Column({ name: 'seats', type: 'int', nullable: true, default: null })
-  seats: number | null;
-
+  // ─── Documents ────────────────────────────────────────────────────────────
   @Column({ name: 'registration_document_url', type: 'text', nullable: true, default: null })
   registrationDocumentUrl: string | null;
 
@@ -78,9 +78,11 @@ export class Vehicle {
   @Column({ name: 'technical_control_expiry', type: 'date', nullable: true, default: null })
   technicalControlExpiry: Date | null;
 
+  // ─── Photos ───────────────────────────────────────────────────────────────
   @Column({ name: 'photos', type: 'jsonb', nullable: true, default: null })
   photos: string[] | null;
 
+  // ─── Status ───────────────────────────────────────────────────────────────
   @Column({
     name: 'status',
     type: 'enum',

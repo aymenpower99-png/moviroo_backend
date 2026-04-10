@@ -5,7 +5,9 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   DeleteDateColumn,
+  OneToMany,
 } from 'typeorm';
+import { Vehicle } from '../../vehicles/entities/vehicle.entity';
 
 @Entity('classes')
 export class VehicleClass {
@@ -18,7 +20,7 @@ export class VehicleClass {
   @Column({ name: 'image_url', type: 'text', nullable: true, default: null })
   imageUrl: string | null;
 
-  // ─── Features ──────────────────────────────────────────────
+  // ─── Features (defined by CLASS — vehicles inherit these) ────────────────
   @Column({ name: 'seats', type: 'int', default: 4 })
   seats: number;
 
@@ -34,7 +36,7 @@ export class VehicleClass {
   @Column({ name: 'water', type: 'boolean', default: false })
   water: boolean;
 
-  // ─── Service Features ──────────────────────────────────────
+  // ─── Service Features ─────────────────────────────────────────────────────
   @Column({ name: 'free_waiting_time', type: 'int', default: 5, comment: 'minutes' })
   freeWaitingTime: number;
 
@@ -44,7 +46,11 @@ export class VehicleClass {
   @Column({ name: 'meet_and_greet', type: 'boolean', default: false })
   meetAndGreet: boolean;
 
-  // ─── Meta ──────────────────────────────────────────────────
+  // ─── Relation: One Class → Many Vehicles ──────────────────────────────────
+  @OneToMany(() => Vehicle, (vehicle) => vehicle.vehicleClass, { lazy: true })
+  vehicles: Promise<Vehicle[]>;
+
+  // ─── Meta ─────────────────────────────────────────────────────────────────
   @Column({ name: 'is_active', type: 'boolean', default: true })
   isActive: boolean;
 

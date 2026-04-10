@@ -1,50 +1,33 @@
 import {
-  IsString,
-  IsOptional,
-  IsBoolean,
-  IsIn,
-  IsEnum,
-  IsNumber,
-  IsLatitude,
-  IsLongitude,
-  MaxLength,
-  ValidateNested,
-  IsPhoneNumber,
+  IsString, IsOptional, IsBoolean,
+  IsEnum, IsNumber, IsLatitude, IsLongitude,
+  IsUUID, MaxLength, ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import {  PaymentMethod } from '../entities/passengers.entity';
-import { VehicleType } from '../../vehicles/entities/vehicle.entity'; // ✅ import from the source of truth
+import { PaymentMethod } from '../entities/passengers.entity';
 
-// ─── Payment AddressDto ────────────────────────────────────────────────────────
+// ── Payment Address ───────────────────────────────────────────────────────────
 
 export class PaymentAddressDto {
-  @IsOptional()
-  @IsString()
-  @MaxLength(30)
+  @IsOptional() @IsString() @MaxLength(30)
   label?: string;
 
-  @IsString()
-  @MaxLength(255)
+  @IsString() @MaxLength(255)
   address: string;
 
-  @IsString()
-  @MaxLength(100)
+  @IsString() @MaxLength(100)
   city: string;
 
-  @IsString()
-  @MaxLength(100)
+  @IsString() @MaxLength(100)
   province: string;
 
-  @IsString()
-  @MaxLength(20)
+  @IsString() @MaxLength(20)
   postalCode: string;
 
-  @IsNumber()
-  @IsLatitude()
+  @IsNumber() @IsLatitude()
   lat: number;
 
-  @IsNumber()
-  @IsLongitude()
+  @IsNumber() @IsLongitude()
   lng: number;
 }
 
@@ -53,28 +36,29 @@ export class AddPaymentAddressDto {
   @Type(() => PaymentAddressDto)
   address: PaymentAddressDto;
 }
-// ─── Profile Update ───────────────────────────────────────────────────────
+
+// ── Profile Update ────────────────────────────────────────────────────────────
 
 export class UpdatePassengerDto {
+  /**
+   * UUID of the passenger's preferred class.
+   * Null = no preference (picks at booking time).
+   * This is a real class UUID — not a hardcoded string.
+   */
   @IsOptional()
-  @IsEnum(VehicleType)
-  preferredVehicleType?: VehicleType;
+  @IsUUID()
+  preferredClassId?: string;
 
   @IsOptional()
   @IsEnum(PaymentMethod)
   defaultPaymentMethod?: PaymentMethod;
 
-  @IsOptional()
-  @IsString()
-  @MaxLength(100)
+  @IsOptional() @IsString() @MaxLength(100)
   emergencyContactName?: string;
 
-  @IsOptional()
-  @IsString()
-  @MaxLength(20)
+  @IsOptional() @IsString() @MaxLength(20)
   emergencyContactPhone?: string;
 
-  @IsOptional()
-  @IsBoolean()
+  @IsOptional() @IsBoolean()
   newsletterOptIn?: boolean;
 }
