@@ -15,7 +15,7 @@ export class DriversService {
     private adminService:        DriverAdminService,
   ) {}
 
-  // ── Driver self-service ──────────────────────────────────────────────────────
+  // ── Driver self-service ───────────────────────────────────────────────────────
   completeProfile(userId: string, dto: CompleteDriverProfileDto) {
     return this.profileService.completeProfile(userId, dto);
   }
@@ -29,16 +29,23 @@ export class DriversService {
     return this.availabilityService.setMyAvailability(userId, status);
   }
 
-  // ── Internal transitions ─────────────────────────────────────────────────────
-  markSetupRequired(userId: string)   { return this.availabilityService.markSetupRequired(userId); }
-  markOfflineIfReady(driverId: string){ return this.availabilityService.markOfflineIfReady(driverId); }
+  // ── Internal transitions ──────────────────────────────────────────────────────
+  markSetupRequired(userId: string)    { return this.availabilityService.markSetupRequired(userId); }
+  markOfflineIfReady(driverId: string) { return this.availabilityService.markOfflineIfReady(driverId); }
 
-  // ── Admin CRUD ───────────────────────────────────────────────────────────────
-  create(dto: CreateDriverDto)              { return this.adminService.create(dto); }
+  /**
+   * Called when a vehicle enters MAINTENANCE.
+   * Forces the driver (by driver.id) back to SETUP_REQUIRED so they cannot go online
+   * until a new AVAILABLE vehicle is assigned.
+   */
+  forceSetupRequired(driverId: string) { return this.availabilityService.forceSetupRequired(driverId); }
+
+  // ── Admin CRUD ────────────────────────────────────────────────────────────────
+  create(dto: CreateDriverDto)             { return this.adminService.create(dto); }
   findAll(page?: number, limit?: number, availabilityStatus?: DriverAvailabilityStatus) {
     return this.adminService.findAll(page, limit, availabilityStatus);
   }
-  findOne(id: string)                       { return this.adminService.findOne(id); }
-  update(id: string, dto: UpdateDriverDto)  { return this.adminService.update(id, dto); }
-  remove(id: string)                        { return this.adminService.remove(id); }
+  findOne(id: string)                      { return this.adminService.findOne(id); }
+  update(id: string, dto: UpdateDriverDto) { return this.adminService.update(id, dto); }
+  remove(id: string)                       { return this.adminService.remove(id); }
 }

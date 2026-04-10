@@ -8,6 +8,7 @@ export enum DriverAvailabilityStatus {
   SETUP_REQUIRED = 'setup_required',
   OFFLINE        = 'offline',
   ONLINE         = 'online',
+  ON_TRIP        = 'on_trip',
 }
 
 @Entity('drivers')

@@ -10,6 +10,7 @@ import { Vehicle, VehicleStatus } from './entities/vehicle.entity';
 import { CreateVehicleDto } from './dto/create-vehicle.dto';
 import { UpdateVehicleDto } from './dto/update-vehicle.dto';
 import { ClassesService } from '../classes/classes.service';
+import { Driver, DriverAvailabilityStatus } from '../driver/entities/driver.entity';
 
 interface NhtsaModel {
   Model_ID: number;
@@ -70,10 +71,12 @@ export class VehiclesService {
   constructor(
     @InjectRepository(Vehicle)
     private readonly vehicleRepo: Repository<Vehicle>,
+    @InjectRepository(Driver)
+    private readonly driverRepo: Repository<Driver>,
     private readonly classesService: ClassesService,
   ) {}
 
-  // ─── Makes & Models ───────────────────────────────────────────────────────
+  // ─── Makes & Models ───────────────────────────────────────────────────────────
 
   getAllMakes(): { id: number; name: string }[] {
     return [...this.POPULAR_MAKES].sort((a, b) => a.name.localeCompare(b.name));
@@ -115,10 +118,9 @@ export class VehiclesService {
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 
-  // ─── CRUD ─────────────────────────────────────────────────────────────────
+  // ─── CRUD ─────────────────────────────────────────────────────────────────────
 
   async create(dto: CreateVehicleDto): Promise<Vehicle> {
-    // Verify class exists
     await this.classesService.findOne(dto.classId);
 
     if (dto.licensePlate) {
@@ -193,7 +195,6 @@ export class VehiclesService {
     return vehicle;
   }
 
-  /** All vehicles in a class — used by class detail page */
   async findByClass(classId: string): Promise<Vehicle[]> {
     await this.classesService.findOne(classId);
     return this.vehicleRepo.find({
@@ -203,16 +204,12 @@ export class VehiclesService {
     });
   }
 
-  /**
-   * Dispatch: returns first AVAILABLE vehicle in a class.
-   * Booking flow: passenger picks class → system calls this → assigns vehicle → creates trip.
-   */
   async findAvailableInClass(classId: string): Promise<Vehicle> {
     await this.classesService.findOne(classId);
     const vehicle = await this.vehicleRepo.findOne({
       where: { classId, status: VehicleStatus.AVAILABLE, isActive: true },
       relations: ['vehicleClass'],
-      order: { createdAt: 'ASC' }, // FIFO
+      order: { createdAt: 'ASC' },
     });
     if (!vehicle) {
       throw new NotFoundException(
@@ -274,23 +271,33 @@ export class VehiclesService {
 
   async assignDriver(id: string, driverId: string): Promise<Vehicle> {
     const vehicle = await this.findOne(id);
-    if (vehicle.status === VehicleStatus.ON_TRIP)
+
+    // ✅ CRITICAL: Only AVAILABLE vehicles can be assigned to a driver
+    if (vehicle.status === VehicleStatus.ON_TRIP) {
       throw new BadRequestException('Cannot reassign driver while vehicle is On Trip.');
-    if (vehicle.status === VehicleStatus.MAINTENANCE)
-      throw new BadRequestException('Vehicle is under Maintenance. Complete maintenance first.');
+    }
+    if (vehicle.status === VehicleStatus.MAINTENANCE) {
+      throw new BadRequestException(
+        'Vehicle is under Maintenance. Complete maintenance before assigning a driver.',
+      );
+    }
+    if (vehicle.status === VehicleStatus.PENDING) {
+      throw new BadRequestException(
+        'Vehicle is still Pending setup. It must be Available before assigning a driver.',
+      );
+    }
+    // At this point status must be AVAILABLE
 
     vehicle.driverId = driverId;
-    if (vehicle.status === VehicleStatus.PENDING &&
-      Array.isArray(vehicle.photos) && vehicle.photos.length > 0) {
-      vehicle.status = VehicleStatus.AVAILABLE;
-    }
     return this.vehicleRepo.save(vehicle);
   }
 
   async setOnTrip(id: string): Promise<Vehicle> {
     const vehicle = await this.findOne(id);
     if (vehicle.status !== VehicleStatus.AVAILABLE)
-      throw new BadRequestException(`Vehicle must be Available to start a trip. Current: ${vehicle.status}`);
+      throw new BadRequestException(
+        `Vehicle must be Available to start a trip. Current: ${vehicle.status}`,
+      );
     vehicle.status = VehicleStatus.ON_TRIP;
     return this.vehicleRepo.save(vehicle);
   }
@@ -305,8 +312,34 @@ export class VehiclesService {
 
   async setMaintenance(id: string): Promise<Vehicle> {
     const vehicle = await this.findOne(id);
-    if (vehicle.status !== VehicleStatus.AVAILABLE)
-      throw new BadRequestException(`Only Available vehicles can go to Maintenance. Current: ${vehicle.status}`);
+
+    // Only Available vehicles can be sent to Maintenance
+    if (vehicle.status !== VehicleStatus.AVAILABLE) {
+      throw new BadRequestException(
+        `Only Available vehicles can go to Maintenance. Current: ${vehicle.status}`,
+      );
+    }
+
+    // ✅ CRITICAL: Force the assigned driver back to SETUP_REQUIRED before clearing driverId
+    if (vehicle.driverId) {
+      const driver = await this.driverRepo.findOne({ where: { id: vehicle.driverId } });
+      if (driver) {
+        const activeStatuses: DriverAvailabilityStatus[] = [
+          DriverAvailabilityStatus.OFFLINE,
+          DriverAvailabilityStatus.ONLINE,
+          DriverAvailabilityStatus.ON_TRIP,
+        ];
+        if (activeStatuses.includes(driver.availabilityStatus)) {
+          await this.driverRepo.update(driver.id, {
+            availabilityStatus: DriverAvailabilityStatus.SETUP_REQUIRED,
+          });
+          this.logger.log(
+            `Driver "${driver.id}" forced to SETUP_REQUIRED — vehicle "${id}" entered MAINTENANCE.`,
+          );
+        }
+      }
+    }
+
     vehicle.status   = VehicleStatus.MAINTENANCE;
     vehicle.driverId = null;
     return this.vehicleRepo.save(vehicle);
@@ -315,7 +348,9 @@ export class VehiclesService {
   async completeMaintenance(id: string): Promise<Vehicle> {
     const vehicle = await this.findOne(id);
     if (vehicle.status !== VehicleStatus.MAINTENANCE)
-      throw new BadRequestException(`Vehicle is not under Maintenance. Current: ${vehicle.status}`);
+      throw new BadRequestException(
+        `Vehicle is not under Maintenance. Current: ${vehicle.status}`,
+      );
     vehicle.status = VehicleStatus.AVAILABLE;
     return this.vehicleRepo.save(vehicle);
   }

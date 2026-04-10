@@ -6,7 +6,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Driver, DriverAvailabilityStatus } from '../entities/driver.entity';
-import { Vehicle } from '../../vehicles/entities/vehicle.entity';
+import { Vehicle, VehicleStatus } from '../../vehicles/entities/vehicle.entity';
 import { User } from '../../users/entites/user.entity';
 import { CreateDriverDto } from '../dto/create-driver.dto';
 import { UpdateDriverDto } from '../dto/update-driver.dto';
@@ -19,7 +19,7 @@ export class DriverAdminService {
     @InjectRepository(User)    private userRepo:    Repository<User>,
   ) {}
 
-  // ─── Create ───────────────────────────────────────────────────────────────
+  // ─── Create ───────────────────────────────────────────────────────────────────
 
   async create(dto: CreateDriverDto): Promise<Driver> {
     if (dto.driverLicenseNumber) {
@@ -51,7 +51,7 @@ export class DriverAdminService {
     return this.driverRepo.save(driver);
   }
 
-  // ─── List All Drivers ─────────────────────────────────────────────────────
+  // ─── List All Drivers ───────────────────────────────────────────────────────��─
 
   async findAll(page = 1, limit = 20, availabilityStatus?: DriverAvailabilityStatus) {
     const where: Record<string, unknown> = {};
@@ -69,8 +69,6 @@ export class DriverAdminService {
     const driverIds = drivers.map((d) => d.id);
     const userIds   = drivers.map((d) => d.userId);
 
-    // ✅ Use findBy instead of QueryBuilder to avoid column issues
-    // Vehicle.driverId stores the driver's UUID (driver.id, not driver.userId)
     const vehicles = driverIds.length > 0
       ? await this.vehicleRepo.find({
           where: driverIds.map(id => ({ driverId: id })),
@@ -114,7 +112,7 @@ export class DriverAdminService {
     return { data, total, page, limit };
   }
 
-  // ─── Find One ─────────────────────────────────────────────────────────────
+  // ─── Find One ─────────────────────────────────────────────────────────────────
 
   async findOne(id: string) {
     const driver = await this.findDriverOrFail(id);
@@ -146,7 +144,7 @@ export class DriverAdminService {
     };
   }
 
-  // ─── Update ───────────────────────────────────────────────────────────────
+  // ─── Update ───────────────────────────────────────────────────────────────────
 
   async update(id: string, dto: UpdateDriverDto): Promise<any> {
     const driver = await this.findDriverOrFail(id);
@@ -160,8 +158,8 @@ export class DriverAdminService {
     }
 
     Object.assign(driver, {
-      ...(dto.driverLicenseNumber  !== undefined && { driverLicenseNumber:   dto.driverLicenseNumber }),
-      ...(dto.driverLicenseExpiry  !== undefined && { driverLicenseExpiry:   new Date(dto.driverLicenseExpiry) }),
+      ...(dto.driverLicenseNumber   !== undefined && { driverLicenseNumber:   dto.driverLicenseNumber }),
+      ...(dto.driverLicenseExpiry   !== undefined && { driverLicenseExpiry:   new Date(dto.driverLicenseExpiry) }),
       ...(dto.driverLicenseFrontUrl !== undefined && { driverLicenseFrontUrl: dto.driverLicenseFrontUrl }),
       ...(dto.driverLicenseBackUrl  !== undefined && { driverLicenseBackUrl:  dto.driverLicenseBackUrl }),
       ...(dto.availabilityStatus    !== undefined && { availabilityStatus:    dto.availabilityStatus }),
@@ -169,23 +167,55 @@ export class DriverAdminService {
 
     await this.driverRepo.save(driver);
 
-    // ── Assign vehicle if provided ────────────────────────────────────────
+    // ── Assign vehicle if provided ────────────────────────────────────────────
     if (dto.vehicleId) {
       const vehicle = await this.vehicleRepo.findOne({ where: { id: dto.vehicleId } });
-      if (!vehicle) throw new NotFoundException(`Vehicle "${dto.vehicleId}" not found.`);
+      if (!vehicle)
+        throw new NotFoundException(`Vehicle "${dto.vehicleId}" not found.`);
+
+      // ✅ CRITICAL: Only AVAILABLE vehicles can be assigned
+      if (vehicle.status !== VehicleStatus.AVAILABLE) {
+        const reason =
+          vehicle.status === VehicleStatus.MAINTENANCE
+            ? 'Vehicle is under Maintenance and cannot be assigned to a driver.'
+            : vehicle.status === VehicleStatus.ON_TRIP
+            ? 'Vehicle is currently On Trip and cannot be reassigned.'
+            : `Vehicle status is "${vehicle.status}". Only Available vehicles can be assigned.`;
+        throw new BadRequestException(reason);
+      }
+
+      // Unlink from any previous driver who had this vehicle
+      await this.vehicleRepo.update(
+        { driverId: driver.id },
+        { driverId: null },
+      );
+
       vehicle.driverId = driver.id;
       await this.vehicleRepo.save(vehicle);
     }
 
-    // ── Auto-promote: setup_required → offline when vehicle + work area ──
+    // ── Auto-promote status based on current state ────────────────────────────
     const vehicle = await this.vehicleRepo.findOne({ where: { driverId: driver.id } });
     const hasVehicle  = !!vehicle;
     const hasWorkArea = !!driver.workAreaId;
+    const vehicleAvailable = vehicle?.status === VehicleStatus.AVAILABLE;
 
-    if (driver.availabilityStatus === DriverAvailabilityStatus.SETUP_REQUIRED && hasVehicle && hasWorkArea) {
+    // SETUP_REQUIRED → OFFLINE only when: vehicle assigned + AVAILABLE + work area set
+    if (
+      driver.availabilityStatus === DriverAvailabilityStatus.SETUP_REQUIRED &&
+      hasVehicle &&
+      hasWorkArea &&
+      vehicleAvailable
+    ) {
       driver.availabilityStatus = DriverAvailabilityStatus.OFFLINE;
       await this.driverRepo.save(driver);
-    } else if (driver.availabilityStatus === DriverAvailabilityStatus.PENDING && hasVehicle) {
+    }
+
+    // PENDING → SETUP_REQUIRED when a vehicle is first linked (regardless of other conditions)
+    if (
+      driver.availabilityStatus === DriverAvailabilityStatus.PENDING &&
+      hasVehicle
+    ) {
       driver.availabilityStatus = DriverAvailabilityStatus.SETUP_REQUIRED;
       await this.driverRepo.save(driver);
     }
@@ -209,7 +239,7 @@ export class DriverAdminService {
     };
   }
 
-  // ─── Remove ───────────────────────────────────────────────────────────────
+  // ─── Remove ───────────────────────────────────────────────────────────────────
 
   async remove(id: string): Promise<{ message: string }> {
     await this.findDriverOrFail(id);
@@ -217,7 +247,7 @@ export class DriverAdminService {
     return { message: `Driver "${id}" has been removed.` };
   }
 
-  // ─── Helper ───────────────────────────────────────────────────────────────
+  // ─── Helper ───────────────────────────────────────────────────────────────────
 
   async findDriverOrFail(id: string): Promise<Driver> {
     const driver = await this.driverRepo.findOne({ where: { id } });
