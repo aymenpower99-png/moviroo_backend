@@ -4,8 +4,11 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, IsNull } from 'typeorm';
-import { VehicleClass } from './entities/class.entity';
+import { Repository, IsNull, In } from 'typeorm';
+import { VehicleClass }  from './entities/class.entity';
+import { Vehicle }       from '../vehicles/entities/vehicle.entity';
+import { Driver }        from '../driver/entities/driver.entity';
+import { User }          from '../users/entites/user.entity';
 import { CreateClassDto } from './dto/create-class.dto';
 import { UpdateClassDto } from './dto/update-class.dto';
 
@@ -14,7 +17,18 @@ export class ClassesService {
   constructor(
     @InjectRepository(VehicleClass)
     private readonly classRepo: Repository<VehicleClass>,
+
+    @InjectRepository(Vehicle)
+    private readonly vehicleRepo: Repository<Vehicle>,
+
+    @InjectRepository(Driver)
+    private readonly driverRepo: Repository<Driver>,
+
+    @InjectRepository(User)
+    private readonly userRepo: Repository<User>,
   ) {}
+
+  // ── Create ───────────────────────────────────────────────────────────────────
 
   async create(dto: CreateClassDto): Promise<VehicleClass> {
     const existing = await this.classRepo.findOne({
@@ -27,11 +41,9 @@ export class ClassesService {
     return this.classRepo.save(newClass);
   }
 
-  /**
-   * GET /admin/classes
-   * Returns all active classes WITH vehicleCount per class.
-   * Used by the classes list page and sidebar badges.
-   */
+  // ── Find All ─────────────────────────────────────────────────────────────────
+  // Returns all active classes WITH vehicleCount per class.
+
   async findAll(): Promise<(VehicleClass & { vehicleCount: number })[]> {
     const result = await this.classRepo
       .createQueryBuilder('cls')
@@ -48,11 +60,8 @@ export class ClassesService {
     }));
   }
 
-  /**
-   * GET /admin/classes/:id
-   * Returns class info only — no vehicles list.
-   * Also used internally to validate class existence.
-   */
+  // ── Find One (no vehicles — used internally) ─────────────────────────────────
+
   async findOne(id: string): Promise<VehicleClass> {
     const vehicleClass = await this.classRepo.findOne({
       where: { id, deletedAt: IsNull() },
@@ -63,21 +72,75 @@ export class ClassesService {
     return vehicleClass;
   }
 
-  /**
-   * GET /admin/classes/:id/detail
-   * Returns class info + features + ALL vehicles assigned to it.
-   * This is the class detail / hub page endpoint.
-   */
+  // ── Find One With Vehicles ───────────────────────────────────────────────────
+  // GET /admin/classes/:id/detail
+  // Returns class + features + all vehicles with REAL driver full names.
+
   async findOneWithVehicles(id: string) {
     const vehicleClass = await this.classRepo.findOne({
       where: { id, deletedAt: IsNull() },
-      relations: ['vehicles'],
     });
     if (!vehicleClass) {
       throw new NotFoundException(`Class with id "${id}" not found.`);
     }
 
-    const vehicles = await vehicleClass.vehicles;
+    // Load vehicles for this class directly (avoids lazy-relation complexity)
+    const vehicles = await this.vehicleRepo.find({
+      where: { classId: id },
+      order: { createdAt: 'ASC' },
+    });
+
+    // ── Resolve driver full names ────────────────────────────────────────────
+    const driverIds = [
+      ...new Set(vehicles.map(v => v.driverId).filter(Boolean)),
+    ] as string[];
+
+    const driverNameMap = new Map<string, string>();
+
+    if (driverIds.length > 0) {
+      // 1) Load drivers to get their userId
+      const drivers = await this.driverRepo.find({
+        where: { id: In(driverIds) },
+        select: ['id', 'userId'],
+      });
+
+      // 2) Load corresponding users for first/last name
+      const userIds = [...new Set(drivers.map(d => d.userId))];
+      const users =
+        userIds.length > 0
+          ? await this.userRepo
+              .createQueryBuilder('u')
+              .select(['u.id', 'u.firstName', 'u.lastName'])
+              .whereInIds(userIds)
+              .getMany()
+          : [];
+
+      const userById = new Map(users.map(u => [u.id, u]));
+
+      for (const driver of drivers) {
+        const user = userById.get(driver.userId);
+        if (user) {
+          const fullName = `${user.firstName ?? ''} ${user.lastName ?? ''}`.trim();
+          driverNameMap.set(driver.id, fullName || 'Unknown');
+        }
+      }
+    }
+
+    // ── Enrich vehicles with driverName ─────────────────────────────────────
+    const vehiclesWithDriver = vehicles.map(v => ({
+      id:           v.id,
+      make:         v.make,
+      model:        v.model,
+      year:         v.year,
+      color:        v.color,
+      licensePlate: v.licensePlate,
+      driverId:     v.driverId,
+      driverName:   v.driverId ? (driverNameMap.get(v.driverId) ?? null) : null,
+      status:       v.status,
+      photos:       v.photos,
+      isActive:     v.isActive,
+      createdAt:    v.createdAt,
+    }));
 
     return {
       id:        vehicleClass.id,
@@ -97,9 +160,11 @@ export class ClassesService {
         meetAndGreet:    vehicleClass.meetAndGreet,
       },
       vehicleCount: vehicles.length,
-      vehicles,
+      vehicles:     vehiclesWithDriver,
     };
   }
+
+  // ── Update ──────────────────────────────────────────────────────────────────
 
   async update(id: string, dto: UpdateClassDto): Promise<VehicleClass> {
     const vehicleClass = await this.findOne(id);
@@ -115,11 +180,15 @@ export class ClassesService {
     return this.classRepo.save(vehicleClass);
   }
 
+  // ── Remove ──────────────────────────────────────────────────────────────────
+
   async remove(id: string): Promise<{ message: string }> {
     const vehicleClass = await this.findOne(id);
     await this.classRepo.softRemove(vehicleClass);
     return { message: `Class "${vehicleClass.name}" deleted successfully.` };
   }
+
+  // ── Features ────────────────────────────────────────────────────────────────
 
   async getFeatures(id: string) {
     const c = await this.findOne(id);
