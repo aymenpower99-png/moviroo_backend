@@ -150,7 +150,7 @@ export class VehicleCrudService {
     return vehicle;
   }
 
-  // ── Update ──────────────────────────────────��───────────────────────────────
+  // ── Update ──────────────────────────────────────────────────────────────────
 
   async update(id: string, dto: UpdateVehicleDto): Promise<Vehicle> {
     const vehicle = await this.findOne(id);
@@ -204,6 +204,14 @@ export class VehicleCrudService {
       ...(dto.isActive                 !== undefined && { isActive:                dto.isActive }),
     });
 
+    // ✅ FIX: If the class is changing, explicitly clear the stale vehicleClass
+    //    relation object from the in-memory entity. Without this, TypeORM may
+    //    keep the old relation object in memory even after classId is updated,
+    //    and the re-fetch can return the old class name in some cache scenarios.
+    if (dto.classId !== undefined) {
+      (vehicle as any).vehicleClass = undefined;
+    }
+
     // Auto-upgrade PENDING → AVAILABLE when fully ready
     if (
       vehicle.status === VehicleStatus.PENDING &&
@@ -215,10 +223,10 @@ export class VehicleCrudService {
 
     await this.vehicleRepo.save(vehicle);
 
-    // ✅ KEY FIX: Re-fetch with vehicleClass relation so the response always
-    //    contains the full class object (name, seats, bags…), not just classId.
-    //    Without this, changing Economy → Comfort returns classId only,
-    //    and the frontend ClassBadge keeps showing the old class name.
+    // ✅ Re-fetch with vehicleClass relation so the response always contains
+    //    the full updated class object (name, seats, bags…).
+    //    The explicit vehicleClass = undefined above ensures TypeORM loads
+    //    the NEW class — not the cached old one — on this re-fetch.
     return this.vehicleRepo.findOne({
       where: { id },
       relations: ['vehicleClass'],
