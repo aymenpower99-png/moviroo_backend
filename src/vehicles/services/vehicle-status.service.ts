@@ -49,7 +49,22 @@ export class VehicleStatusService {
     }
 
     vehicle.driverId = driverId;
-    return this.vehicleRepo.save(vehicle);
+    const saved = await this.vehicleRepo.save(vehicle);
+
+    // Promote the driver SETUP_REQUIRED → OFFLINE if they have a work area
+    // (vehicle is guaranteed Available at this point — Pending/Maintenance/OnTrip are blocked above)
+    const driver = await this.driverRepo.findOne({ where: { id: driverId } });
+    if (
+      driver &&
+      driver.availabilityStatus === DriverAvailabilityStatus.SETUP_REQUIRED &&
+      driver.workAreaId
+    ) {
+      await this.driverRepo.update(driver.id, {
+        availabilityStatus: DriverAvailabilityStatus.OFFLINE,
+      });
+    }
+
+    return saved;
   }
 
   // ── Trip Lifecycle ───────────────────────────────────────────────────────────

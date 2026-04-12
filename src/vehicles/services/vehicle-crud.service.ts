@@ -223,6 +223,21 @@ export class VehicleCrudService {
 
     await this.vehicleRepo.save(vehicle);
 
+    // When a driver is (re-)assigned via the vehicle edit form, promote them
+    // from SETUP_REQUIRED → OFFLINE if the vehicle is Available and they have a work area.
+    if (dto.driverId && vehicle.status === VehicleStatus.AVAILABLE) {
+      const driver = await this.driverRepo.findOne({ where: { id: dto.driverId } });
+      if (
+        driver &&
+        driver.availabilityStatus === DriverAvailabilityStatus.SETUP_REQUIRED &&
+        driver.workAreaId
+      ) {
+        await this.driverRepo.update(driver.id, {
+          availabilityStatus: DriverAvailabilityStatus.OFFLINE,
+        });
+      }
+    }
+
     // ✅ Re-fetch with vehicleClass relation so the response always contains
     //    the full updated class object (name, seats, bags…).
     //    The explicit vehicleClass = undefined above ensures TypeORM loads

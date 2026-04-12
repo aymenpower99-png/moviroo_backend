@@ -35,6 +35,11 @@ export class AdminInviteService {
     private mailService: MailService,
   ) {}
 
+
+
+
+
+
   async inviteUser(dto: InviteUserDto) {
     const exists = await this.userRepo.findOne({
       where: { email: dto.email },
@@ -92,6 +97,14 @@ export class AdminInviteService {
 
     return { message: `Invitation sent to ${user.email}.`, userId: user.id };
   }
+
+
+
+
+
+
+
+  
 
   async activateAccount(dto: ActivateAccountDto) {
     let payload: InviteTokenPayload;

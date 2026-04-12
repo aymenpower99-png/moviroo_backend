@@ -1,9 +1,9 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { WorkArea } from './entities/work-area.entity';
 import { Driver, DriverAvailabilityStatus } from '../driver/entities/driver.entity';
-import { Vehicle } from '../vehicles/entities/vehicle.entity';
+import { Vehicle, VehicleStatus } from '../vehicles/entities/vehicle.entity';
 import { User } from '../users/entites/user.entity';
 import { CreateWorkAreaDto } from './dto/create-work-area.dto';
 
@@ -41,15 +41,35 @@ export class WorkAreaService {
       if (!area) throw new NotFoundException(`Work area "${workAreaId}" not found.`);
     }
 
+    // Cannot change work area while driver is actively on a trip
+    if (driver.availabilityStatus === DriverAvailabilityStatus.ON_TRIP) {
+      throw new BadRequestException(
+        'Cannot change work area while driver is On Trip.',
+      );
+    }
+
     driver.workAreaId = workAreaId ?? null;
 
     const vehicle = await this.vehicleRepo.findOne({ where: { driverId: driver.id } });
-    if (
-      driver.availabilityStatus === DriverAvailabilityStatus.SETUP_REQUIRED &&
-      !!vehicle &&
-      !!workAreaId
-    ) {
-      driver.availabilityStatus = DriverAvailabilityStatus.OFFLINE;
+
+    if (workAreaId) {
+      // ASSIGNING: promote SETUP_REQUIRED → OFFLINE only when vehicle is also Available
+      if (
+        driver.availabilityStatus === DriverAvailabilityStatus.SETUP_REQUIRED &&
+        !!vehicle &&
+        vehicle.status === VehicleStatus.AVAILABLE
+      ) {
+        driver.availabilityStatus = DriverAvailabilityStatus.OFFLINE;
+      }
+    } else {
+      // UNASSIGNING: demote active states back to SETUP_REQUIRED
+      const activeStatuses: DriverAvailabilityStatus[] = [
+        DriverAvailabilityStatus.OFFLINE,
+        DriverAvailabilityStatus.ONLINE,
+      ];
+      if (activeStatuses.includes(driver.availabilityStatus)) {
+        driver.availabilityStatus = DriverAvailabilityStatus.SETUP_REQUIRED;
+      }
     }
 
     return this.driverRepo.save(driver);
