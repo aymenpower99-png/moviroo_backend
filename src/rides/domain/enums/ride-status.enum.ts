@@ -1,0 +1,10 @@
+export enum RideStatus {
+  PENDING            = 'PENDING',
+  SEARCHING_DRIVER   = 'SEARCHING_DRIVER',
+  ASSIGNED           = 'ASSIGNED',
+  EN_ROUTE_TO_PICKUP = 'EN_ROUTE_TO_PICKUP',
+  ARRIVED            = 'ARRIVED',
+  IN_TRIP            = 'IN_TRIP',
+  COMPLETED          = 'COMPLETED',
+  CANCELLED          = 'CANCELLED',
+}

@@ -18,6 +18,7 @@ import { VehiclesModule }  from './vehicles/vehicles.module';
 import { DriversModule }   from './driver/drivers.module';
 import { SupportModule }   from './support/support.module';
 import { WorkAreaModule }  from './work-area/work-area.module';
+import { RidesModule }     from './rides/rides.module';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { WorkAreaModule }  from './work-area/work-area.module';
     DriversModule,
     SupportModule,
     WorkAreaModule,
+    RidesModule,
   ],
   controllers: [AppController],
   providers:   [AppService],
