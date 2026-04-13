@@ -129,6 +129,9 @@ export class Ride {
   @Column({ name: 'pricing_snapshot', type: 'jsonb', nullable: true, default: null })
   pricingSnapshot: Record<string, any> | null;
 
+  @Column({ name: 'dispatch_snapshot', type: 'jsonb', nullable: true, default: null })
+  dispatchSnapshot: Record<string, any> | null;
+
   /* ── Timestamps ────────────────────────────── */
 
   @Column({ name: 'scheduled_at', type: 'timestamptz', nullable: true, default: null })

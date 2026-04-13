@@ -1,0 +1,40 @@
+import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
+
+import { DriverLocation } from './domain/entities/driver-location.entity';
+import { DispatchOffer } from './domain/entities/dispatch-offer.entity';
+import { Ride } from '../rides/domain/entities/ride.entity';
+import { Driver } from '../driver/entities/driver.entity';
+import { Vehicle } from '../vehicles/entities/vehicle.entity';
+import { WorkArea } from '../work-area/entities/work-area.entity';
+
+import { DispatchController } from './dispatch.controller';
+
+import { FindEligibleDriversUseCase } from './application/use-cases/find-eligible-drivers.use-case';
+import { DispatchRideUseCase } from './application/use-cases/dispatch-ride.use-case';
+import { RespondToOfferUseCase } from './application/use-cases/respond-to-offer.use-case';
+import { ScoreDriversService } from './application/services/score-drivers.service';
+import { FallbackDispatchService } from './application/services/fallback-dispatch.service';
+
+@Module({
+  imports: [
+    TypeOrmModule.forFeature([
+      DriverLocation,
+      DispatchOffer,
+      Ride,
+      Driver,
+      Vehicle,
+      WorkArea,
+    ]),
+  ],
+  controllers: [DispatchController],
+  providers: [
+    FindEligibleDriversUseCase,
+    DispatchRideUseCase,
+    RespondToOfferUseCase,
+    ScoreDriversService,
+    FallbackDispatchService,
+  ],
+  exports: [FallbackDispatchService],
+})
+export class DispatchModule {}
