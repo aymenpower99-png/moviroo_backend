@@ -25,6 +25,7 @@ import { RideStatus } from '../rides/domain/enums/ride-status.enum';
 import { DriverLocation } from './domain/entities/driver-location.entity';
 import { DispatchOffer } from './domain/entities/dispatch-offer.entity';
 import { OfferStatus } from './domain/enums/offer-status.enum';
+import { Driver, DriverAvailabilityStatus } from '../driver/entities/driver.entity';
 
 import { UpdateLocationDto } from './application/dtos/update-location.dto';
 import { RejectOfferDto } from './application/dtos/reject-offer.dto';
@@ -42,6 +43,8 @@ export class DispatchController {
     private readonly offerRepo: Repository<DispatchOffer>,
     @InjectRepository(Ride)
     private readonly rideRepo: Repository<Ride>,
+    @InjectRepository(Driver)
+    private readonly driverRepo: Repository<Driver>,
     private readonly respondUC: RespondToOfferUseCase,
     private readonly fallbackService: FallbackDispatchService,
   ) {}
@@ -68,6 +71,23 @@ export class DispatchController {
     return { message: 'Location updated', driverId: user.id };
   }
 
+  /* ─── Driver: heartbeat (lightweight — only updates last_seen_at) ─── */
+  @Patch('locations/heartbeat')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(UserRole.DRIVER)
+  async heartbeat(@CurrentUser() user: User) {
+    const updated = await this.locRepo.update(
+      { driverId: user.id },
+      { lastSeenAt: new Date() },
+    );
+    if (updated.affected === 0) {
+      throw new NotFoundException(
+        'No location record found. Send GPS first via POST /api/dispatch/locations',
+      );
+    }
+    return { message: 'Heartbeat received', ts: new Date() };
+  }
+
   /* ─── Driver: go online ─────────────────────── */
   @Patch('locations/online')
   @UseGuards(AuthGuard('jwt'), RolesGuard)
@@ -78,12 +98,21 @@ export class DispatchController {
     });
     if (!loc) {
       throw new NotFoundException(
-        'Update your location first (POST /api/dispatch/locations)',
+        'Send your location first via POST /api/dispatch/locations',
       );
     }
+
+    // Update real-time location table
     loc.isOnline = true;
     loc.lastSeenAt = new Date();
     await this.locRepo.save(loc);
+
+    // ✅ Sync driver profile status
+    await this.driverRepo.update(
+      { userId: user.id },
+      { availabilityStatus: DriverAvailabilityStatus.ONLINE },
+    );
+
     return { message: 'Driver is now ONLINE', driverId: user.id };
   }
 
@@ -92,10 +121,18 @@ export class DispatchController {
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(UserRole.DRIVER)
   async goOffline(@CurrentUser() user: User) {
+    // Update real-time location table
     await this.locRepo.update(
       { driverId: user.id },
       { isOnline: false },
     );
+
+    // ✅ Sync driver profile status
+    await this.driverRepo.update(
+      { userId: user.id },
+      { availabilityStatus: DriverAvailabilityStatus.OFFLINE },
+    );
+
     return { message: 'Driver is now OFFLINE', driverId: user.id };
   }
 
@@ -126,17 +163,17 @@ export class DispatchController {
 
     if (ride.status !== RideStatus.SEARCHING_DRIVER) {
       throw new ConflictException(
-        `Ride is in ${ride.status} status, must be SEARCHING_DRIVER`,
+        `Ride is in status "${ride.status}", must be SEARCHING_DRIVER to dispatch`,
       );
     }
 
-    // Fire-and-forget: dispatch loop runs in the background
+    // Fire-and-forget: dispatch loop runs in background
     this.fallbackService.runFullDispatch(ride).catch((err) => {
       this.logger.error(`Dispatch failed for ride ${rideId}`, err.stack);
     });
 
     return {
-      message: 'Dispatch started — offers will be sent sequentially (15s each)',
+      message: 'Dispatch started — offers sent sequentially (15s per driver)',
       rideId,
       status: ride.status,
     };
@@ -177,7 +214,7 @@ export class DispatchController {
     });
   }
 
-  /* ─── Admin: see all offers for a ride ──────── */
+  /* ─── Admin: all offers for a ride ──────────── */
   @Get('offers/ride/:rideId')
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(UserRole.SUPER_ADMIN)
@@ -191,3 +228,4 @@ export class DispatchController {
     });
   }
 }
+

@@ -95,14 +95,14 @@ export class RidesController {
   findAll(@CurrentUser() user: User) {
     if (user.role === UserRole.SUPER_ADMIN) {
       return this.rideRepo.find({
-        relations: ['passenger', 'vehicleClass'],
+        relations: ['passenger', 'vehicleClass', 'driver', 'vehicle'],
         order: { createdAt: 'DESC' },
-        take: 100,
+        take: 200,
       });
     }
     return this.rideRepo.find({
       where: { passengerId: user.id },
-      relations: ['vehicleClass'],
+      relations: ['vehicleClass', 'driver', 'vehicle'],
       order: { createdAt: 'DESC' },
     });
   }

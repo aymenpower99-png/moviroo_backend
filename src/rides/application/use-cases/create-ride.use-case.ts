@@ -108,9 +108,10 @@ export class CreateRideUseCase {
       dropoffLon,
       distanceKm: pricingResult.distanceKm,
       durationMin: pricingResult.durationMin,
-      priceEstimate: pricingResult.finalPrice,
+      priceEstimate: pricingResult.exactPrice,
       priceFinal: pricingResult.finalPrice,
       surgeMultiplier: pricingResult.surgeMultiplier,
+      loyaltyPointsEarned: pricingResult.loyaltyPoints,
       pricingSnapshot: pricingResult.fullResponse,
       scheduledAt: new Date(dto.scheduled_at),
     });

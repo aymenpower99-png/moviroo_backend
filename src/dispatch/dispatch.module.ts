@@ -15,6 +15,7 @@ import { DispatchRideUseCase } from './application/use-cases/dispatch-ride.use-c
 import { RespondToOfferUseCase } from './application/use-cases/respond-to-offer.use-case';
 import { ScoreDriversService } from './application/services/score-drivers.service';
 import { FallbackDispatchService } from './application/services/fallback-dispatch.service';
+import { HeartbeatService } from './application/services/heartbeat.service';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { FallbackDispatchService } from './application/services/fallback-dispatc
     RespondToOfferUseCase,
     ScoreDriversService,
     FallbackDispatchService,
+    HeartbeatService,
   ],
   exports: [FallbackDispatchService],
 })

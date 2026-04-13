@@ -11,10 +11,12 @@ export interface PricingRequest {
 }
 
 export interface PricingResult {
-  finalPrice: number;
+  finalPrice: number;        // facture price (rounded to 5 TND)
+  exactPrice: number;        // exact calculated price
+  loyaltyPoints: number;     // points earned for this ride
   surgeMultiplier: number;
   distanceKm: number;
-  durationMin: number;
+  durationMin: number;       // whole minutes (ceil)
   fullResponse: Record<string, any>;
 }
 
@@ -69,9 +71,11 @@ export class PricingService {
 
     return {
       finalPrice: data.final_price,
+      exactPrice: data.final_price_exact ?? data.final_price,
+      loyaltyPoints: data.loyalty_points ?? 0,
       surgeMultiplier: data.surge_multiplier,
       distanceKm: data.distance_km,
-      durationMin: data.duration_min,
+      durationMin: Math.ceil(data.duration_min),
       fullResponse: data,
     };
   }
@@ -91,13 +95,17 @@ export class PricingService {
       distanceKm * PricingService.RATE_PER_KM +
       durationMin * PricingService.RATE_PER_MIN;
 
-    const finalPrice = Math.max(PricingService.MIN_FARE, +raw.toFixed(2));
+    const exactPrice = Math.max(PricingService.MIN_FARE, +raw.toFixed(2));
+    const finalPrice = Math.ceil(exactPrice / 5) * 5;
+    const loyaltyPoints = Math.ceil((finalPrice * 0.5) / 5) * 5;
 
     return {
       finalPrice,
+      exactPrice,
+      loyaltyPoints,
       surgeMultiplier: 1.0,
       distanceKm,
-      durationMin,
+      durationMin: Math.ceil(durationMin),
       fullResponse: {
         fallback: true,
         base_fare: PricingService.BASE_FARE,

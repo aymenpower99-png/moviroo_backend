@@ -91,6 +91,12 @@ export class Ride {
   @Column({ name: 'duration_min', type: 'double precision', nullable: true, default: null })
   durationMin: number | null;
 
+  @Column({ name: 'distance_km_real', type: 'double precision', nullable: true, default: null })
+  distanceKmReal: number | null;
+
+  @Column({ name: 'duration_min_real', type: 'double precision', nullable: true, default: null })
+  durationMinReal: number | null;
+
   /* ── Pricing ───────────────────────────────── */
 
   @Column({
@@ -129,6 +135,9 @@ export class Ride {
   @Column({ name: 'pricing_snapshot', type: 'jsonb', nullable: true, default: null })
   pricingSnapshot: Record<string, any> | null;
 
+  @Column({ name: 'loyalty_points_earned', type: 'int', default: 0 })
+  loyaltyPointsEarned: number;
+
   @Column({ name: 'dispatch_snapshot', type: 'jsonb', nullable: true, default: null })
   dispatchSnapshot: Record<string, any> | null;
 
@@ -139,6 +148,18 @@ export class Ride {
 
   @Column({ name: 'confirmed_at', type: 'timestamptz', nullable: true, default: null })
   confirmedAt: Date | null;
+
+  @Column({ name: 'enroute_at', type: 'timestamptz', nullable: true, default: null })
+  enrouteAt: Date | null;
+
+  @Column({ name: 'arrived_at', type: 'timestamptz', nullable: true, default: null })
+  arrivedAt: Date | null;
+
+  @Column({ name: 'trip_started_at', type: 'timestamptz', nullable: true, default: null })
+  tripStartedAt: Date | null;
+
+  @Column({ name: 'completed_at', type: 'timestamptz', nullable: true, default: null })
+  completedAt: Date | null;
 
   @Column({ name: 'cancelled_at', type: 'timestamptz', nullable: true, default: null })
   cancelledAt: Date | null;

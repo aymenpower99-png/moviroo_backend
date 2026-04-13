@@ -20,6 +20,7 @@ import { SupportModule }   from './support/support.module';
 import { WorkAreaModule }  from './work-area/work-area.module';
 import { RidesModule }     from './rides/rides.module';
 import { DispatchModule }  from './dispatch/dispatch.module';
+import { TripsModule }     from './trips/trips.module';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { DispatchModule }  from './dispatch/dispatch.module';
     WorkAreaModule,
     RidesModule,
     DispatchModule,
+    TripsModule,
   ],
   controllers: [AppController],
   providers:   [AppService],
