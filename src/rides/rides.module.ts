@@ -15,9 +15,12 @@ import { HaversineService } from './infrastructure/services/haversine.service';
 import { GeocodingService } from './infrastructure/services/geocoding.service';
 import { PricingService } from './infrastructure/services/pricing.service';
 
+import { DispatchModule } from '../dispatch/dispatch.module';
+
 @Module({
   imports: [
     TypeOrmModule.forFeature([Ride, PassengerEntity, VehicleClass]),
+    DispatchModule,
   ],
   controllers: [RidesController],
   providers: [

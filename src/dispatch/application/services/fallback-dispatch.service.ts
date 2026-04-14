@@ -11,10 +11,18 @@ const DEFAULT_RADIUS_KM = 10;
 export class FallbackDispatchService {
   private readonly logger = new Logger(FallbackDispatchService.name);
 
+  /** In-memory guard: prevents concurrent dispatch for the same ride */
+  private readonly activeDispatches = new Set<string>();
+
   constructor(
     @InjectRepository(Ride) private readonly rideRepo: Repository<Ride>,
     private readonly dispatchUC: DispatchRideUseCase,
   ) {}
+
+  /** Returns true if dispatch is already running for this ride */
+  isDispatching(rideId: string): boolean {
+    return this.activeDispatches.has(rideId);
+  }
 
   /**
    * Full dispatch pipeline with 3 fallback attempts:
@@ -24,6 +32,21 @@ export class FallbackDispatchService {
    *  - If all fail: cancel ride with reason 'no_driver_found'
    */
   async runFullDispatch(ride: Ride): Promise<void> {
+    // Dedup guard: prevent concurrent dispatch for the same ride
+    if (this.activeDispatches.has(ride.id)) {
+      this.logger.warn(`⚠️ Dispatch already running for ride ${ride.id}, skipping`);
+      return;
+    }
+    this.activeDispatches.add(ride.id);
+
+    try {
+      await this._dispatchPipeline(ride);
+    } finally {
+      this.activeDispatches.delete(ride.id);
+    }
+  }
+
+  private async _dispatchPipeline(ride: Ride): Promise<void> {
     const allOffers: any[] = [];
 
     const attempts = [
