@@ -1,7 +1,17 @@
 import {
   IsString, IsOptional, IsBoolean, IsInt,
   MinLength, MaxLength, Min, Max,
+  IsArray, ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
+
+export class ExtraFeatureItemDto {
+  @IsString()
+  name: string;
+
+  @IsBoolean()
+  enabled: boolean;
+}
 
 export class CreateClassDto {
   @IsString()
@@ -37,4 +47,16 @@ export class CreateClassDto {
 
   @IsOptional() @IsBoolean()
   meetAndGreet?: boolean;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ExtraFeatureItemDto)
+  extraFeatures?: ExtraFeatureItemDto[];
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ExtraFeatureItemDto)
+  extraServices?: ExtraFeatureItemDto[];
 }

@@ -158,6 +158,8 @@ export class ClassesService {
         freeWaitingTime: vehicleClass.freeWaitingTime,
         doorToDoor:      vehicleClass.doorToDoor,
         meetAndGreet:    vehicleClass.meetAndGreet,
+        extraFeatures:   vehicleClass.extraFeatures,
+        extraServices:   vehicleClass.extraServices,
       },
       vehicleCount: vehicles.length,
       vehicles:     vehiclesWithDriver,
@@ -201,6 +203,8 @@ export class ClassesService {
       freeWaitingTime: c.freeWaitingTime,
       doorToDoor:      c.doorToDoor,
       meetAndGreet:    c.meetAndGreet,
+      extraFeatures:   c.extraFeatures,
+      extraServices:   c.extraServices,
     };
   }
 }

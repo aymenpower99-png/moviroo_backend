@@ -46,6 +46,12 @@ export class VehicleClass {
   @Column({ name: 'meet_and_greet', type: 'boolean', default: false })
   meetAndGreet: boolean;
 
+  @Column({ name: 'extra_features', type: 'jsonb', default: [] })
+  extraFeatures: { name: string; enabled: boolean }[];
+
+  @Column({ name: 'extra_services', type: 'jsonb', default: [] })
+  extraServices: { name: string; enabled: boolean }[];
+
   // ─── Relation: One Class → Many Vehicles ──────────────────────────────────
   @OneToMany(() => Vehicle, (vehicle) => vehicle.vehicleClass, { lazy: true })
   vehicles: Promise<Vehicle[]>;

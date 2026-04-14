@@ -3,6 +3,7 @@ import {
   CreateDateColumn, UpdateDateColumn, DeleteDateColumn,
 } from 'typeorm';
 
+
 export enum UserRole {
   SUPER_ADMIN = 'super_admin',
   AGENCY      = 'agency',
@@ -14,6 +15,13 @@ export enum UserStatus {
   PENDING = 'pending',
   ACTIVE  = 'active',
   BLOCKED = 'blocked',
+}
+
+export enum UserProvider {
+  MANUAL   = 'manual',
+  GOOGLE   = 'google',
+  APPLE    = 'apple',
+  FACEBOOK = 'facebook',
 }
 
 @Entity('users')
@@ -76,8 +84,17 @@ export class User {
   })
   status: UserStatus;
 
-  @Column({ name: 'invite_token', type: 'text', nullable: true, default: null })
+  @Column({
+    name: 'invite_token', type: 'text', nullable: true, default: null })
   inviteToken: string | null;
+
+  @Column({
+    type: 'enum',
+    enum: UserProvider,
+    enumName: 'users_provider_enum',
+    default: UserProvider.MANUAL,
+  })
+  provider: UserProvider;
 
   @Column({ name: 'agency_id', type: 'uuid', nullable: true, default: null })
   agencyId: string | null;
