@@ -45,9 +45,8 @@ export class PassengerEntity {
 
   @Column({
     name: 'default_payment_method',
-    type: 'enum',
-    enum: PaymentMethod,
-    enumName: 'payment_method_enum',
+    type: 'varchar',
+    length: 50,
     nullable: true,
     default: null,
   })

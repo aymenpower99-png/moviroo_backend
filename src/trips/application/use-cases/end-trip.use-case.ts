@@ -13,6 +13,7 @@ import { TripWaypoint } from '../../domain/entities/trip-waypoint.entity';
 import { DriverLocation } from '../../../dispatch/domain/entities/driver-location.entity';
 import { Driver, DriverAvailabilityStatus } from '../../../driver/entities/driver.entity';
 import { PassengerEntity } from '../../../passenger/entities/passengers.entity';
+import { BillingService } from '../../../billing/services/billing.service';
 
 @Injectable()
 export class EndTripUseCase {
@@ -29,6 +30,7 @@ export class EndTripUseCase {
     private readonly driverRepo: Repository<Driver>,
     @InjectRepository(PassengerEntity)
     private readonly passengerRepo: Repository<PassengerEntity>,
+    private readonly billingService: BillingService,
   ) {}
 
   async execute(driverUserId: string, rideId: string): Promise<Ride> {
@@ -128,6 +130,13 @@ export class EndTripUseCase {
     this.logger.log(
       `Ride ${rideId} → COMPLETED (real: ${realDistanceKm}km, ${realDurationMin}min, ${waypoints.length} waypoints, +${pointsEarned} pts)`,
     );
+
+    /* ── 8. Auto-create TripPayment (PENDING) ──── */
+    try {
+      await this.billingService.createTripPayment(ride);
+    } catch (err) {
+      this.logger.error(`Failed to create TripPayment for ride ${rideId}: ${err}`);
+    }
 
     return ride;
   }

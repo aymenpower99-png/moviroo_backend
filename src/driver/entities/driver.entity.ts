@@ -61,6 +61,14 @@ export class Driver {
   @Column({ name: 'last_location_update', type: 'timestamp', nullable: true, default: null })
   lastLocationUpdate: Date | null;
 
+  /* ── Salary & Performance ──────────────────────── */
+
+  @Column({ name: 'fixed_monthly_salary', type: 'numeric', precision: 10, scale: 2, default: 0 })
+  fixedMonthlySalary: number;
+
+  @Column({ name: 'cancellation_count', type: 'int', default: 0 })
+  cancellationCount: number;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 
