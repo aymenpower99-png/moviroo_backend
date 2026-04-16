@@ -71,18 +71,36 @@ export class DispatchController {
     return { message: 'Location updated', driverId: user.id };
   }
 
-  /* ─── Driver: heartbeat (lightweight — only updates last_seen_at) ─── */
+  /* ─── Driver: heartbeat (updates last_seen_at + optional GPS coords) ─── */
   @Patch('locations/heartbeat')
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(UserRole.DRIVER)
-  async heartbeat(@CurrentUser() user: User) {
+  async heartbeat(@CurrentUser() user: User, @Body() body: any) {
+    const patch: Record<string, any> = { lastSeenAt: new Date() };
+
+    // Accept lat/lng from body if provided
+    const lat = body?.lat ?? body?.latitude;
+    const lng = body?.lng ?? body?.longitude;
+    if (lat != null && lng != null && typeof lat === 'number' && typeof lng === 'number') {
+      patch.latitude = lat;
+      patch.longitude = lng;
+    }
+
     const updated = await this.locRepo.update(
       { driverId: user.id },
-      { lastSeenAt: new Date() },
+      patch,
     );
     if (updated.affected === 0) {
-      throw new NotFoundException(
-        'No location record found. Send GPS first via POST /api/dispatch/locations',
+      // No row yet — upsert a new one
+      await this.locRepo.upsert(
+        {
+          driverId: user.id,
+          latitude: lat ?? 0,
+          longitude: lng ?? 0,
+          lastSeenAt: new Date(),
+          isOnline: true,
+        },
+        { conflictPaths: ['driverId'] },
       );
     }
     return { message: 'Heartbeat received', ts: new Date() };
@@ -92,20 +110,23 @@ export class DispatchController {
   @Patch('locations/online')
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(UserRole.DRIVER)
-  async goOnline(@CurrentUser() user: User) {
-    const loc = await this.locRepo.findOne({
-      where: { driverId: user.id },
-    });
-    if (!loc) {
-      throw new NotFoundException(
-        'Send your location first via POST /api/dispatch/locations',
-      );
-    }
+  async goOnline(@CurrentUser() user: User, @Body() body: any) {
+    // Accept lat/lng from body
+    const lat = body?.lat ?? body?.latitude;
+    const lng = body?.lng ?? body?.longitude;
 
-    // Update real-time location table
-    loc.isOnline = true;
-    loc.lastSeenAt = new Date();
-    await this.locRepo.save(loc);
+    // Upsert: create or update the location record (no NotFoundException)
+    await this.locRepo.upsert(
+      {
+        driverId: user.id,
+        isOnline: true,
+        lastSeenAt: new Date(),
+        ...(lat != null && lng != null && typeof lat === 'number' && typeof lng === 'number'
+          ? { latitude: lat, longitude: lng }
+          : {}),
+      },
+      { conflictPaths: ['driverId'] },
+    );
 
     // ✅ Sync driver profile status
     await this.driverRepo.update(

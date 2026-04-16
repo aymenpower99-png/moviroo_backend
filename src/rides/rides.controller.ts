@@ -100,6 +100,17 @@ export class RidesController {
         take: 200,
       });
     }
+
+    // Driver sees rides assigned to them
+    if (user.role === UserRole.DRIVER) {
+      return this.rideRepo.find({
+        where: { driverId: user.id },
+        relations: ['passenger', 'vehicleClass', 'vehicle'],
+        order: { createdAt: 'DESC' },
+      });
+    }
+
+    // Passenger sees their own rides
     return this.rideRepo.find({
       where: { passengerId: user.id },
       relations: ['vehicleClass', 'driver', 'vehicle'],
