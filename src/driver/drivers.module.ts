@@ -3,6 +3,7 @@ import { TypeOrmModule }     from '@nestjs/typeorm';
 import { Driver }            from './entities/driver.entity';
 import { Vehicle }           from '../vehicles/entities/vehicle.entity';
 import { User }              from '../users/entites/user.entity';
+import { WorkArea }          from '../work-area/entities/work-area.entity';
 import { DriversService }    from './drivers.service';
 import { DriversController } from './drivers.controller';
 import { DriverProfileService }      from './services/driver-profile.service';
@@ -10,7 +11,7 @@ import { DriverAvailabilityService } from './services/driver-availability.servic
 import { DriverAdminService }        from './services/driver-admin.service';
 
 @Module({
-  imports:     [TypeOrmModule.forFeature([Driver, Vehicle, User])],
+  imports:     [TypeOrmModule.forFeature([Driver, Vehicle, User, WorkArea])],
   controllers: [DriversController],
   providers: [
     DriversService,

@@ -9,14 +9,16 @@ import { Repository } from 'typeorm';
 import { Driver, DriverAvailabilityStatus } from '../entities/driver.entity';
 import { Vehicle } from '../../vehicles/entities/vehicle.entity';
 import { User, UserStatus } from '../../users/entites/user.entity';
+import { WorkArea } from '../../work-area/entities/work-area.entity';
 import { CompleteDriverProfileDto } from '../dto/complete-driver-profile.dto';
 
 @Injectable()
 export class DriverProfileService {
   constructor(
-    @InjectRepository(Driver)  private driverRepo: Repository<Driver>,
-    @InjectRepository(Vehicle) private vehicleRepo: Repository<Vehicle>,
-    @InjectRepository(User)    private userRepo: Repository<User>,
+    @InjectRepository(Driver)   private driverRepo: Repository<Driver>,
+    @InjectRepository(Vehicle)  private vehicleRepo: Repository<Vehicle>,
+    @InjectRepository(User)     private userRepo: Repository<User>,
+    @InjectRepository(WorkArea) private workAreaRepo: Repository<WorkArea>,
   ) {}
 
   async completeProfile(userId: string, dto: CompleteDriverProfileDto): Promise<Driver> {
@@ -53,12 +55,32 @@ export class DriverProfileService {
     const driver = await this.driverRepo.findOne({ where: { userId } });
     if (!driver) return { profileComplete: false };
 
+    // Vehicle has eager: true on vehicleClass, so it auto-joins
     const vehicle = await this.vehicleRepo.findOne({ where: { driverId: driver.id } });
+
+    // Join work area if assigned
+    const workArea = driver.workAreaId
+      ? await this.workAreaRepo.findOne({ where: { id: driver.workAreaId } })
+      : null;
+
     return {
       profileComplete: true,
       ...driver,
       vehicle: vehicle
-        ? { id: vehicle.id, make: vehicle.make, model: vehicle.model, year: vehicle.year, licensePlate: vehicle.licensePlate }
+        ? {
+            id: vehicle.id,
+            make: vehicle.make,
+            model: vehicle.model,
+            year: vehicle.year,
+            color: vehicle.color,
+            licensePlate: vehicle.licensePlate,
+            vehicleClass: vehicle.vehicleClass
+              ? { id: vehicle.vehicleClass.id, name: vehicle.vehicleClass.name }
+              : null,
+          }
+        : null,
+      workArea: workArea
+        ? { id: workArea.id, country: workArea.country, ville: workArea.ville }
         : null,
     };
   }
