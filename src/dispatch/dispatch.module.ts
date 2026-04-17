@@ -6,7 +6,6 @@ import { DispatchOffer } from './domain/entities/dispatch-offer.entity';
 import { Ride } from '../rides/domain/entities/ride.entity';
 import { Driver } from '../driver/entities/driver.entity';
 import { Vehicle } from '../vehicles/entities/vehicle.entity';
-import { WorkArea } from '../work-area/entities/work-area.entity';
 
 import { DispatchController } from './dispatch.controller';
 
@@ -26,7 +25,6 @@ import { ScheduledDispatchService } from './application/services/scheduled-dispa
       Ride,
       Driver,
       Vehicle,
-      WorkArea,
     ]),
   ],
   controllers: [DispatchController],

@@ -5,7 +5,6 @@ import { DriverLocation } from '../../domain/entities/driver-location.entity';
 import { DispatchOffer } from '../../domain/entities/dispatch-offer.entity';
 import { Driver } from '../../../driver/entities/driver.entity';
 import { Vehicle, VehicleStatus } from '../../../vehicles/entities/vehicle.entity';
-import { WorkArea } from '../../../work-area/entities/work-area.entity';
 
 export interface EligibleDriver {
   userId: string;
@@ -28,8 +27,6 @@ export class FindEligibleDriversUseCase {
     private readonly driverRepo: Repository<Driver>,
     @InjectRepository(Vehicle)
     private readonly vehicleRepo: Repository<Vehicle>,
-    @InjectRepository(WorkArea)
-    private readonly workAreaRepo: Repository<WorkArea>,
   ) {}
 
   /**
@@ -37,9 +34,12 @@ export class FindEligibleDriversUseCase {
    *  - is_online = true AND is_on_trip = false
    *  - last_seen_at > NOW() - 60 seconds
    *  - NOT already offered for this ride_id
-   *  - Have a work_area whose ville appears in the pickup address
    *  - Vehicle class_id matches ride's class_id AND vehicle is AVAILABLE
    *  - Within maxRadiusKm of pickup
+   *
+   * Note: Work area assignment is informational only and is NOT used to filter
+   * dispatch eligibility. GPS proximity to the pickup point is the sole
+   * geographic gate (Uber-style approach).
    */
   async execute(
     rideId: string,
@@ -72,7 +72,6 @@ export class FindEligibleDriversUseCase {
       `Found ${locations.length} online drivers with recent location`,
     );
 
-    const pickupNorm = pickupAddress.toLowerCase();
     const eligible: EligibleDriver[] = [];
 
     for (const loc of locations) {
@@ -80,27 +79,6 @@ export class FindEligibleDriversUseCase {
         where: { userId: loc.driverId },
       });
       if (!driver) continue;
-
-      // Work area check: driver must have an assigned work area and its
-      // ville must appear in the pickup address (e.g. "Lac 1, Tunis" ⊃ "tunis")
-      if (!driver.workAreaId) {
-        this.logger.debug(
-          `Driver ${loc.driverId} skipped — no work area assigned`,
-        );
-        continue;
-      }
-      const workArea = await this.workAreaRepo.findOne({
-        where: { id: driver.workAreaId },
-      });
-      if (workArea) {
-        const villeNorm = workArea.ville.toLowerCase().trim();
-        if (!pickupNorm.includes(villeNorm)) {
-          this.logger.debug(
-            `Driver ${loc.driverId} skipped — work area "${workArea.ville}" not in pickup "${pickupAddress}"`,
-          );
-          continue;
-        }
-      }
 
       // Vehicle: class + available
       const vehicle = await this.vehicleRepo.findOne({

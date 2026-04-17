@@ -291,9 +291,9 @@ export class DriverAdminService {
   // ─── Remove ───────────────────────────────────────────────────────────────────
 
   async remove(id: string): Promise<{ message: string }> {
-    await this.findDriverOrFail(id);
-    await this.driverRepo.softDelete(id);
-    return { message: `Driver "${id}" has been removed.` };
+    const driver = await this.findDriverOrFail(id);
+    await this.driverRepo.delete(driver.id);
+    return { message: `Driver "${id}" has been permanently deleted.` };
   }
 
   // ─── Helper ───────────────────────────────────────────────────────────────────

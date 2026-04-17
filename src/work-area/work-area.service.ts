@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { WorkArea } from './entities/work-area.entity';
@@ -17,7 +17,42 @@ export class WorkAreaService {
   ) {}
 
   async create(dto: CreateWorkAreaDto): Promise<WorkArea> {
-    const area = this.workAreaRepo.create({ country: dto.country, ville: dto.ville });
+    const existing = await this.workAreaRepo.findOne({
+      where: { ville: dto.ville.trim(), country: dto.country.trim() },
+    });
+    if (existing) {
+      throw new ConflictException(
+        `Work area "${dto.ville}, ${dto.country}" already exists.`,
+      );
+    }
+    const area = this.workAreaRepo.create({
+      country: dto.country.trim(),
+      ville: dto.ville.trim(),
+    });
+    return this.workAreaRepo.save(area);
+  }
+
+  async update(id: string, dto: { country?: string; ville?: string }): Promise<WorkArea> {
+    const area = await this.workAreaRepo.findOne({ where: { id } });
+    if (!area) throw new NotFoundException(`Work area "${id}" not found.`);
+
+    const newVille   = (dto.ville   ?? area.ville).trim();
+    const newCountry = (dto.country ?? area.country).trim();
+
+    // Check for duplicate (excluding self)
+    if (newVille !== area.ville || newCountry !== area.country) {
+      const dup = await this.workAreaRepo.findOne({
+        where: { ville: newVille, country: newCountry },
+      });
+      if (dup && dup.id !== id) {
+        throw new ConflictException(
+          `Work area "${newVille}, ${newCountry}" already exists.`,
+        );
+      }
+    }
+
+    area.ville   = newVille;
+    area.country = newCountry;
     return this.workAreaRepo.save(area);
   }
 

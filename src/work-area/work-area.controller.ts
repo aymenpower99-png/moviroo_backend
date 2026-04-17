@@ -1,6 +1,6 @@
 import {
   Body, Controller, Delete, Get,
-  HttpCode, Param, ParseUUIDPipe, Post, UseGuards,
+  HttpCode, Param, ParseUUIDPipe, Patch, Post, UseGuards,
 } from '@nestjs/common';
 import { AuthGuard }  from '@nestjs/passport';
 import { Roles }      from '../common/decorators/roles.decorator';
@@ -38,6 +38,15 @@ export class WorkAreaController {
     @Body() dto: AssignWorkAreaDto,
   ) {
     return this.workAreaService.assignToDriver(driverId, dto.workAreaId ?? null);
+  }
+
+  @Patch(':id')
+  @HttpCode(200)
+  update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: { country?: string; ville?: string },
+  ) {
+    return this.workAreaService.update(id, dto);
   }
 
   @Delete(':id')

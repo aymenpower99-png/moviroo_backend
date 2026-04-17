@@ -203,4 +203,13 @@ export class SupportService {
     await this.ticketRepo.update(ticketId, { assignedAdminId: adminId });
     return this.ticketRepo.findOneOrFail({ where: { id: ticketId } });
   }
+
+  // ── Admin: hard delete ticket ─────────────────────────────────────────────
+  async adminDeleteTicket(ticketId: string): Promise<{ message: string }> {
+    const ticket = await this.ticketRepo.findOne({ where: { id: ticketId } });
+    if (!ticket) throw new NotFoundException('Ticket not found');
+    await this.messageRepo.delete({ ticketId });
+    await this.ticketRepo.delete(ticketId);
+    return { message: `Ticket "${ticketId}" permanently deleted.` };
+  }
 }

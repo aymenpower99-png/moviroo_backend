@@ -1,5 +1,5 @@
 import {
-  Body, Controller, Get, Param, ParseUUIDPipe,
+  Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe,
   Patch, Post, Query, Req, UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
@@ -99,5 +99,11 @@ export class SupportAdminController {
   @Post(':id/assign')
   assign(@Param('id', ParseUUIDPipe) id: string, @Req() req: Request) {
     return this.svc.adminAssign(id, userId(req));
+  }
+
+  @Delete(':id')
+  @HttpCode(200)
+  remove(@Param('id', ParseUUIDPipe) id: string) {
+    return this.svc.adminDeleteTicket(id);
   }
 }

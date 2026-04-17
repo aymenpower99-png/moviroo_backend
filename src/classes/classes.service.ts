@@ -186,7 +186,7 @@ export class ClassesService {
 
   async remove(id: string): Promise<{ message: string }> {
     const vehicleClass = await this.findOne(id);
-    await this.classRepo.softRemove(vehicleClass);
+    await this.classRepo.delete(vehicleClass.id);
     return { message: `Class "${vehicleClass.name}" deleted successfully.` };
   }
 
