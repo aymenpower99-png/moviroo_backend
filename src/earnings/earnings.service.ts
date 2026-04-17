@@ -105,16 +105,8 @@ export class EarningsService {
     // Count accepted = completed + cancelled (all rides that were accepted)
     const acceptedRides = completedRides + cancelledRides;
 
-    // Calculate attendance (unique days with at least 1 completed ride)
-    const daysResult = await this.rideRepo
-      .createQueryBuilder('r')
-      .select("COUNT(DISTINCT DATE(r.completed_at))", 'days')
-      .where('r.driver_id = :uid', { uid: driver.userId })
-      .andWhere('r.status = :status', { status: RideStatus.COMPLETED })
-      .andWhere('r.completed_at BETWEEN :start AND :end', { start: startDate, end: endDate })
-      .getRawOne();
-
-    const attendance = parseInt(daysResult?.days || '0', 10);
+    // Attendance = unique days driver went online (tracked via trackAttendance)
+    const attendance = (record.attendanceDays ?? []).length;
     const missedDays = Math.max(0, record.expectedWorkDays - attendance);
     const dailyRate = Number(record.baseSalary) / record.expectedWorkDays;
     const deductionAmount = Math.round(missedDays * dailyRate * 100) / 100;
@@ -201,6 +193,23 @@ export class EarningsService {
     }
 
     return result;
+  }
+
+  // ── Track attendance when driver goes online ──
+  async trackAttendance(userId: string): Promise<void> {
+    const driver = await this.driverRepo.findOne({ where: { userId } });
+    if (!driver) return;
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth() + 1;
+    const today = now.toISOString().substring(0, 10);
+
+    const record = await this.getOrCreateMonthly(driver.id, year, month);
+    const days = record.attendanceDays ?? [];
+    if (!days.includes(today)) {
+      record.attendanceDays = [...days, today];
+      await this.earningsRepo.save(record);
+    }
   }
 
   // ── Get driver's earnings by userId ──

@@ -7,12 +7,14 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Driver, DriverAvailabilityStatus } from '../entities/driver.entity';
 import { Vehicle, VehicleStatus } from '../../vehicles/entities/vehicle.entity';
+import { EarningsService } from '../../earnings/earnings.service';
 
 @Injectable()
 export class DriverAvailabilityService {
   constructor(
     @InjectRepository(Driver)  private driverRepo:  Repository<Driver>,
     @InjectRepository(Vehicle) private vehicleRepo: Repository<Vehicle>,
+    private readonly earningsService: EarningsService,
   ) {}
 
   // ─── Driver: Toggle online / offline ─────────────────────────────────────────
@@ -50,7 +52,13 @@ export class DriverAvailabilityService {
     }
 
     driver.availabilityStatus = status;
-    return this.driverRepo.save(driver);
+    const saved = await this.driverRepo.save(driver);
+
+    if (status === DriverAvailabilityStatus.ONLINE) {
+      await this.earningsService.trackAttendance(userId);
+    }
+
+    return saved;
   }
 
   // ─── Internal: PENDING → SETUP_REQUIRED (called on account activation) ────────

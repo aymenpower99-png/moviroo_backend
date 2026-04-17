@@ -51,6 +51,9 @@ export class MonthlyEarnings {
   @Column({ name: 'total_earnings', type: 'numeric', precision: 10, scale: 2, default: 0 })
   totalEarnings: number;
 
+  @Column({ name: 'attendance_days', type: 'simple-array', nullable: true, default: '' })
+  attendanceDays: string[];
+
   @Column({ name: 'weekly_breakdown', type: 'jsonb', default: '[]' })
   weeklyBreakdown: { week: number; salary: number; commission: number; rides: number }[];
 
