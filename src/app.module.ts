@@ -22,6 +22,8 @@ import { RidesModule }     from './rides/rides.module';
 import { DispatchModule }  from './dispatch/dispatch.module';
 import { TripsModule }     from './trips/trips.module';
 import { BillingModule }   from './billing/billing.module';
+import { HelpCenterModule } from './help-center/help-center.module';
+import { EarningsModule }  from './earnings/earnings.module';
 
 @Module({
   imports: [
@@ -42,6 +44,8 @@ import { BillingModule }   from './billing/billing.module';
     DispatchModule,
     TripsModule,
     BillingModule,
+    HelpCenterModule,
+    EarningsModule,
   ],
   controllers: [AppController],
   providers:   [AppService],
