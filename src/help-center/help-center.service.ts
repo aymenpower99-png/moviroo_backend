@@ -5,12 +5,52 @@ import { HelpArticle, ArticleStatus } from './entities/help-article.entity';
 import { CreateArticleDto } from './dto/create-article.dto';
 import { UpdateArticleDto } from './dto/update-article.dto';
 
+const AUTO_TRANSLATE_LANGS = ['fr', 'ar'];
+
 @Injectable()
 export class HelpCenterService {
   constructor(
     @InjectRepository(HelpArticle)
     private readonly repo: Repository<HelpArticle>,
   ) {}
+
+  // ── Internal: call MyMemory free translation API ──
+  private async translateText(text: string, targetLang: string): Promise<string> {
+    try {
+      const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=en|${targetLang}`;
+      const res = await fetch(url);
+      const data = (await res.json()) as {
+        responseStatus: number;
+        responseData?: { translatedText?: string };
+      };
+      if (data.responseStatus === 200 && data.responseData?.translatedText) {
+        return data.responseData.translatedText;
+      }
+    } catch { /* fall through to EN fallback */ }
+    return text;
+  }
+
+  // ── Internal: auto-translate missing languages in background ──
+  private async autoTranslateArticle(article: HelpArticle): Promise<void> {
+    const title: Record<string, string> = { ...article.title };
+    const description: Record<string, string> = { ...article.description };
+    let changed = false;
+
+    for (const lang of AUTO_TRANSLATE_LANGS) {
+      if (!title[lang] && title['en']) {
+        title[lang] = await this.translateText(title['en'], lang);
+        changed = true;
+      }
+      if (!description[lang] && description['en']) {
+        description[lang] = await this.translateText(description['en'], lang);
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      await this.repo.update(article.id, { title, description });
+    }
+  }
 
   // ── Public: get articles for a language ──
   async getArticles(lang: string = 'en') {
@@ -51,7 +91,10 @@ export class HelpCenterService {
       sortOrder: dto.sortOrder ?? 0,
       status: ArticleStatus.AUTO,
     });
-    return this.repo.save(article);
+    const saved = await this.repo.save(article);
+    // Trigger auto-translation in background (non-blocking)
+    this.autoTranslateArticle(saved).catch(() => {});
+    return saved;
   }
 
   // ── Admin: update article (supports multi-lang edits) ──
@@ -64,14 +107,18 @@ export class HelpCenterService {
     if (dto.status) article.status = dto.status;
     if (dto.isActive !== undefined) article.isActive = dto.isActive;
     if (dto.sortOrder !== undefined) article.sortOrder = dto.sortOrder;
-    return this.repo.save(article);
+    const saved = await this.repo.save(article);
+    // Re-translate if EN content changed
+    if (dto.title?.en || dto.description?.en) {
+      this.autoTranslateArticle(saved).catch(() => {});
+    }
+    return saved;
   }
 
-  // ── Admin: soft-delete ──
-  async deleteArticle(id: string) {
+  // ── Admin: hard-delete ──
+  async deleteArticle(id: string): Promise<void> {
     const article = await this.adminGetOne(id);
-    article.isActive = false;
-    return this.repo.save(article);
+    await this.repo.remove(article);
   }
 
   // ── Get unique categories ──
