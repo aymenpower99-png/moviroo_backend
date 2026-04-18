@@ -6,6 +6,8 @@ import { DispatchOffer } from './domain/entities/dispatch-offer.entity';
 import { Ride } from '../rides/domain/entities/ride.entity';
 import { Driver } from '../driver/entities/driver.entity';
 import { Vehicle } from '../vehicles/entities/vehicle.entity';
+import { User } from '../users/entites/user.entity';
+import { WorkArea } from '../work-area/entities/work-area.entity';
 
 import { DispatchController } from './dispatch.controller';
 
@@ -16,6 +18,7 @@ import { ScoreDriversService } from './application/services/score-drivers.servic
 import { FallbackDispatchService } from './application/services/fallback-dispatch.service';
 import { HeartbeatService } from './application/services/heartbeat.service';
 import { ScheduledDispatchService } from './application/services/scheduled-dispatch.service';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
@@ -25,7 +28,10 @@ import { ScheduledDispatchService } from './application/services/scheduled-dispa
       Ride,
       Driver,
       Vehicle,
+      User,
+      WorkArea,
     ]),
+    NotificationsModule,
   ],
   controllers: [DispatchController],
   providers: [

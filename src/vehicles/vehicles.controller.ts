@@ -160,6 +160,16 @@ export class VehiclesController {
     return this.vehiclesService.completeMaintenance(id);
   }
 
+  // ── ACTIVATE (Pending → Available) ───────────────────────────────────────────
+
+  @Post(':id/activate')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN)
+  @HttpCode(200)
+  activate(@Param('id', ParseUUIDPipe) id: string) {
+    return this.vehiclesService.activate(id);
+  }
+
   // ── REMOVE FROM CLASS ─────────────────────────────────────────────────────────
   // Sets vehicle status → Pending, clears driver. Blocks if On Trip.
 

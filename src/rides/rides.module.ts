@@ -4,6 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { Ride } from './domain/entities/ride.entity';
 import { PassengerEntity } from '../passenger/entities/passengers.entity';
 import { VehicleClass } from '../classes/entities/class.entity';
+import { DispatchOffer } from '../dispatch/domain/entities/dispatch-offer.entity';
 
 import { RidesController } from './rides.controller';
 
@@ -19,7 +20,7 @@ import { DispatchModule } from '../dispatch/dispatch.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Ride, PassengerEntity, VehicleClass]),
+    TypeOrmModule.forFeature([Ride, PassengerEntity, VehicleClass, DispatchOffer]),
     DispatchModule,
   ],
   controllers: [RidesController],

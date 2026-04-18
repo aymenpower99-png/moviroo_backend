@@ -40,4 +40,5 @@ export class VehiclesService {
   endTrip(id: string)                    { return this.statusService.endTrip(id); }
   setMaintenance(id: string)             { return this.statusService.setMaintenance(id); }
   completeMaintenance(id: string)        { return this.statusService.completeMaintenance(id); }
+  activate(id: string)                   { return this.statusService.activate(id); }
 }

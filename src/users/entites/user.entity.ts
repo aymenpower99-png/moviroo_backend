@@ -129,6 +129,9 @@ export class User {
   @Column({ name: 'email_change_expiry', type: 'timestamptz', nullable: true, default: null })
   emailChangeExpiry: Date | null;
 
+  @Column({ name: 'fcm_token', type: 'varchar', length: 500, nullable: true, default: null })
+  fcmToken: string | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

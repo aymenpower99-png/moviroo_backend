@@ -47,8 +47,8 @@ export class ConfirmRideUseCase {
       );
     }
 
-    /* Lock price and transition */
-    ride.priceFinal = ride.priceEstimate;
+    /* Lock price and transition — keep billing price (finalPrice), fallback to estimate */
+    ride.priceFinal = ride.priceFinal ?? ride.priceEstimate;
     ride.status = RideStatus.SEARCHING_DRIVER;
     ride.confirmedAt = new Date();
 

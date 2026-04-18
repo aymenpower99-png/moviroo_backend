@@ -31,6 +31,7 @@ import { UpdateLocationDto } from './application/dtos/update-location.dto';
 import { RejectOfferDto } from './application/dtos/reject-offer.dto';
 import { RespondToOfferUseCase } from './application/use-cases/respond-to-offer.use-case';
 import { FallbackDispatchService } from './application/services/fallback-dispatch.service';
+import { FcmService } from '../notifications/fcm.service';
 
 @Controller('dispatch')
 export class DispatchController {
@@ -47,6 +48,7 @@ export class DispatchController {
     private readonly driverRepo: Repository<Driver>,
     private readonly respondUC: RespondToOfferUseCase,
     private readonly fallbackService: FallbackDispatchService,
+    private readonly fcmService: FcmService,
   ) {}
 
   /* ─── Driver: update GPS location ───────────── */
@@ -230,7 +232,7 @@ export class DispatchController {
   async myPendingOffers(@CurrentUser() user: User) {
     return this.offerRepo.find({
       where: { driverId: user.id, status: OfferStatus.PENDING },
-      relations: ['ride', 'ride.vehicleClass'],
+      relations: ['ride', 'ride.vehicleClass', 'ride.passenger'],
       order: { offeredAt: 'DESC' },
     });
   }
@@ -248,5 +250,19 @@ export class DispatchController {
       order: { score: 'DESC' },
     });
   }
-}
 
+  /* ─── Driver: register FCM token ────────────── */
+  @Post('fcm-token')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(UserRole.DRIVER)
+  async registerFcmToken(
+    @CurrentUser() user: User,
+    @Body() body: { token: string },
+  ) {
+    if (!body.token) {
+      return { message: 'Token is required' };
+    }
+    await this.fcmService.registerToken(user.id, body.token);
+    return { message: 'FCM token registered' };
+  }
+}

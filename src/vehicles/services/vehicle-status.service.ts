@@ -135,4 +135,16 @@ export class VehicleStatusService {
     vehicle.status = VehicleStatus.AVAILABLE;
     return this.vehicleRepo.save(vehicle);
   }
+
+  /** Activate a PENDING vehicle → AVAILABLE (admin approval) */
+  async activate(id: string): Promise<Vehicle> {
+    const vehicle = await this.crudService.findOne(id);
+    if (vehicle.status !== VehicleStatus.PENDING) {
+      throw new BadRequestException(
+        `Only Pending vehicles can be activated. Current: ${vehicle.status}`,
+      );
+    }
+    vehicle.status = VehicleStatus.AVAILABLE;
+    return this.vehicleRepo.save(vehicle);
+  }
 }

@@ -3,12 +3,14 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Param,
   Body,
   UseGuards,
   ParseUUIDPipe,
   NotFoundException,
   ForbiddenException,
+  HttpCode,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -25,6 +27,7 @@ import { CancelRideDto } from './application/dtos/cancel-ride.dto';
 import { CreateRideUseCase } from './application/use-cases/create-ride.use-case';
 import { ConfirmRideUseCase } from './application/use-cases/confirm-ride.use-case';
 import { CancelRideUseCase } from './application/use-cases/cancel-ride.use-case';
+import { DispatchOffer } from '../dispatch/domain/entities/dispatch-offer.entity';
 
 @Controller('rides')
 export class RidesController {
@@ -34,6 +37,8 @@ export class RidesController {
     private readonly cancelRideUC: CancelRideUseCase,
     @InjectRepository(Ride)
     private readonly rideRepo: Repository<Ride>,
+    @InjectRepository(DispatchOffer)
+    private readonly offerRepo: Repository<DispatchOffer>,
   ) {}
 
   /* ─── Create a new ride ───────────────────── */
@@ -116,5 +121,18 @@ export class RidesController {
       relations: ['vehicleClass', 'driver', 'vehicle'],
       order: { createdAt: 'DESC' },
     });
+  }
+
+  /* ─── Hard delete ride (admin only) ──────── */
+  @Delete(':id')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN)
+  @HttpCode(204)
+  async hardDelete(@Param('id', ParseUUIDPipe) id: string) {
+    const ride = await this.rideRepo.findOne({ where: { id } });
+    if (!ride) throw new NotFoundException('Ride not found');
+    // Remove dispatch offers first (FK constraint)
+    await this.offerRepo.delete({ rideId: id });
+    await this.rideRepo.delete(id);
   }
 }

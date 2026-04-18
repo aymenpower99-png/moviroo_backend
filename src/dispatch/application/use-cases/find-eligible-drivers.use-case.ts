@@ -5,6 +5,7 @@ import { DriverLocation } from '../../domain/entities/driver-location.entity';
 import { DispatchOffer } from '../../domain/entities/dispatch-offer.entity';
 import { Driver } from '../../../driver/entities/driver.entity';
 import { Vehicle, VehicleStatus } from '../../../vehicles/entities/vehicle.entity';
+import { WorkArea } from '../../../work-area/entities/work-area.entity';
 
 export interface EligibleDriver {
   userId: string;
@@ -27,19 +28,16 @@ export class FindEligibleDriversUseCase {
     private readonly driverRepo: Repository<Driver>,
     @InjectRepository(Vehicle)
     private readonly vehicleRepo: Repository<Vehicle>,
+    @InjectRepository(WorkArea)
+    private readonly workAreaRepo: Repository<WorkArea>,
   ) {}
 
   /**
-   * Find drivers that are:
-   *  - is_online = true AND is_on_trip = false
-   *  - last_seen_at > NOW() - 60 seconds
-   *  - NOT already offered for this ride_id
-   *  - Vehicle class_id matches ride's class_id AND vehicle is AVAILABLE
-   *  - Within maxRadiusKm of pickup
+   * Hybrid dispatch: Work Area first → GPS fallback
    *
-   * Note: Work area assignment is informational only and is NOT used to filter
-   * dispatch eligibility. GPS proximity to the pickup point is the sole
-   * geographic gate (Uber-style approach).
+   * STEP 1: Find drivers in the same Work Area as the pickup
+   * STEP 2: Filter by GPS within maxRadiusKm
+   * STEP 3: If no drivers found in Work Area, fallback to GPS-only (global)
    */
   async execute(
     rideId: string,
@@ -56,7 +54,18 @@ export class FindEligibleDriversUseCase {
     });
     const excludeIds = existing.map((o) => o.driverId);
 
-    // 2. Find online, not-on-trip, recent driver locations
+    // 2. Determine Work Area from pickup address (match city name in work_areas.ville)
+    const allAreas = await this.workAreaRepo.find();
+    const pickupLower = pickupAddress.toLowerCase();
+    const matchedArea = allAreas.find((a) =>
+      pickupLower.includes(a.ville.toLowerCase()),
+    );
+    const rideWorkAreaId = matchedArea?.id ?? null;
+    if (matchedArea) {
+      this.logger.log(`Pickup "${pickupAddress}" matched Work Area: ${matchedArea.ville} (${matchedArea.id})`);
+    }
+
+    // 3. Find online, not-on-trip, recent driver locations
     const qb = this.locRepo
       .createQueryBuilder('dl')
       .where('dl.is_online = true')
@@ -72,7 +81,8 @@ export class FindEligibleDriversUseCase {
       `Found ${locations.length} online drivers with recent location`,
     );
 
-    const eligible: EligibleDriver[] = [];
+    // Build full candidate list with driver record + vehicle check + GPS
+    const allCandidates: (EligibleDriver & { workAreaId: string | null })[] = [];
 
     for (const loc of locations) {
       const driver = await this.driverRepo.findOne({
@@ -99,19 +109,37 @@ export class FindEligibleDriversUseCase {
       );
       if (dist > maxRadiusKm) continue;
 
-      eligible.push({
+      allCandidates.push({
         userId: loc.driverId,
         driverRecordId: driver.id,
         vehicleId: vehicle.id,
         latitude: loc.latitude,
         longitude: loc.longitude,
+        workAreaId: driver.workAreaId,
       });
     }
 
+    // STEP 1: Try drivers in same Work Area first
+    if (rideWorkAreaId) {
+      const inArea = allCandidates.filter(
+        (c) => c.workAreaId === rideWorkAreaId,
+      );
+      if (inArea.length > 0) {
+        this.logger.log(
+          `${inArea.length} eligible drivers in Work Area ${rideWorkAreaId} within ${maxRadiusKm}km`,
+        );
+        return inArea;
+      }
+      this.logger.log(
+        `No drivers in Work Area ${rideWorkAreaId} — falling back to global GPS`,
+      );
+    }
+
+    // STEP 2: Fallback — all GPS-eligible regardless of Work Area
     this.logger.log(
-      `${eligible.length} eligible drivers within ${maxRadiusKm}km for class ${classId} in pickup area`,
+      `${allCandidates.length} eligible drivers (global GPS) within ${maxRadiusKm}km for class ${classId}`,
     );
-    return eligible;
+    return allCandidates;
   }
 
   private haversineKm(

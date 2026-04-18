@@ -24,6 +24,8 @@ import { TripsModule }     from './trips/trips.module';
 import { BillingModule }   from './billing/billing.module';
 import { HelpCenterModule } from './help-center/help-center.module';
 import { EarningsModule }  from './earnings/earnings.module';
+import { NotificationsModule } from './notifications/notifications.module';
+import { ChatModule } from './chat/chat.module';
 
 @Module({
   imports: [
@@ -46,6 +48,8 @@ import { EarningsModule }  from './earnings/earnings.module';
     BillingModule,
     HelpCenterModule,
     EarningsModule,
+    NotificationsModule,
+    ChatModule,
   ],
   controllers: [AppController],
   providers:   [AppService],

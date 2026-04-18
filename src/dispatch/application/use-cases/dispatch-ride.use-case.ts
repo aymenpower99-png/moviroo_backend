@@ -10,10 +10,11 @@ import {
   ScoreDriversService,
   ScoredDriver,
 } from '../services/score-drivers.service';
+import { FcmService } from '../../../notifications/fcm.service';
 
-/** Configurable offer timeout (default 15 seconds) */
+/** Configurable offer timeout (default 45 seconds — gives driver time to see & respond) */
 const OFFER_TIMEOUT_MS = parseInt(
-  process.env.DISPATCH_OFFER_TIMEOUT_MS ?? '15000',
+  process.env.DISPATCH_OFFER_TIMEOUT_MS ?? '45000',
   10,
 );
 
@@ -28,6 +29,7 @@ export class DispatchRideUseCase {
     private readonly offerRepo: Repository<DispatchOffer>,
     private readonly findDrivers: FindEligibleDriversUseCase,
     private readonly scoreService: ScoreDriversService,
+    private readonly fcmService: FcmService,
   ) {}
 
   /**
@@ -99,6 +101,20 @@ export class DispatchRideUseCase {
         score: candidate.score,
       });
       await this.offerRepo.save(offer);
+
+      // Push notification to driver's device
+      this.fcmService
+        .sendRideOffer(
+          candidate.userId,
+          offer.id,
+          ride.pickupAddress,
+          ride.dropoffAddress,
+          ride.priceFinal ?? ride.priceEstimate ?? 0,
+          ride.distanceKm ?? 0,
+        )
+        .catch((e) =>
+          this.logger.warn(`FCM push failed for driver ${candidate.userId.slice(0, 8)}: ${e.message}`),
+        );
 
       this.logger.log(
         `📨 Offer ${offer.id} → driver ${candidate.userId.slice(0, 8)} ` +

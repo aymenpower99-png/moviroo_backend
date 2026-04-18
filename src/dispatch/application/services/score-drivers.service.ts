@@ -53,16 +53,19 @@ export class ScoreDriversService {
       const safeDist = Math.max(distKm, 0.05);
 
       // Find driver's last completed trip to compute idle bonus
-      const lastTrip = await this.rideRepo.findOne({
-        where: { driverId: c.userId, status: RideStatus.COMPLETED },
-        order: { updatedAt: 'DESC' },
-        select: ['updatedAt'],
-      });
+      const lastTrip = await this.rideRepo
+        .createQueryBuilder('r')
+        .select('r.updatedAt', 'updatedAt')
+        .where('r.driverId = :driverId', { driverId: c.userId })
+        .andWhere('r.status = :status', { status: RideStatus.COMPLETED })
+        .orderBy('r.updatedAt', 'DESC')
+        .limit(1)
+        .getRawOne<{ updatedAt: string }>();
 
       let idleBonus = 1.0; // max bonus if never had a trip
-      if (lastTrip) {
+      if (lastTrip?.updatedAt) {
         const secsSince =
-          (Date.now() - lastTrip.updatedAt.getTime()) / 1000;
+          (Date.now() - new Date(lastTrip.updatedAt).getTime()) / 1000;
         idleBonus = Math.min(secsSince / 3600, 1.0);
       }
 
