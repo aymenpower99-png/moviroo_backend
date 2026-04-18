@@ -78,7 +78,11 @@ export class DispatchController {
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(UserRole.DRIVER)
   async heartbeat(@CurrentUser() user: User, @Body() body: any) {
-    const patch: Record<string, any> = { lastSeenAt: new Date() };
+    const now = new Date();
+    // A heartbeat is proof the driver is alive — always re-assert isOnline: true
+    // This fixes the race where HeartbeatService marks the driver OFFLINE due to a
+    // delayed heartbeat, but subsequent heartbeats only updated lastSeenAt (not isOnline).
+    const patch: Record<string, any> = { lastSeenAt: now, isOnline: true };
 
     // Accept lat/lng from body if provided
     const lat = body?.lat ?? body?.latitude;
@@ -99,13 +103,20 @@ export class DispatchController {
           driverId: user.id,
           latitude: lat ?? 0,
           longitude: lng ?? 0,
-          lastSeenAt: new Date(),
+          lastSeenAt: now,
           isOnline: true,
         },
         { conflictPaths: ['driverId'] },
       );
     }
-    return { message: 'Heartbeat received', ts: new Date() };
+
+    // Re-sync driver profile status whenever heartbeat arrives
+    await this.driverRepo.update(
+      { userId: user.id },
+      { availabilityStatus: DriverAvailabilityStatus.ONLINE },
+    );
+
+    return { message: 'Heartbeat received', ts: now };
   }
 
   /* ─── Driver: go online ─────────────────────── */

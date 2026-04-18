@@ -70,7 +70,7 @@ export class FindEligibleDriversUseCase {
       .createQueryBuilder('dl')
       .where('dl.is_online = true')
       .andWhere('dl.is_on_trip = false')
-      .andWhere("dl.last_seen_at > NOW() - INTERVAL '60 seconds'");
+      .andWhere("dl.last_seen_at > NOW() - INTERVAL '120 seconds'");
 
     if (excludeIds.length > 0) {
       qb.andWhere('dl.driver_id NOT IN (:...excludeIds)', { excludeIds });

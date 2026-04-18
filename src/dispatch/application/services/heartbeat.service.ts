@@ -7,8 +7,12 @@ import { Driver, DriverAvailabilityStatus } from '../../../driver/entities/drive
 /** How often (ms) we scan for stale drivers */
 const SWEEP_INTERVAL_MS = 30_000; // every 30 seconds
 
-/** Driver considered stale if no heartbeat for this long */
-const STALE_THRESHOLD_MS = 60_000; // 60 seconds
+/**
+ * Driver considered stale if no heartbeat for this long.
+ * Flutter sends heartbeats every 20s. We allow 120s (6 missed heartbeats)
+ * to absorb GPS delays, background throttling, and network jitter.
+ */
+const STALE_THRESHOLD_MS = 120_000; // 2 minutes
 
 @Injectable()
 export class HeartbeatService implements OnModuleInit, OnModuleDestroy {
