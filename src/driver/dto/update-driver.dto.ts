@@ -1,6 +1,6 @@
 import {
-  IsDateString, IsEnum, IsOptional,
-  IsString, IsUUID, MaxLength,
+  IsDateString, IsEnum, IsNumber, IsOptional,
+  IsString, IsUUID, MaxLength, Min,
 } from 'class-validator';
 import { DriverAvailabilityStatus } from '../entities/driver.entity';
 
@@ -23,4 +23,7 @@ export class UpdateDriverDto {
   /** Assign a vehicle to this driver by vehicle UUID */
   @IsUUID() @IsOptional()
   vehicleId?: string;
+
+  @IsNumber() @IsOptional() @Min(0)
+  fixedMonthlySalary?: number;
 }

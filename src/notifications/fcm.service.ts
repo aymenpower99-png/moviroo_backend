@@ -87,6 +87,7 @@
       }
 
       try {
+        const channelId = data?.channelId ?? 'ride_offers';
         await admin.messaging().send({
           token: user.fcmToken,
           notification: { title, body },
@@ -94,7 +95,7 @@
           android: {
             priority: 'high',
             notification: {
-              channelId: 'ride_offers',
+              channelId,
               priority: 'max',
               sound: 'default',
             },

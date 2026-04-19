@@ -50,6 +50,9 @@ export class DriverAdminService {
       driverLicenseFrontUrl: dto.driverLicenseFrontUrl,
       driverLicenseBackUrl: dto.driverLicenseBackUrl,
       availabilityStatus: DriverAvailabilityStatus.PENDING,
+      ...(dto.fixedMonthlySalary !== undefined && {
+        fixedMonthlySalary: dto.fixedMonthlySalary,
+      }),
     });
 
     return this.driverRepo.save(driver);
@@ -200,6 +203,9 @@ export class DriverAdminService {
       }),
       ...(dto.availabilityStatus !== undefined && {
         availabilityStatus: dto.availabilityStatus,
+      }),
+      ...(dto.fixedMonthlySalary !== undefined && {
+        fixedMonthlySalary: dto.fixedMonthlySalary,
       }),
     });
 

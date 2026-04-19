@@ -5,6 +5,7 @@ import { MonthlyEarnings } from './entities/monthly-earnings.entity';
 import { EarningsConfig } from './entities/earnings-config.entity';
 import { Ride } from '../rides/domain/entities/ride.entity';
 import { Driver } from '../driver/entities/driver.entity';
+import { CommissionTier } from '../billing/entities/commission-tier.entity';
 import { RideStatus } from '../rides/domain/enums/ride-status.enum';
 
 @Injectable()
@@ -18,6 +19,8 @@ export class EarningsService {
     private readonly rideRepo: Repository<Ride>,
     @InjectRepository(Driver)
     private readonly driverRepo: Repository<Driver>,
+    @InjectRepository(CommissionTier)
+    private readonly tierRepo: Repository<CommissionTier>,
   ) {}
 
   // ── Get active config ──
@@ -27,7 +30,6 @@ export class EarningsService {
       order: { createdAt: 'DESC' },
     });
     if (!config) {
-      // Create default config
       return this.configRepo.save(
         this.configRepo.create({
           baseSalary: 3000,
@@ -72,65 +74,82 @@ export class EarningsService {
     return record;
   }
 
+  // ── Get all active commission tiers ──
+  private async getActiveTiers(): Promise<CommissionTier[]> {
+    return this.tierRepo.find({
+      where: { isActive: true },
+      order: { sortOrder: 'ASC', requiredRides: 'ASC' },
+    });
+  }
+
+  // ── Calculate tier-based commission ──
+  private calculateTierCommission(
+    completedRides: number,
+    tiers: CommissionTier[],
+  ): {
+    commission: number;
+    breakdown: { tierId: string; tierName: string; requiredRides: number; bonusAmount: number; reached: boolean }[];
+    nextTier: { name: string; requiredRides: number; ridesNeeded: number } | null;
+  } {
+    let commission = 0;
+    const breakdown = tiers.map((t) => {
+      const reached = completedRides >= t.requiredRides;
+      if (reached) commission += Number(t.bonusAmount);
+      return { tierId: t.id, tierName: t.name, requiredRides: t.requiredRides, bonusAmount: Number(t.bonusAmount), reached };
+    });
+
+    const unreached = tiers.find((t) => completedRides < t.requiredRides);
+    const nextTier = unreached
+      ? { name: unreached.name, requiredRides: unreached.requiredRides, ridesNeeded: unreached.requiredRides - completedRides }
+      : null;
+
+    return { commission: Math.round(commission * 100) / 100, breakdown, nextTier };
+  }
+
   // ── Recalculate earnings for a driver's month ──
   async recalculate(driverId: string, year: number, month: number): Promise<MonthlyEarnings> {
     const record = await this.getOrCreateMonthly(driverId, year, month);
 
-    // Get the driver record to find driver.userId
     const driver = await this.driverRepo.findOne({ where: { id: driverId } });
     if (!driver) throw new NotFoundException('Driver not found');
 
-    // Date range for this month
     const startDate = new Date(year, month - 1, 1);
     const endDate = new Date(year, month, 0, 23, 59, 59, 999);
 
-    // Count completed rides
     const completedRides = await this.rideRepo.count({
-      where: {
-        driverId: driver.userId,
-        status: RideStatus.COMPLETED,
-        completedAt: Between(startDate, endDate),
-      },
+      where: { driverId: driver.userId, status: RideStatus.COMPLETED, completedAt: Between(startDate, endDate) },
     });
 
-    // Count cancelled rides
     const cancelledRides = await this.rideRepo.count({
-      where: {
-        driverId: driver.userId,
-        status: RideStatus.CANCELLED,
-        cancelledAt: Between(startDate, endDate),
-      },
+      where: { driverId: driver.userId, status: RideStatus.CANCELLED, cancelledAt: Between(startDate, endDate) },
     });
 
-    // Count accepted = completed + cancelled (all rides that were accepted)
     const acceptedRides = completedRides + cancelledRides;
 
-    // Attendance = unique days driver went online (tracked via trackAttendance)
     const attendance = (record.attendanceDays ?? []).length;
     const missedDays = Math.max(0, record.expectedWorkDays - attendance);
     const dailyRate = Number(record.baseSalary) / record.expectedWorkDays;
     const deductionAmount = Math.round(missedDays * dailyRate * 100) / 100;
 
-    // Commission calculation
-    let commission = 0;
-    if (completedRides > record.ridesThreshold) {
-      const extraRides = completedRides - record.ridesThreshold;
-      commission = Math.round(extraRides * Number(record.commissionPerRide) * 100) / 100;
+    // Tier-based commission (preferred) with fallback to threshold model
+    const allTiers = await this.getActiveTiers();
+    let commission: number;
+    if (allTiers.length > 0) {
+      const result = this.calculateTierCommission(completedRides, allTiers);
+      commission = result.commission;
+    } else {
+      // Fallback: single threshold model
+      commission = 0;
+      if (completedRides > record.ridesThreshold) {
+        const extra = completedRides - record.ridesThreshold;
+        commission = Math.round(extra * Number(record.commissionPerRide) * 100) / 100;
+      }
     }
 
-    const totalEarnings = Math.round(
-      (Number(record.baseSalary) - deductionAmount + commission) * 100,
-    ) / 100;
+    const totalEarnings = Math.round((Number(record.baseSalary) - deductionAmount + commission) * 100) / 100;
 
-    // Weekly breakdown
-    const weeklyBreakdown = await this.calculateWeeklyBreakdown(
-      year,
-      month,
-      Number(record.baseSalary),
-      driver.userId,
-    );
+    const weeklyBreakdown = await this.calculateWeeklyBreakdown(year, month, Number(record.baseSalary), driver.userId);
 
-    // Update record
     record.ridesCompleted = completedRides;
     record.ridesAccepted = acceptedRides;
     record.ridesCancelled = cancelledRides;
@@ -153,14 +172,12 @@ export class EarningsService {
     const startDate = new Date(year, month - 1, 1);
     const endDate = new Date(year, month, 0);
 
-    // Split into weeks (Mon-Sun)
     const weeks: { start: Date; end: Date; num: number }[] = [];
     let weekStart = new Date(startDate);
     let weekNum = 1;
 
     while (weekStart <= endDate) {
       const weekEnd = new Date(weekStart);
-      // Find next Sunday or end of month
       const daysToSunday = 7 - weekStart.getDay();
       weekEnd.setDate(weekStart.getDate() + (daysToSunday === 7 ? 6 : daysToSunday));
       if (weekEnd > endDate) weekEnd.setTime(endDate.getTime());
@@ -178,18 +195,9 @@ export class EarningsService {
 
     for (const w of weeks) {
       const rides = await this.rideRepo.count({
-        where: {
-          driverId: userId,
-          status: RideStatus.COMPLETED,
-          completedAt: Between(w.start, w.end),
-        },
+        where: { driverId: userId, status: RideStatus.COMPLETED, completedAt: Between(w.start, w.end) },
       });
-      result.push({
-        week: w.num,
-        salary: salaryPerWeek,
-        commission: 0, // Per-week commission is complex; simplified to 0 for now
-        rides,
-      });
+      result.push({ week: w.num, salary: salaryPerWeek, commission: 0, rides });
     }
 
     return result;
@@ -221,9 +229,13 @@ export class EarningsService {
 
   // ── Get driver's earnings for a specific month ──
   async getDriverEarnings(driverId: string, year: number, month: number) {
-    // Always recalculate to get fresh data
     const record = await this.recalculate(driverId, year, month);
-    const ridesLeft = Math.max(0, record.ridesThreshold - record.ridesCompleted);
+
+    // Build tier breakdown for response
+    const allTiers = await this.getActiveTiers();
+    const { breakdown: tiers, nextTier } = this.calculateTierCommission(record.ridesCompleted, allTiers);
+
+    const ridesLeftForCommission = nextTier?.ridesNeeded ?? 0;
 
     return {
       baseSalary: Number(record.baseSalary),
@@ -240,8 +252,10 @@ export class EarningsService {
         ridesAccepted: record.ridesAccepted,
         ridesCancelled: record.ridesCancelled,
         ridesThreshold: record.ridesThreshold,
-        ridesLeftForCommission: ridesLeft,
+        ridesLeftForCommission,
       },
+      tiers,
+      nextTier,
       weekly: record.weeklyBreakdown,
     };
   }
@@ -259,3 +273,4 @@ export class EarningsService {
     });
   }
 }
+

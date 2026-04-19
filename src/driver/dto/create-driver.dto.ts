@@ -4,7 +4,9 @@ import {
   IsString,
   IsUUID,
   IsNotEmpty,
+  IsNumber,
   MaxLength,
+  Min,
 } from 'class-validator';
 
 export class CreateDriverDto {
@@ -25,4 +27,7 @@ export class CreateDriverDto {
 
   @IsString() @IsOptional() @MaxLength(20)
   phone?: string;
+
+  @IsNumber() @IsOptional() @Min(0)
+  fixedMonthlySalary?: number;
 }

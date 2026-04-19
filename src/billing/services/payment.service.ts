@@ -121,14 +121,6 @@ export class PaymentService {
   }
 
   /* ══════════════════════════════════════════════════
-     Wallet payment
-  ══════════════════════════════════════════════════ */
-
-  async processWalletPayment(tripPaymentId: string): Promise<TripPayment> {
-    return this.markAsPaid(tripPaymentId, PaymentMethod.WALLET);
-  }
-
-  /* ══════════════════════════════════════════════════
      Refund
   ══════════════════════════════════════════════════ */
 

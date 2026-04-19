@@ -63,7 +63,7 @@ export class Driver {
 
   /* ── Salary & Performance ──────────────────────── */
 
-  @Column({ name: 'fixed_monthly_salary', type: 'numeric', precision: 10, scale: 2, default: 0 })
+  @Column({ name: 'fixed_monthly_salary', type: 'numeric', precision: 10, scale: 2, default: 800 })
   fixedMonthlySalary: number;
 
   @Column({ name: 'cancellation_count', type: 'int', default: 0 })

@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Param,
   Query,
   Body,
@@ -83,7 +84,6 @@ export class BillingController {
       apiVersion: '2025-03-31.basil' as any,
     });
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let event: any;
     try {
       event = stripe.webhooks.constructEvent(
@@ -109,16 +109,6 @@ export class BillingController {
   @Roles(UserRole.SUPER_ADMIN)
   async confirmCash(@Param('id') tripPaymentId: string) {
     return this.paymentService.confirmCashPayment(tripPaymentId);
-  }
-
-  /* ══════════════════════════════════════════════════
-     Wallet payment
-  ══════════════════════════════════════════════════ */
-
-  @Patch('payments/:id/pay-wallet')
-  @UseGuards(AuthGuard('jwt'))
-  async payWithWallet(@Param('id') tripPaymentId: string) {
-    return this.paymentService.processWalletPayment(tripPaymentId);
   }
 
   /* ══════════════════════════════════════════════════
@@ -176,7 +166,42 @@ export class BillingController {
   }
 
   /* ══════════════════════════════════════════════════
-     Driver Earnings
+     Commission Tiers CRUD
+  ══════════════════════════════════════════════════ */
+
+  @Get('commission-tiers')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN)
+  async getTiers() {
+    return this.driverEarningsService.getAllTiers();
+  }
+
+  @Post('commission-tiers')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN)
+  async createTier(@Body() body: { name: string; requiredRides: number; bonusAmount: number; sortOrder?: number }) {
+    return this.driverEarningsService.createTier(body);
+  }
+
+  @Patch('commission-tiers/:id')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN)
+  async updateTier(
+    @Param('id') id: string,
+    @Body() body: Partial<{ name: string; requiredRides: number; bonusAmount: number; sortOrder: number; isActive: boolean }>,
+  ) {
+    return this.driverEarningsService.updateTier(id, body);
+  }
+
+  @Delete('commission-tiers/:id')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN)
+  async deleteTier(@Param('id') id: string) {
+    return this.driverEarningsService.deleteTier(id);
+  }
+
+  /* ══════════════════════════════════════════════════
+     Driver Earnings (auto-recalculates current month)
   ══════════════════════════════════════════════════ */
 
   @Get('driver-earnings')
@@ -186,11 +211,11 @@ export class BillingController {
     return this.driverEarningsService.getEarnings(filters);
   }
 
-  @Post('driver-earnings/calculate')
+  @Post('driver-earnings/lock')
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(UserRole.SUPER_ADMIN)
-  async calculateEarnings(@Query('month') month?: string) {
-    return this.driverEarningsService.calculateMonthlyEarnings(month);
+  async lockMonth(@Body() body: { month: string }) {
+    return this.driverEarningsService.lockMonth(body.month);
   }
 
   /* ══════════════════════════════════════════════════

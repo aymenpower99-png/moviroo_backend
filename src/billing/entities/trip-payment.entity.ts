@@ -22,7 +22,6 @@ export enum PaymentStatus {
 export enum PaymentMethod {
   CARD = 'CARD',
   CASH = 'CASH',
-  WALLET = 'WALLET',
 }
 
 /* ── Numeric transformer ── */

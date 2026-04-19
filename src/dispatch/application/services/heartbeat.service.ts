@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { LessThan, Repository } from 'typeorm';
 import { DriverLocation } from '../../domain/entities/driver-location.entity';
 import { Driver, DriverAvailabilityStatus } from '../../../driver/entities/driver.entity';
+import { FcmService } from '../../../notifications/fcm.service';
 
 /** How often (ms) we scan for stale drivers */
 const SWEEP_INTERVAL_MS = 30_000; // every 30 seconds
@@ -24,6 +25,7 @@ export class HeartbeatService implements OnModuleInit, OnModuleDestroy {
     private readonly locRepo: Repository<DriverLocation>,
     @InjectRepository(Driver)
     private readonly driverRepo: Repository<Driver>,
+    private readonly fcmService: FcmService,
   ) {}
 
   onModuleInit() {
@@ -48,6 +50,7 @@ export class HeartbeatService implements OnModuleInit, OnModuleDestroy {
   /**
    * Mark any driver whose last_seen_at is older than STALE_THRESHOLD_MS
    * as is_online=false and sync Driver.availabilityStatus → OFFLINE.
+   * Also sends FCM push notification to inform the driver.
    */
   async expireStaleDrivers(): Promise<void> {
     const cutoff = new Date(Date.now() - STALE_THRESHOLD_MS);
@@ -67,16 +70,33 @@ export class HeartbeatService implements OnModuleInit, OnModuleDestroy {
     );
 
     for (const loc of stale) {
-      // Mark location offline
-      await this.locRepo.update(loc.id, { isOnline: false, isOnTrip: false });
+      // Mark location offline using QueryBuilder (avoids TypeORM update() quirks with boolean false)
+      await this.locRepo
+        .createQueryBuilder()
+        .update()
+        .set({ isOnline: false, isOnTrip: false })
+        .where('id = :id', { id: loc.id })
+        .execute();
 
       // Sync driver profile status
-      await this.driverRepo.update(
-        { userId: loc.driverId },
-        { availabilityStatus: DriverAvailabilityStatus.OFFLINE },
-      );
+      await this.driverRepo
+        .createQueryBuilder()
+        .update()
+        .set({ availabilityStatus: DriverAvailabilityStatus.OFFLINE })
+        .where('user_id = :userId', { userId: loc.driverId })
+        .execute();
 
-      this.logger.log(`  → Driver ${loc.driverId} forced OFFLINE (stale heartbeat)`);
+      // Send FCM push notification to the driver
+      this.fcmService.sendToUser(
+        loc.driverId,
+        'You went offline',
+        'Your status was changed to offline due to inactivity. Open the app to go back online.',
+        { type: 'DRIVER_STATUS_OFFLINE', channelId: 'driver_status' },
+      ).catch((err) => {
+        this.logger.warn(`FCM offline push failed for ${loc.driverId.slice(0, 8)}: ${err}`);
+      });
+
+      this.logger.log(`  → Driver ${loc.driverId} forced OFFLINE (stale heartbeat) + FCM sent`);
     }
   }
 }

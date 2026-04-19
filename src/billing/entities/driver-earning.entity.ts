@@ -12,6 +12,7 @@ import {
 export enum EarningStatus {
   PENDING    = 'PENDING',
   CALCULATED = 'CALCULATED',
+  LOCKED     = 'LOCKED',
   PAID       = 'PAID',
 }
 
@@ -79,6 +80,31 @@ export class DriverEarning {
   })
   netEarnings: number;
 
+  /* ── Attendance & deductions (22-day model) ── */
+  @Column({ type: 'int', default: 0 })
+  attendance: number;
+
+  @Column({ name: 'missed_days', type: 'int', default: 0 })
+  missedDays: number;
+
+  @Column({
+    name: 'deduction_amount',
+    type: 'decimal',
+    precision: 10,
+    scale: 2,
+    default: 0,
+    transformer: numericTransformer,
+  })
+  deductionAmount: number;
+
+  /** Comma-separated attendance dates (YYYY-MM-DD) */
+  @Column({ name: 'attendance_days', type: 'text', default: '' })
+  attendanceDays: string;
+
+  /* ── Commission tier breakdown (JSONB) ── */
+  @Column({ name: 'commission_breakdown', type: 'jsonb', default: '[]' })
+  commissionBreakdown: { tierId: string; tierName: string; requiredRides: number; bonusAmount: number; reached: boolean }[];
+
   /* ── Performance metrics (snapshot) ── */
   @Column({ name: 'completed_trips', type: 'int', default: 0 })
   completedTrips: number;
@@ -99,9 +125,7 @@ export class DriverEarning {
   /* ── Status ── */
   @Column({
     name: 'earning_status',
-    type: 'enum',
-    enum: EarningStatus,
-    enumName: 'earning_status_enum',
+    type: 'text',
     default: EarningStatus.PENDING,
   })
   earningStatus: EarningStatus;
@@ -115,3 +139,4 @@ export class DriverEarning {
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
 }
+
