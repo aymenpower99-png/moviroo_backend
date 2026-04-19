@@ -70,11 +70,11 @@ export class HeartbeatService implements OnModuleInit, OnModuleDestroy {
     );
 
     for (const loc of stale) {
-      // Mark location offline using QueryBuilder (avoids TypeORM update() quirks with boolean false)
+      // Mark location offline + set forced flag to prevent heartbeat from re-enabling
       await this.locRepo
         .createQueryBuilder()
         .update()
-        .set({ isOnline: false, isOnTrip: false })
+        .set({ isOnline: false, isOnTrip: false, forcedOfflineAt: new Date() })
         .where('id = :id', { id: loc.id })
         .execute();
 
@@ -86,7 +86,8 @@ export class HeartbeatService implements OnModuleInit, OnModuleDestroy {
         .where('user_id = :userId', { userId: loc.driverId })
         .execute();
 
-      // Send FCM push notification to the driver
+      // Send FCM push notification to the driver (once — sweep won't find them again
+      // because isOnline is now false)
       this.fcmService.sendToUser(
         loc.driverId,
         'You went offline',

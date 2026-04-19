@@ -54,6 +54,12 @@ export class DriverLocation {
   @Column({ name: 'last_seen_at', type: 'timestamptz', default: () => 'NOW()' })
   lastSeenAt: Date;
 
+  /** Set by HeartbeatService when the driver is forced offline due to stale heartbeat.
+   *  While non-null, the heartbeat endpoint will NOT re-enable isOnline.
+   *  Only the explicit goOnline endpoint clears this flag. */
+  @Column({ name: 'forced_offline_at', type: 'timestamptz', nullable: true, default: null })
+  forcedOfflineAt: Date | null;
+
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
 }

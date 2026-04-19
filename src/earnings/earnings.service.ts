@@ -113,6 +113,14 @@ export class EarningsService {
     const driver = await this.driverRepo.findOne({ where: { id: driverId } });
     if (!driver) throw new NotFoundException('Driver not found');
 
+    // Always refresh baseSalary from driver's current salary (prevents stale values)
+    const config = await this.getConfig();
+    const currentBaseSalary =
+      driver.fixedMonthlySalary && Number(driver.fixedMonthlySalary) > 0
+        ? Number(driver.fixedMonthlySalary)
+        : Number(config.baseSalary);
+    record.baseSalary = currentBaseSalary;
+
     const startDate = new Date(year, month - 1, 1);
     const endDate = new Date(year, month, 0, 23, 59, 59, 999);
 
@@ -148,7 +156,7 @@ export class EarningsService {
 
     const totalEarnings = Math.round((Number(record.baseSalary) - deductionAmount + commission) * 100) / 100;
 
-    const weeklyBreakdown = await this.calculateWeeklyBreakdown(year, month, Number(record.baseSalary), driver.userId);
+    const weeklyBreakdown = await this.calculateWeeklyBreakdown(year, month, currentBaseSalary, driver.userId, commission, completedRides);
 
     record.ridesCompleted = completedRides;
     record.ridesAccepted = acceptedRides;
@@ -168,6 +176,8 @@ export class EarningsService {
     month: number,
     baseSalary: number,
     userId: string,
+    monthlyCommission: number,
+    totalCompletedRides: number,
   ): Promise<{ week: number; salary: number; commission: number; rides: number }[]> {
     const startDate = new Date(year, month - 1, 1);
     const endDate = new Date(year, month, 0);
@@ -197,7 +207,11 @@ export class EarningsService {
       const rides = await this.rideRepo.count({
         where: { driverId: userId, status: RideStatus.COMPLETED, completedAt: Between(w.start, w.end) },
       });
-      result.push({ week: w.num, salary: salaryPerWeek, commission: 0, rides });
+      const weekCommission =
+        totalCompletedRides > 0
+          ? Math.round((rides / totalCompletedRides) * monthlyCommission * 100) / 100
+          : 0;
+      result.push({ week: w.num, salary: salaryPerWeek, commission: weekCommission, rides });
     }
 
     return result;

@@ -79,10 +79,18 @@ export class DispatchController {
   @Roles(UserRole.DRIVER)
   async heartbeat(@CurrentUser() user: User, @Body() body: any) {
     const now = new Date();
-    // A heartbeat is proof the driver is alive — always re-assert isOnline: true
-    // This fixes the race where HeartbeatService marks the driver OFFLINE due to a
-    // delayed heartbeat, but subsequent heartbeats only updated lastSeenAt (not isOnline).
-    const patch: Record<string, any> = { lastSeenAt: now, isOnline: true };
+
+    // Check if driver was force-offlined by HeartbeatService sweep.
+    // If so, heartbeat must NOT re-enable online status — only explicit goOnline can.
+    const existingLoc = await this.locRepo.findOne({ where: { driverId: user.id } });
+    const isForcedOffline = existingLoc?.forcedOfflineAt != null;
+
+    const patch: Record<string, any> = { lastSeenAt: now };
+
+    // Only re-assert online if driver wasn't forced offline by sweep
+    if (!isForcedOffline) {
+      patch.isOnline = true;
+    }
 
     // Accept lat/lng from body if provided
     const lat = body?.lat ?? body?.latitude;
@@ -110,11 +118,13 @@ export class DispatchController {
       );
     }
 
-    // Re-sync driver profile status whenever heartbeat arrives
-    await this.driverRepo.update(
-      { userId: user.id },
-      { availabilityStatus: DriverAvailabilityStatus.ONLINE },
-    );
+    // Only re-sync driver profile status if not forced offline
+    if (!isForcedOffline) {
+      await this.driverRepo.update(
+        { userId: user.id },
+        { availabilityStatus: DriverAvailabilityStatus.ONLINE },
+      );
+    }
 
     return { message: 'Heartbeat received', ts: now };
   }
@@ -129,11 +139,13 @@ export class DispatchController {
     const lng = body?.lng ?? body?.longitude;
 
     // Upsert: create or update the location record (no NotFoundException)
+    // Clear forcedOfflineAt so the driver is truly back online
     await this.locRepo.upsert(
       {
         driverId: user.id,
         isOnline: true,
         lastSeenAt: new Date(),
+        forcedOfflineAt: null as any,
         ...(lat != null && lng != null && typeof lat === 'number' && typeof lng === 'number'
           ? { latitude: lat, longitude: lng }
           : {}),
