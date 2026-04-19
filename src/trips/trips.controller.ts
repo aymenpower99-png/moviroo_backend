@@ -8,6 +8,8 @@ import {
   UseGuards,
   ParseUUIDPipe,
   NotFoundException,
+  ForbiddenException,
+  ConflictException,
   Logger,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
@@ -20,7 +22,9 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { User, UserRole } from '../users/entites/user.entity';
 
 import { Ride } from '../rides/domain/entities/ride.entity';
+import { RideStatus } from '../rides/domain/enums/ride-status.enum';
 import { DriverLocation } from '../dispatch/domain/entities/driver-location.entity';
+import { Driver } from '../driver/entities/driver.entity';
 
 import { StartEnrouteUseCase } from './application/use-cases/start-enroute.use-case';
 import { ArrivedUseCase } from './application/use-cases/arrived.use-case';
@@ -45,6 +49,8 @@ export class TripsController {
     private readonly rideRepo: Repository<Ride>,
     @InjectRepository(DriverLocation)
     private readonly locRepo: Repository<DriverLocation>,
+    @InjectRepository(Driver)
+    private readonly driverRepo: Repository<Driver>,
   ) {}
 
   /* ─── STEP 1: Driver starts en-route to pickup ──── */
@@ -147,6 +153,50 @@ export class TripsController {
     @Body() dto: SubmitRatingDto,
   ) {
     return this.submitRatingUC.execute(user, rideId, dto);
+  }
+
+  /* ─── Driver cancel (with reason + cancellation count) ──── */
+  @Patch(':rideId/cancel')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(UserRole.DRIVER)
+  async driverCancel(
+    @CurrentUser() user: User,
+    @Param('rideId', ParseUUIDPipe) rideId: string,
+    @Body() body: { reason?: string },
+  ) {
+    const ride = await this.rideRepo.findOne({ where: { id: rideId } });
+    if (!ride) throw new NotFoundException('Ride not found');
+    if (ride.driverId !== user.id) throw new ForbiddenException('Not assigned to this ride');
+
+    const cancellable: RideStatus[] = [
+      RideStatus.ASSIGNED,
+      RideStatus.EN_ROUTE_TO_PICKUP,
+      RideStatus.ARRIVED,
+    ];
+    if (!cancellable.includes(ride.status)) {
+      throw new ConflictException(`Cannot cancel a ride in ${ride.status} status`);
+    }
+
+    ride.status            = RideStatus.CANCELLED;
+    ride.cancelledAt       = new Date();
+    ride.cancellationReason = body?.reason ?? null;
+    await this.rideRepo.save(ride);
+
+    // Increment driver's cancellation count
+    const driver = await this.driverRepo.findOne({ where: { userId: user.id } });
+    if (driver) {
+      driver.cancellationCount = (driver.cancellationCount ?? 0) + 1;
+      await this.driverRepo.save(driver);
+    }
+
+    this.tripGateway.emitToRide(rideId, 'trip:cancelled', {
+      rideId,
+      cancelledBy: 'driver',
+      reason: body?.reason ?? null,
+      message: 'Ride cancelled by driver',
+    });
+
+    return ride;
   }
 
   /* ─── STEP 7: Polling fallback (GET trip status) ──── */

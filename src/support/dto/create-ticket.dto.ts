@@ -1,4 +1,4 @@
-import { IsEnum, IsNotEmpty, IsString, MaxLength } from 'class-validator';
+import { IsEnum, IsNotEmpty, IsObject, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 import { TicketCategory } from '../entities/support-ticket.entity';
 
 export class CreateTicketDto {
@@ -10,4 +10,12 @@ export class CreateTicketDto {
 
   @IsEnum(TicketCategory)
   category: TicketCategory;
+
+  @IsOptional()
+  @IsUUID()
+  rideId?: string;
+
+  @IsOptional()
+  @IsObject()
+  metadata?: Record<string, any>;
 }

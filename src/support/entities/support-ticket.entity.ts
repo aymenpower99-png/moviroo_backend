@@ -51,6 +51,12 @@ export class SupportTicket {
   @Column({ name: 'assigned_admin_id', type: 'uuid', nullable: true, default: null })
   assignedAdminId: string | null;
 
+  @Column({ name: 'ride_id', type: 'uuid', nullable: true, default: null })
+  rideId: string | null;
+
+  @Column({ name: 'metadata', type: 'jsonb', nullable: true, default: null })
+  metadata: Record<string, any> | null;
+
   @Column({ name: 'resolved_at', type: 'timestamptz', nullable: true, default: null })
   resolvedAt: Date | null;
 

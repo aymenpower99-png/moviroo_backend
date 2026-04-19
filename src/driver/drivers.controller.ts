@@ -29,6 +29,30 @@ import { DriverAvailabilityStatus } from './entities/driver.entity';
 export class DriversController {
   constructor(private readonly driversService: DriversService) {}
 
+  // ─── Driver: Get Notification Preferences ────────────────────────────────────
+
+  @Get('me/notifications')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.DRIVER)
+  getNotificationPrefs(@Req() req: Request) {
+    const userId = (req.user as any).sub as string;
+    return this.driversService.getNotificationPrefs(userId);
+  }
+
+  // ─── Driver: Update Notification Preferences ─────────────────────────────────
+
+  @Patch('me/notifications')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.DRIVER)
+  @HttpCode(200)
+  updateNotificationPrefs(
+    @Req() req: Request,
+    @Body() body: { pushEnabled?: boolean; emailEnabled?: boolean },
+  ) {
+    const userId = (req.user as any).sub as string;
+    return this.driversService.updateNotificationPrefs(userId, body);
+  }
+
   // ─── Driver: Complete Own Profile ────────────────────────────────────────────
 
   @Post('me/complete-profile')
@@ -49,7 +73,7 @@ export class DriversController {
     return this.driversService.getMyProfile(userId);
   }
 
-  // ─── Driver: Set Own Availability (online / offline only) ────────────��───────
+  // ─── Driver: Set Own Availability (online / offline only) ────────────────────────
 
   @Patch('me/availability')
   @UseGuards(RolesGuard)

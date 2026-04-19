@@ -84,4 +84,25 @@ export class DriverProfileService {
         : null,
     };
   }
+
+  async getNotificationPrefs(userId: string) {
+    const driver = await this.driverRepo.findOne({ where: { userId } });
+    if (!driver) throw new NotFoundException('Driver not found');
+    return {
+      pushEnabled:  driver.notifPushEnabled  ?? true,
+      emailEnabled: driver.notifEmailEnabled ?? true,
+    };
+  }
+
+  async updateNotificationPrefs(
+    userId: string,
+    prefs: { pushEnabled?: boolean; emailEnabled?: boolean },
+  ) {
+    const driver = await this.driverRepo.findOne({ where: { userId } });
+    if (!driver) throw new NotFoundException('Driver not found');
+    if (prefs.pushEnabled  !== undefined) driver.notifPushEnabled  = prefs.pushEnabled;
+    if (prefs.emailEnabled !== undefined) driver.notifEmailEnabled = prefs.emailEnabled;
+    await this.driverRepo.save(driver);
+    return { pushEnabled: driver.notifPushEnabled, emailEnabled: driver.notifEmailEnabled };
+  }
 }

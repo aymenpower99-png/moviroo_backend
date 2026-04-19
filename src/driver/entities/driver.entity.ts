@@ -69,6 +69,12 @@ export class Driver {
   @Column({ name: 'cancellation_count', type: 'int', default: 0 })
   cancellationCount: number;
 
+  @Column({ name: 'notif_push_enabled', type: 'boolean', default: true })
+  notifPushEnabled: boolean;
+
+  @Column({ name: 'notif_email_enabled', type: 'boolean', default: true })
+  notifEmailEnabled: boolean;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

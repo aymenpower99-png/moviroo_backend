@@ -28,6 +28,12 @@ export class DriversService {
   ): Promise<Driver> {
     return this.availabilityService.setMyAvailability(userId, status);
   }
+  getNotificationPrefs(userId: string) {
+    return this.profileService.getNotificationPrefs(userId);
+  }
+  updateNotificationPrefs(userId: string, prefs: { pushEnabled?: boolean; emailEnabled?: boolean }) {
+    return this.profileService.updateNotificationPrefs(userId, prefs);
+  }
 
   // ── Internal transitions ──────────────────────────────────────────────────────
   markSetupRequired(userId: string)    { return this.availabilityService.markSetupRequired(userId); }
