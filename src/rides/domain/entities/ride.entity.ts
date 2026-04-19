@@ -138,6 +138,9 @@ export class Ride {
   @Column({ name: 'loyalty_points_earned', type: 'int', default: 0 })
   loyaltyPointsEarned: number;
 
+  @Column({ name: 'payment_method', type: 'varchar', length: 20, nullable: true, default: null })
+  paymentMethod: string | null;
+
   @Column({ name: 'dispatch_snapshot', type: 'jsonb', nullable: true, default: null })
   dispatchSnapshot: Record<string, any> | null;
 

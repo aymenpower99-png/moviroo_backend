@@ -2,7 +2,7 @@ import { Injectable, Logger, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
-import { TripPayment, PaymentStatus } from '../entities/trip-payment.entity';
+import { TripPayment, PaymentStatus, PaymentMethod } from '../entities/trip-payment.entity';
 import { Ride } from '../../rides/domain/entities/ride.entity';
 
 @Injectable()
@@ -26,17 +26,22 @@ export class BillingService {
     }
 
     const amount = ride.priceFinal ?? ride.priceEstimate ?? 0;
+    const isCash = ride.paymentMethod?.toUpperCase() === 'CASH';
 
     const payment = this.paymentRepo.create({
       rideId: ride.id,
       passengerId: ride.passengerId,
       driverId: ride.driverId,
       amount,
-      paymentStatus: PaymentStatus.PENDING,
+      paymentMethod: isCash ? PaymentMethod.CASH : null,
+      paymentStatus: isCash ? PaymentStatus.PAID : PaymentStatus.PENDING,
+      paidAt: isCash ? new Date() : null,
     });
 
     const saved = await this.paymentRepo.save(payment);
-    this.logger.log(`TripPayment ${saved.id} created for ride ${ride.id} — ${amount} TND (PENDING)`);
+    this.logger.log(
+      `TripPayment ${saved.id} created for ride ${ride.id} — ${amount} TND (${isCash ? 'PAID/CASH' : 'PENDING'})`,
+    );
     return saved;
   }
 

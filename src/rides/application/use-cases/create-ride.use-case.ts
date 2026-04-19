@@ -96,6 +96,8 @@ export class CreateRideUseCase {
     });
 
     /* 6 ── Persist ride ─────────────────────── */
+    const isAdminCreated = currentUser.role === UserRole.SUPER_ADMIN;
+
     const ride = this.rideRepo.create({
       passengerId,
       classId: dto.class_id,
@@ -114,6 +116,7 @@ export class CreateRideUseCase {
       loyaltyPointsEarned: pricingResult.loyaltyPoints,
       pricingSnapshot: pricingResult.fullResponse,
       scheduledAt: new Date(dto.scheduled_at),
+      paymentMethod: isAdminCreated ? 'CASH' : null,
     });
 
     const saved = await this.rideRepo.save(ride);
