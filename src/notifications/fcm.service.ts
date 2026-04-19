@@ -3,6 +3,7 @@
   import { InjectRepository } from '@nestjs/typeorm';
   import { Repository } from 'typeorm';
   import { User } from '../users/entites/user.entity';
+  import { Driver } from '../driver/entities/driver.entity';
 
   @Injectable()
   export class FcmService implements OnModuleInit {
@@ -12,6 +13,8 @@
     constructor(
       @InjectRepository(User)
       private readonly userRepo: Repository<User>,
+      @InjectRepository(Driver)
+      private readonly driverRepo: Repository<Driver>,
     ) {}
 
     onModuleInit() {
@@ -73,6 +76,16 @@
     ): Promise<boolean> {
       if (!this.initialized) {
         this.logger.warn('FCM not initialized — skipping push');
+        return false;
+      }
+
+      // Check if driver has push notifications disabled
+      const driver = await this.driverRepo.findOne({
+        where: { userId },
+        select: ['notifPushEnabled'],
+      });
+      if (driver && driver.notifPushEnabled === false) {
+        this.logger.log(`Push skipped (disabled by driver) for user ${userId.slice(0, 8)}`);
         return false;
       }
 
