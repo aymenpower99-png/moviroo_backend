@@ -1,6 +1,5 @@
 import { IsOptional, IsEnum, IsString } from 'class-validator';
 import { PaymentStatus } from '../entities/trip-payment.entity';
-import { TransactionType } from '../entities/transaction.entity';
 
 export class PaymentFilterDto {
   @IsOptional()
@@ -14,18 +13,6 @@ export class PaymentFilterDto {
   @IsOptional()
   @IsString()
   dateTo?: string;
-
-  @IsOptional()
-  page?: number;
-
-  @IsOptional()
-  limit?: number;
-}
-
-export class TransactionFilterDto {
-  @IsOptional()
-  @IsEnum(TransactionType)
-  type?: TransactionType;
 
   @IsOptional()
   page?: number;
@@ -48,10 +35,4 @@ export class EarningsFilterDto {
 
   @IsOptional()
   limit?: number;
-}
-
-export class RefundDto {
-  @IsOptional()
-  @IsString()
-  reason?: string;
 }

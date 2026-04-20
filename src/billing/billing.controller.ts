@@ -27,9 +27,7 @@ import { PaymentService } from './services/payment.service';
 import { DriverEarningsService } from './services/driver-earnings.service';
 import {
   PaymentFilterDto,
-  TransactionFilterDto,
   EarningsFilterDto,
-  RefundDto,
 } from './dto/billing.dto';
 
 @Controller('billing')
@@ -112,28 +110,6 @@ export class BillingController {
   }
 
   /* ══════════════════════════════════════════════════
-     Refund
-  ══════════════════════════════════════════════════ */
-
-  @Post('payments/:id/refund')
-  @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @Roles(UserRole.SUPER_ADMIN)
-  async refund(@Param('id') tripPaymentId: string, @Body() body: RefundDto) {
-    return this.paymentService.processRefund(tripPaymentId, body.reason);
-  }
-
-  /* ══════════════════════════════════════════════════
-     Transactions
-  ══════════════════════════════════════════════════ */
-
-  @Get('transactions')
-  @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @Roles(UserRole.SUPER_ADMIN)
-  async getTransactions(@Query() filters: TransactionFilterDto) {
-    return this.paymentService.getTransactions(filters);
-  }
-
-  /* ══════════════════════════════════════════════════
      Revenue Stats (KPI cards + charts)
   ══════════════════════════════════════════════════ */
 
@@ -201,7 +177,7 @@ export class BillingController {
   }
 
   /* ══════════════════════════════════════════════════
-     Driver Earnings (auto-recalculates current month)
+     Driver Earnings (computed on-the-fly)
   ══════════════════════════════════════════════════ */
 
   @Get('driver-earnings')
@@ -209,13 +185,6 @@ export class BillingController {
   @Roles(UserRole.SUPER_ADMIN)
   async getDriverEarnings(@Query() filters: EarningsFilterDto) {
     return this.driverEarningsService.getEarnings(filters);
-  }
-
-  @Post('driver-earnings/lock')
-  @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @Roles(UserRole.SUPER_ADMIN)
-  async lockMonth(@Body() body: { month: string }) {
-    return this.driverEarningsService.lockMonth(body.month);
   }
 
   /* ══════════════════════════════════════════════════

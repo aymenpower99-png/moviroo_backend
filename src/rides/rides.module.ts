@@ -6,7 +6,6 @@ import { PassengerEntity } from '../passenger/entities/passengers.entity';
 import { VehicleClass } from '../classes/entities/class.entity';
 import { DispatchOffer } from '../dispatch/domain/entities/dispatch-offer.entity';
 import { TripPayment } from '../billing/entities/trip-payment.entity';
-import { Transaction } from '../billing/entities/transaction.entity';
 
 import { RidesController } from './rides.controller';
 
@@ -22,7 +21,7 @@ import { DispatchModule } from '../dispatch/dispatch.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Ride, PassengerEntity, VehicleClass, DispatchOffer, TripPayment, Transaction]),
+    TypeOrmModule.forFeature([Ride, PassengerEntity, VehicleClass, DispatchOffer, TripPayment]),
     DispatchModule,
   ],
   controllers: [RidesController],

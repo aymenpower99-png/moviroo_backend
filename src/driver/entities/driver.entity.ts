@@ -1,7 +1,9 @@
 import {
   Entity, PrimaryGeneratedColumn, Column,
   CreateDateColumn, UpdateDateColumn, DeleteDateColumn,
+  ManyToOne, JoinColumn,
 } from 'typeorm';
+import { User } from '../../users/entites/user.entity';
 
 export enum DriverAvailabilityStatus {
   PENDING        = 'pending',
@@ -18,6 +20,10 @@ export class Driver {
 
   @Column({ name: 'user_id', type: 'uuid', unique: true })
   userId: string;
+
+  @ManyToOne(() => User, { eager: false })
+  @JoinColumn({ name: 'user_id' })
+  user?: User;
 
   @Column({ name: 'driver_license_number', type: 'varchar', length: 50, unique: true, nullable: true, default: null })
   driverLicenseNumber: string | null;

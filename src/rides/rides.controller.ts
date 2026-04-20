@@ -14,7 +14,7 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
+import { Repository } from 'typeorm';
 
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -29,7 +29,6 @@ import { ConfirmRideUseCase } from './application/use-cases/confirm-ride.use-cas
 import { CancelRideUseCase } from './application/use-cases/cancel-ride.use-case';
 import { DispatchOffer } from '../dispatch/domain/entities/dispatch-offer.entity';
 import { TripPayment } from '../billing/entities/trip-payment.entity';
-import { Transaction } from '../billing/entities/transaction.entity';
 
 @Controller('rides')
 export class RidesController {
@@ -43,8 +42,6 @@ export class RidesController {
     private readonly offerRepo: Repository<DispatchOffer>,
     @InjectRepository(TripPayment)
     private readonly paymentRepo: Repository<TripPayment>,
-    @InjectRepository(Transaction)
-    private readonly txnRepo: Repository<Transaction>,
   ) {}
 
   /* ─── Create a new ride ───────────────────── */
@@ -138,23 +135,10 @@ export class RidesController {
     const ride = await this.rideRepo.findOne({ where: { id } });
     if (!ride) throw new NotFoundException('Ride not found');
 
-    // 1. Nullify trip_payment FK on transactions (transactions → trip_payments)
-    const payments = await this.paymentRepo.find({
-      where: { rideId: id },
-      select: ['id'],
-    });
-    if (payments.length > 0) {
-      const paymentIds = payments.map((p) => p.id);
-      await this.txnRepo.update(
-        { tripPaymentId: In(paymentIds) },
-        { tripPaymentId: null as any },
-      );
-    }
-
-    // 2. Delete trip_payments (trip_payments → rides)
+    // 1. Delete trip_payments (trip_payments → rides)
     await this.paymentRepo.delete({ rideId: id });
 
-    // 3. Delete dispatch offers (dispatch_offers → rides)
+    // 2. Delete dispatch offers (dispatch_offers → rides)
     await this.offerRepo.delete({ rideId: id });
 
     // 4. Finally delete the ride
