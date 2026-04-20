@@ -10,7 +10,7 @@ import {
   ScoreDriversService,
   ScoredDriver,
 } from '../services/score-drivers.service';
-import { FcmService } from '../../../notifications/fcm.service';
+import { FcmService } from '../../../notifications/services/fcm.service';
 
 /** Configurable offer timeout (default 45 seconds — gives driver time to see & respond) */
 const OFFER_TIMEOUT_MS = parseInt(
@@ -79,10 +79,7 @@ export class DispatchRideUseCase {
       const currentRide = await this.rideRepo.findOne({
         where: { id: ride.id },
       });
-      if (
-        !currentRide ||
-        currentRide.status !== RideStatus.SEARCHING_DRIVER
-      ) {
+      if (!currentRide || currentRide.status !== RideStatus.SEARCHING_DRIVER) {
         this.logger.log(
           `Ride ${ride.id} no longer SEARCHING_DRIVER (status=${currentRide?.status})`,
         );
@@ -113,7 +110,9 @@ export class DispatchRideUseCase {
           ride.distanceKm ?? 0,
         )
         .catch((e) =>
-          this.logger.warn(`FCM push failed for driver ${candidate.userId.slice(0, 8)}: ${e.message}`),
+          this.logger.warn(
+            `FCM push failed for driver ${candidate.userId.slice(0, 8)}: ${e.message}`,
+          ),
         );
 
       this.logger.log(

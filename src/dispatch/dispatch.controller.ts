@@ -25,13 +25,16 @@ import { RideStatus } from '../rides/domain/enums/ride-status.enum';
 import { DriverLocation } from './domain/entities/driver-location.entity';
 import { DispatchOffer } from './domain/entities/dispatch-offer.entity';
 import { OfferStatus } from './domain/enums/offer-status.enum';
-import { Driver, DriverAvailabilityStatus } from '../driver/entities/driver.entity';
+import {
+  Driver,
+  DriverAvailabilityStatus,
+} from '../driver/entities/driver.entity';
 
 import { UpdateLocationDto } from './application/dtos/update-location.dto';
 import { RejectOfferDto } from './application/dtos/reject-offer.dto';
 import { RespondToOfferUseCase } from './application/use-cases/respond-to-offer.use-case';
 import { FallbackDispatchService } from './application/services/fallback-dispatch.service';
-import { FcmService } from '../notifications/fcm.service';
+import { FcmService } from '../notifications/services/fcm.service';
 import { DriverAvailabilityService } from '../driver/services/driver-availability.service';
 
 @Controller('dispatch')
@@ -84,7 +87,9 @@ export class DispatchController {
 
     // Check if driver was force-offlined by HeartbeatService sweep.
     // If so, heartbeat must NOT re-enable online status — only explicit goOnline can.
-    const existingLoc = await this.locRepo.findOne({ where: { driverId: user.id } });
+    const existingLoc = await this.locRepo.findOne({
+      where: { driverId: user.id },
+    });
     const isForcedOffline = existingLoc?.forcedOfflineAt != null;
 
     const patch: Record<string, any> = { lastSeenAt: now };
@@ -97,15 +102,17 @@ export class DispatchController {
     // Accept lat/lng from body if provided
     const lat = body?.lat ?? body?.latitude;
     const lng = body?.lng ?? body?.longitude;
-    if (lat != null && lng != null && typeof lat === 'number' && typeof lng === 'number') {
+    if (
+      lat != null &&
+      lng != null &&
+      typeof lat === 'number' &&
+      typeof lng === 'number'
+    ) {
       patch.latitude = lat;
       patch.longitude = lng;
     }
 
-    const updated = await this.locRepo.update(
-      { driverId: user.id },
-      patch,
-    );
+    const updated = await this.locRepo.update({ driverId: user.id }, patch);
     if (updated.affected === 0) {
       // No row yet — upsert a new one
       await this.locRepo.upsert(
@@ -154,7 +161,10 @@ export class DispatchController {
         isOnline: true,
         lastSeenAt: new Date(),
         forcedOfflineAt: null as any,
-        ...(lat != null && lng != null && typeof lat === 'number' && typeof lng === 'number'
+        ...(lat != null &&
+        lng != null &&
+        typeof lat === 'number' &&
+        typeof lng === 'number'
           ? { latitude: lat, longitude: lng }
           : {}),
       },
@@ -176,10 +186,7 @@ export class DispatchController {
     );
 
     // Update real-time location table
-    await this.locRepo.update(
-      { driverId: user.id },
-      { isOnline: false },
-    );
+    await this.locRepo.update({ driverId: user.id }, { isOnline: false });
 
     return { message: 'Driver is now OFFLINE', driverId: user.id };
   }
@@ -200,9 +207,7 @@ export class DispatchController {
   @Post('ride/:rideId')
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(UserRole.SUPER_ADMIN)
-  async triggerDispatch(
-    @Param('rideId', ParseUUIDPipe) rideId: string,
-  ) {
+  async triggerDispatch(@Param('rideId', ParseUUIDPipe) rideId: string) {
     const ride = await this.rideRepo.findOne({
       where: { id: rideId },
       relations: ['vehicleClass'],
@@ -231,10 +236,7 @@ export class DispatchController {
   @Post('offers/:id/accept')
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(UserRole.DRIVER)
-  accept(
-    @CurrentUser() user: User,
-    @Param('id', ParseUUIDPipe) id: string,
-  ) {
+  accept(@CurrentUser() user: User, @Param('id', ParseUUIDPipe) id: string) {
     return this.respondUC.accept(user, id);
   }
 
@@ -266,9 +268,7 @@ export class DispatchController {
   @Get('offers/ride/:rideId')
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(UserRole.SUPER_ADMIN)
-  async rideOffers(
-    @Param('rideId', ParseUUIDPipe) rideId: string,
-  ) {
+  async rideOffers(@Param('rideId', ParseUUIDPipe) rideId: string) {
     return this.offerRepo.find({
       where: { rideId },
       relations: ['driver'],

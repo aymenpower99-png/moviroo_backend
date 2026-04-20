@@ -15,6 +15,7 @@ import { DriverLocation } from '../../domain/entities/driver-location.entity';
 import { Driver } from '../../../driver/entities/driver.entity';
 import { Vehicle } from '../../../vehicles/entities/vehicle.entity';
 import { User } from '../../../users/entites/user.entity';
+import { DriverNotificationService } from '../../../notifications/services/driver-notification.service';
 
 @Injectable()
 export class RespondToOfferUseCase {
@@ -31,6 +32,7 @@ export class RespondToOfferUseCase {
     private readonly driverRepo: Repository<Driver>,
     @InjectRepository(Vehicle)
     private readonly vehicleRepo: Repository<Vehicle>,
+    private readonly driverNotif: DriverNotificationService,
   ) {}
 
   /**
@@ -89,10 +91,15 @@ export class RespondToOfferUseCase {
       `✅ Ride ${ride.id} ASSIGNED → driver=${currentUser.id} vehicle=${vehicle.id}`,
     );
 
-    return this.rideRepo.findOne({
+    // Send push confirmation to driver (respects notifPushEnabled toggle)
+    const fullRide = await this.rideRepo.findOne({
       where: { id: ride.id },
       relations: ['passenger', 'driver', 'vehicle', 'vehicleClass'],
-    }) as Promise<Ride>;
+    }) as Ride;
+    const passengerName = [(fullRide as any)?.passenger?.firstName, (fullRide as any)?.passenger?.lastName].filter(Boolean).join(' ') || 'the passenger';
+    this.driverNotif.rideAccepted(currentUser.id, ride.id, passengerName);
+
+    return fullRide;
   }
 
   /**

@@ -8,13 +8,13 @@ import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { User } from '../users/entites/user.entity';
-import { MailService } from '../mail/mail.service';
+import { AuthMailService } from '../mail/services/auth-mail.service';
 
 @Injectable()
 export class AuthPasswordService {
   constructor(
     @InjectRepository(User) private userRepo: Repository<User>,
-    private mailService: MailService,
+    private mailService: AuthMailService,
   ) {}
 
   /** Deterministic SHA-256 hash for reset tokens (enables direct DB lookup). */
@@ -46,7 +46,11 @@ export class AuthPasswordService {
       passwordResetExpiry: expiry,
     });
 
-    await this.mailService.sendForgotPassword(user.email, user.firstName, rawToken);
+    await this.mailService.sendForgotPassword(
+      user.email,
+      user.firstName,
+      rawToken,
+    );
 
     return {
       message:
@@ -62,7 +66,11 @@ export class AuthPasswordService {
       where: { passwordResetToken: tokenHash },
     });
 
-    if (!user || !user.passwordResetExpiry || user.passwordResetExpiry < new Date()) {
+    if (
+      !user ||
+      !user.passwordResetExpiry ||
+      user.passwordResetExpiry < new Date()
+    ) {
       throw new BadRequestException('Invalid or expired reset token');
     }
 
@@ -77,9 +85,14 @@ export class AuthPasswordService {
     return { message: 'Password updated successfully' };
   }
 
-  async updatePassword(userId: string, currentPassword: string, newPassword: string) {
+  async updatePassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string,
+  ) {
     const user = await this.userRepo.findOne({ where: { id: userId } });
-    if (!user || !user.password) throw new UnauthorizedException('Invalid credentials');
+    if (!user || !user.password)
+      throw new UnauthorizedException('Invalid credentials');
 
     const ok = await bcrypt.compare(currentPassword, user.password);
     if (!ok) throw new UnauthorizedException('Invalid credentials');

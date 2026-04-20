@@ -19,6 +19,7 @@ import { CreateDriverDto } from './dto/create-driver.dto';
 import { UpdateDriverDto } from './dto/update-driver.dto';
 import { SetAvailabilityDto } from './dto/set-availability.dto';
 import { CompleteDriverProfileDto } from './dto/complete-driver-profile.dto';
+import { UpdateNotificationPrefsDto } from './dto/update-notification-prefs.dto';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { UserRole } from '../users/entites/user.entity';
@@ -35,7 +36,7 @@ export class DriversController {
   @UseGuards(RolesGuard)
   @Roles(UserRole.DRIVER)
   getNotificationPrefs(@Req() req: Request) {
-    const userId = (req.user as any).sub as string;
+    const userId = (req.user as any).id as string;
     return this.driversService.getNotificationPrefs(userId);
   }
 
@@ -47,9 +48,9 @@ export class DriversController {
   @HttpCode(200)
   updateNotificationPrefs(
     @Req() req: Request,
-    @Body() body: { pushEnabled?: boolean; emailEnabled?: boolean },
+    @Body() body: UpdateNotificationPrefsDto,
   ) {
-    const userId = (req.user as any).sub as string;
+    const userId = (req.user as any).id as string;
     return this.driversService.updateNotificationPrefs(userId, body);
   }
 
@@ -59,7 +60,7 @@ export class DriversController {
   @UseGuards(RolesGuard)
   @Roles(UserRole.DRIVER)
   completeProfile(@Req() req: Request, @Body() dto: CompleteDriverProfileDto) {
-    const userId = (req.user as any).sub as string;
+    const userId = (req.user as any).id as string;
     return this.driversService.completeProfile(userId, dto);
   }
 
@@ -69,7 +70,7 @@ export class DriversController {
   @UseGuards(RolesGuard)
   @Roles(UserRole.DRIVER)
   getMyProfile(@Req() req: Request) {
-    const userId = (req.user as any).sub as string;
+    const userId = (req.user as any).id as string;
     return this.driversService.getMyProfile(userId);
   }
 
@@ -80,7 +81,7 @@ export class DriversController {
   @Roles(UserRole.DRIVER)
   @HttpCode(200)
   setMyAvailability(@Req() req: Request, @Body() dto: SetAvailabilityDto) {
-    const userId = (req.user as any).sub as string;
+    const userId = (req.user as any).id as string;
     // Cast is safe: DriverToggleStatus values are a subset of DriverAvailabilityStatus
     return this.driversService.setMyAvailability(
       userId,
@@ -100,8 +101,12 @@ export class DriversController {
     @Req() req: Request,
     @Body() body: { monthlyOnlineMs: number; month: string },
   ) {
-    const userId = (req.user as any).sub as string;
-    return this.driversService.seedMonthlyOnlineTime(userId, body.monthlyOnlineMs, body.month);
+    const userId = (req.user as any).id as string;
+    return this.driversService.seedMonthlyOnlineTime(
+      userId,
+      body.monthlyOnlineMs,
+      body.month,
+    );
   }
 
   // ─── Admin / Agency: Create Driver ───────────────────────────────────────────
@@ -119,12 +124,12 @@ export class DriversController {
   @UseGuards(RolesGuard)
   @Roles(UserRole.SUPER_ADMIN, UserRole.AGENCY)
   findAll(
-    @Query('page')               page?:               string,
-    @Query('limit')              limit?:              string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
     @Query('availabilityStatus') availabilityStatus?: DriverAvailabilityStatus,
   ) {
     return this.driversService.findAll(
-      page  ? +page  : 1,
+      page ? +page : 1,
       limit ? +limit : 20,
       availabilityStatus,
     );

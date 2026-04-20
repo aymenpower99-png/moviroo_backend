@@ -1,9 +1,17 @@
-import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleInit,
+  OnModuleDestroy,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { LessThan, Repository } from 'typeorm';
 import { DriverLocation } from '../../domain/entities/driver-location.entity';
-import { Driver, DriverAvailabilityStatus } from '../../../driver/entities/driver.entity';
-import { FcmService } from '../../../notifications/fcm.service';
+import {
+  Driver,
+  DriverAvailabilityStatus,
+} from '../../../driver/entities/driver.entity';
+import { FcmService } from '../../../notifications/services/fcm.service';
 
 /** How often (ms) we scan for stale drivers */
 const SWEEP_INTERVAL_MS = 30_000; // every 30 seconds
@@ -86,17 +94,22 @@ export class HeartbeatService implements OnModuleInit, OnModuleDestroy {
         .execute();
 
       // Load driver to accumulate session time before marking offline
-      const driver = await this.driverRepo.findOne({ where: { userId: loc.driverId } });
+      const driver = await this.driverRepo.findOne({
+        where: { userId: loc.driverId },
+      });
       if (driver) {
-        const update: Partial<Driver> = { availabilityStatus: DriverAvailabilityStatus.OFFLINE };
+        const update: Partial<Driver> = {
+          availabilityStatus: DriverAvailabilityStatus.OFFLINE,
+        };
         if (driver.onlineSince) {
           const deltaMs = Date.now() - new Date(driver.onlineSince).getTime();
           const currentMonth = this._currentMonth();
           if (driver.onlineTimeMonth !== currentMonth) {
             update.monthlyOnlineMs = deltaMs;
-            update.onlineTimeMonth  = currentMonth;
+            update.onlineTimeMonth = currentMonth;
           } else {
-            update.monthlyOnlineMs = (Number(driver.monthlyOnlineMs) || 0) + deltaMs;
+            update.monthlyOnlineMs =
+              (Number(driver.monthlyOnlineMs) || 0) + deltaMs;
           }
           update.onlineSince = null;
         }
@@ -113,16 +126,22 @@ export class HeartbeatService implements OnModuleInit, OnModuleDestroy {
 
       // Send FCM push notification to the driver (once — sweep won't find them again
       // because isOnline is now false)
-      this.fcmService.sendToUser(
-        loc.driverId,
-        'You went offline',
-        'Your status was changed to offline due to inactivity. Open the app to go back online.',
-        { type: 'DRIVER_STATUS_OFFLINE', channelId: 'driver_status' },
-      ).catch((err) => {
-        this.logger.warn(`FCM offline push failed for ${loc.driverId.slice(0, 8)}: ${err}`);
-      });
+      this.fcmService
+        .sendToUser(
+          loc.driverId,
+          'You went offline',
+          'Your status was changed to offline due to inactivity. Open the app to go back online.',
+          { type: 'DRIVER_STATUS_OFFLINE', channelId: 'driver_status' },
+        )
+        .catch((err) => {
+          this.logger.warn(
+            `FCM offline push failed for ${loc.driverId.slice(0, 8)}: ${err}`,
+          );
+        });
 
-      this.logger.log(`  → Driver ${loc.driverId} forced OFFLINE (stale heartbeat) + FCM sent`);
+      this.logger.log(
+        `  → Driver ${loc.driverId} forced OFFLINE (stale heartbeat) + FCM sent`,
+      );
     }
   }
 }

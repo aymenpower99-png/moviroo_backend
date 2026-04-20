@@ -10,9 +10,16 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import { User, UserRole, UserStatus } from '../../users/entites/user.entity';
-import { Driver, DriverAvailabilityStatus } from '../../driver/entities/driver.entity';
-import { PassengerEntity, MembershipLevel } from '../../passenger/entities/passengers.entity';
-import { MailService } from '../../mail/mail.service';
+import {
+  Driver,
+  DriverAvailabilityStatus,
+} from '../../driver/entities/driver.entity';
+import {
+  PassengerEntity,
+  MembershipLevel,
+} from '../../passenger/entities/passengers.entity';
+import { InvitationMailService } from '../../mail/services/invitation-mail.service';
+import { WelcomeMailService } from '../../mail/services/welcome-mail.service';
 import { InviteUserDto } from '../dto/invite-user.dto';
 import { ActivateAccountDto } from '../dto/activate-account.dto';
 
@@ -27,18 +34,15 @@ interface InviteTokenPayload {
 @Injectable()
 export class AdminInviteService {
   constructor(
-    @InjectRepository(User)            private userRepo: Repository<User>,
-    @InjectRepository(Driver)          private driverRepo: Repository<Driver>,
-    @InjectRepository(PassengerEntity) private passengerRepo: Repository<PassengerEntity>,
+    @InjectRepository(User) private userRepo: Repository<User>,
+    @InjectRepository(Driver) private driverRepo: Repository<Driver>,
+    @InjectRepository(PassengerEntity)
+    private passengerRepo: Repository<PassengerEntity>,
     private jwtService: JwtService,
     private config: ConfigService,
-    private mailService: MailService,
+    private invitationMail: InvitationMailService,
+    private welcomeMail: WelcomeMailService,
   ) {}
-
-
-
-
-
 
   async inviteUser(dto: InviteUserDto) {
     const exists = await this.userRepo.findOne({
@@ -50,46 +54,55 @@ export class AdminInviteService {
       if (exists.deletedAt) {
         await this.userRepo.restore(exists.id);
         await this.userRepo.update(exists.id, {
-          firstName:     dto.firstName,
-          lastName:      dto.lastName,
-          phone:         dto.phone,
-          role:          dto.role,
-          status:        UserStatus.PENDING,
-          password:      null,
+          firstName: dto.firstName,
+          lastName: dto.lastName,
+          phone: dto.phone,
+          role: dto.role,
+          status: UserStatus.PENDING,
+          password: null,
           emailVerified: false,
-          inviteToken:   null,
+          inviteToken: null,
         });
 
-        const restoredUser = await this.userRepo.findOneOrFail({ where: { id: exists.id } });
+        const restoredUser = await this.userRepo.findOneOrFail({
+          where: { id: exists.id },
+        });
         const { token, link } = await this.generateInviteLink(restoredUser);
         const hashed = await bcrypt.hash(token, 10);
         await this.userRepo.update(restoredUser.id, { inviteToken: hashed });
-        await this.mailService.sendInvitation(restoredUser.email, restoredUser.firstName, link);
+        await this.invitationMail.sendInvitation(
+          restoredUser.email,
+          restoredUser.firstName,
+          link,
+        );
 
         if (restoredUser.role === UserRole.DRIVER) {
           await this.ensureDriverPending(restoredUser.id);
         }
 
-        return { message: `Invitation sent to ${restoredUser.email}.`, userId: restoredUser.id };
+        return {
+          message: `Invitation sent to ${restoredUser.email}.`,
+          userId: restoredUser.id,
+        };
       }
       throw new BadRequestException('A user with this email already exists.');
     }
 
     const user = this.userRepo.create({
       firstName: dto.firstName,
-      lastName:  dto.lastName,
-      email:     dto.email,
-      phone:     dto.phone,
-      role:      dto.role,
-      status:    UserStatus.PENDING,
-      password:  null,
+      lastName: dto.lastName,
+      email: dto.email,
+      phone: dto.phone,
+      role: dto.role,
+      status: UserStatus.PENDING,
+      password: null,
     });
     await this.userRepo.save(user);
 
     const { token, link } = await this.generateInviteLink(user);
     const hashed = await bcrypt.hash(token, 10);
     await this.userRepo.update(user.id, { inviteToken: hashed });
-    await this.mailService.sendInvitation(user.email, user.firstName, link);
+    await this.invitationMail.sendInvitation(user.email, user.firstName, link);
 
     if (user.role === UserRole.DRIVER) {
       await this.ensureDriverPending(user.id);
@@ -98,20 +111,15 @@ export class AdminInviteService {
     return { message: `Invitation sent to ${user.email}.`, userId: user.id };
   }
 
-
-
-
-
-
-
-  
-
   async activateAccount(dto: ActivateAccountDto) {
     let payload: InviteTokenPayload;
     try {
-      payload = await this.jwtService.verifyAsync<InviteTokenPayload>(dto.token, {
-        secret: this.config.get<string>('jwt.inviteSecret')!,
-      });
+      payload = await this.jwtService.verifyAsync<InviteTokenPayload>(
+        dto.token,
+        {
+          secret: this.config.get<string>('jwt.inviteSecret')!,
+        },
+      );
     } catch {
       throw new UnauthorizedException('Invalid or expired activation link.');
     }
@@ -127,33 +135,39 @@ export class AdminInviteService {
     if (user.status === UserStatus.BLOCKED)
       throw new BadRequestException('Account is blocked. Contact support.');
     if (!user.inviteToken)
-      throw new UnauthorizedException('Activation link has already been used or is invalid.');
+      throw new UnauthorizedException(
+        'Activation link has already been used or is invalid.',
+      );
 
     const tokenValid = await bcrypt.compare(dto.token, user.inviteToken);
     if (!tokenValid)
-      throw new UnauthorizedException('Activation link has expired. Request a new one.');
+      throw new UnauthorizedException(
+        'Activation link has expired. Request a new one.',
+      );
 
     const hashedPassword = await bcrypt.hash(dto.password, 12);
     await this.userRepo.update(user.id, {
-      password:      hashedPassword,
-      status:        UserStatus.ACTIVE,
+      password: hashedPassword,
+      status: UserStatus.ACTIVE,
       emailVerified: true,
-      inviteToken:   null,
+      inviteToken: null,
     });
 
     if (user.role === UserRole.PASSENGER) {
-      const exists = await this.passengerRepo.findOne({ where: { userId: user.id } });
+      const exists = await this.passengerRepo.findOne({
+        where: { userId: user.id },
+      });
       if (!exists) {
         await this.passengerRepo.save(
           this.passengerRepo.create({
-            userId:           user.id,
-            preferredClassId: null,          // ← passenger picks class at booking time
-            membershipLevel:  MembershipLevel.GO,
+            userId: user.id,
+            preferredClassId: null, // ← passenger picks class at booking time
+            membershipLevel: MembershipLevel.GO,
             membershipPoints: 0,
-            totalBookings:    0,
-            ratingAverage:    5.0,
-            totalRatings:     0,
-            newsletterOptIn:  false,
+            totalBookings: 0,
+            ratingAverage: 5.0,
+            totalRatings: 0,
+            newsletterOptIn: false,
           }),
         );
       }
@@ -161,10 +175,16 @@ export class AdminInviteService {
 
     if (user.role === UserRole.DRIVER) {
       await this.driverRepo.update(
-        { userId: user.id, availabilityStatus: DriverAvailabilityStatus.PENDING },
+        {
+          userId: user.id,
+          availabilityStatus: DriverAvailabilityStatus.PENDING,
+        },
         { availabilityStatus: DriverAvailabilityStatus.SETUP_REQUIRED },
       );
     }
+
+    // ✅ First real interaction for admin-invited users → send welcome email
+    this.welcomeMail.sendWelcome(user.role, user.email, user.firstName);
 
     return { message: 'Account activated successfully. You can now log in.' };
   }
@@ -172,12 +192,14 @@ export class AdminInviteService {
   async resendInvitation(userId: string) {
     const user = await this.findUserOrFail(userId);
     if (user.status !== UserStatus.PENDING)
-      throw new BadRequestException('Can only resend invitation to pending users.');
+      throw new BadRequestException(
+        'Can only resend invitation to pending users.',
+      );
 
     const { token, link } = await this.generateInviteLink(user);
     const hashed = await bcrypt.hash(token, 10);
     await this.userRepo.update(user.id, { inviteToken: hashed });
-    await this.mailService.sendInvitation(user.email, user.firstName, link);
+    await this.invitationMail.sendInvitation(user.email, user.firstName, link);
     return { message: `Invitation resent to ${user.email}.` };
   }
 
@@ -201,8 +223,15 @@ export class AdminInviteService {
 
   private async generateInviteLink(user: User) {
     const token = await this.jwtService.signAsync(
-      { sub: user.id, email: user.email, purpose: 'invite' } satisfies InviteTokenPayload,
-      { secret: this.config.get<string>('jwt.inviteSecret')!, expiresIn: '72h' },
+      {
+        sub: user.id,
+        email: user.email,
+        purpose: 'invite',
+      } satisfies InviteTokenPayload,
+      {
+        secret: this.config.get<string>('jwt.inviteSecret')!,
+        expiresIn: '72h',
+      },
     );
     const backendUrl = (
       this.config.get<string>('BACKEND_URL') ?? 'http://localhost:3000'

@@ -33,6 +33,7 @@ import { EndTripUseCase } from './application/use-cases/end-trip.use-case';
 import { SubmitRatingUseCase } from './application/use-cases/submit-rating.use-case';
 import { SubmitRatingDto } from './application/dtos/submit-rating.dto';
 import { TripTrackingGateway } from './gateway/trip-tracking.gateway';
+import { DriverNotificationService } from '../notifications/services/driver-notification.service';
 
 @Controller('trips')
 export class TripsController {
@@ -51,6 +52,7 @@ export class TripsController {
     private readonly locRepo: Repository<DriverLocation>,
     @InjectRepository(Driver)
     private readonly driverRepo: Repository<Driver>,
+    private readonly driverNotif: DriverNotificationService,
   ) {}
 
   /* ─── STEP 1: Driver starts en-route to pickup ──── */
@@ -68,6 +70,13 @@ export class TripsController {
       driver_eta_min: (ride as any).driverEtaMin ?? null,
       message: 'Driver is on the way',
     });
+
+    // Push notification to driver
+    this.driverNotif.rideStatusChanged(
+      user.id,
+      rideId,
+      RideStatus.EN_ROUTE_TO_PICKUP,
+    );
 
     return ride;
   }
@@ -88,6 +97,8 @@ export class TripsController {
       arrived_at: ride.arrivedAt,
     });
 
+    this.driverNotif.rideStatusChanged(user.id, rideId, RideStatus.ARRIVED);
+
     return ride;
   }
 
@@ -107,6 +118,8 @@ export class TripsController {
       price_final: ride.priceFinal,
       message: 'Trip has started',
     });
+
+    this.driverNotif.rideStatusChanged(user.id, rideId, RideStatus.IN_TRIP);
 
     return ride;
   }
@@ -132,6 +145,8 @@ export class TripsController {
       loyalty_points_earned: ride.loyaltyPointsEarned,
       message: 'Trip completed',
     });
+
+    this.driverNotif.rideStatusChanged(user.id, rideId, RideStatus.COMPLETED);
 
     /* Send rating prompt after 5-second delay */
     setTimeout(() => {
@@ -166,7 +181,8 @@ export class TripsController {
   ) {
     const ride = await this.rideRepo.findOne({ where: { id: rideId } });
     if (!ride) throw new NotFoundException('Ride not found');
-    if (ride.driverId !== user.id) throw new ForbiddenException('Not assigned to this ride');
+    if (ride.driverId !== user.id)
+      throw new ForbiddenException('Not assigned to this ride');
 
     const cancellable: RideStatus[] = [
       RideStatus.ASSIGNED,
@@ -174,20 +190,27 @@ export class TripsController {
       RideStatus.ARRIVED,
     ];
     if (!cancellable.includes(ride.status)) {
-      throw new ConflictException(`Cannot cancel a ride in ${ride.status} status`);
+      throw new ConflictException(
+        `Cannot cancel a ride in ${ride.status} status`,
+      );
     }
 
-    ride.status            = RideStatus.CANCELLED;
-    ride.cancelledAt       = new Date();
+    ride.status = RideStatus.CANCELLED;
+    ride.cancelledAt = new Date();
     ride.cancellationReason = body?.reason ?? null;
     await this.rideRepo.save(ride);
 
     // Increment driver's cancellation count
-    const driver = await this.driverRepo.findOne({ where: { userId: user.id } });
+    const driver = await this.driverRepo.findOne({
+      where: { userId: user.id },
+    });
     if (driver) {
       driver.cancellationCount = (driver.cancellationCount ?? 0) + 1;
       await this.driverRepo.save(driver);
     }
+
+    // Free driver from trip
+    await this.locRepo.update({ driverId: user.id }, { isOnTrip: false });
 
     this.tripGateway.emitToRide(rideId, 'trip:cancelled', {
       rideId,
@@ -195,6 +218,9 @@ export class TripsController {
       reason: body?.reason ?? null,
       message: 'Ride cancelled by driver',
     });
+
+    // Push notification to driver confirming cancellation
+    this.driverNotif.rideCancelledByDriver(user.id, rideId);
 
     return ride;
   }

@@ -10,12 +10,19 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import { User, UserRole, UserStatus } from '../users/entites/user.entity';
-import { Driver, DriverAvailabilityStatus } from '../driver/entities/driver.entity';
-import { PassengerEntity, MembershipLevel } from '../passenger/entities/passengers.entity';
+import {
+  Driver,
+  DriverAvailabilityStatus,
+} from '../driver/entities/driver.entity';
+import {
+  PassengerEntity,
+  MembershipLevel,
+} from '../passenger/entities/passengers.entity';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { OtpService } from '../otp/otp.service';
-import { MailService } from '../mail/mail.service';
+import { AuthMailService } from '../mail/services/auth-mail.service';
+import { WelcomeMailService } from '../mail/services/welcome-mail.service';
 
 // ── No VehicleType import — it no longer exists ──────────────────────────────
 
@@ -34,13 +41,15 @@ interface PreAuthPayload {
 @Injectable()
 export class AuthService {
   constructor(
-    @InjectRepository(User)             private userRepo: Repository<User>,
-    @InjectRepository(Driver)           private driverRepo: Repository<Driver>,
-    @InjectRepository(PassengerEntity)  private passengerRepo: Repository<PassengerEntity>,
+    @InjectRepository(User) private userRepo: Repository<User>,
+    @InjectRepository(Driver) private driverRepo: Repository<Driver>,
+    @InjectRepository(PassengerEntity)
+    private passengerRepo: Repository<PassengerEntity>,
     private jwtService: JwtService,
     private config: ConfigService,
     private otpService: OtpService,
-    private mailService: MailService,
+    private authMail: AuthMailService,
+    private welcomeMail: WelcomeMailService,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -50,19 +59,25 @@ export class AuthService {
     const hashed = await bcrypt.hash(dto.password, 12);
     const user = this.userRepo.create({
       firstName: dto.firstName,
-      lastName:  dto.lastName,
-      email:     dto.email,
-      phone:     dto.phone,
-      password:  hashed,
-      status:    UserStatus.PENDING,
+      lastName: dto.lastName,
+      email: dto.email,
+      phone: dto.phone,
+      password: hashed,
+      status: UserStatus.PENDING,
     });
     await this.userRepo.save(user);
 
     const code = await this.otpService.generateOtp(user.id);
-    await this.mailService.sendOtp(user.email, user.firstName, code, 'verify-email');
+    await this.authMail.sendOtp(
+      user.email,
+      user.firstName,
+      code,
+      'verify-email',
+    );
 
     return {
-      message: 'Registration successful. Check your email for a verification code.',
+      message:
+        'Registration successful. Check your email for a verification code.',
       requiresOtp: true,
       userId: user.id,
     };
@@ -78,35 +93,42 @@ export class AuthService {
     const user = await this.userRepo.findOneOrFail({ where: { id: userId } });
 
     if (user.role === UserRole.PASSENGER) {
-      const exists = await this.passengerRepo.findOne({ where: { userId: user.id } });
+      const exists = await this.passengerRepo.findOne({
+        where: { userId: user.id },
+      });
       if (!exists) {
         await this.passengerRepo.save(
           this.passengerRepo.create({
-            userId:           user.id,
-            preferredClassId: null,          // ← passenger picks class at booking time
-            membershipLevel:  MembershipLevel.GO,
+            userId: user.id,
+            preferredClassId: null, // ← passenger picks class at booking time
+            membershipLevel: MembershipLevel.GO,
             membershipPoints: 0,
-            totalBookings:    0,
-            ratingAverage:    5.0,
-            totalRatings:     0,
-            newsletterOptIn:  false,
+            totalBookings: 0,
+            ratingAverage: 5.0,
+            totalRatings: 0,
+            newsletterOptIn: false,
           }),
         );
       }
     } else if (user.role === UserRole.DRIVER) {
-      const exists = await this.driverRepo.findOne({ where: { userId: user.id } });
+      const exists = await this.driverRepo.findOne({
+        where: { userId: user.id },
+      });
       if (!exists) {
         await this.driverRepo.save(
           this.driverRepo.create({
-            userId:             user.id,
+            userId: user.id,
             availabilityStatus: DriverAvailabilityStatus.OFFLINE,
-            ratingAverage:      5.0,
-            totalRatings:       0,
-            totalTrips:         0,
+            ratingAverage: 5.0,
+            totalRatings: 0,
+            totalTrips: 0,
           }),
         );
       }
     }
+
+    // ✅ First real interaction for email/password registration → send welcome
+    this.welcomeMail.sendWelcome(user.role, user.email, user.firstName);
 
     const tokens = await this.generateTokens(user);
     await this.saveRefreshToken(user.id, tokens.refreshToken);
@@ -126,18 +148,29 @@ export class AuthService {
         'Please activate your account first. Check your invitation email.',
       );
     if (user.status === UserStatus.BLOCKED)
-      throw new ForbiddenException('Your account has been blocked. Please contact support.');
+      throw new ForbiddenException(
+        'Your account has been blocked. Please contact support.',
+      );
 
     if (user.role === UserRole.DRIVER) {
-      const driverProfile = await this.driverRepo.findOne({ where: { userId: user.id } });
+      const driverProfile = await this.driverRepo.findOne({
+        where: { userId: user.id },
+      });
       if (!driverProfile) {
-        throw new ForbiddenException('Your account is being prepared by the agency.');
+        throw new ForbiddenException(
+          'Your account is being prepared by the agency.',
+        );
       }
     }
 
     if (!user.emailVerified) {
       const code = await this.otpService.generateOtp(user.id);
-      await this.mailService.sendOtp(user.email, user.firstName, code, 'verify-email');
+      await this.authMail.sendOtp(
+        user.email,
+        user.firstName,
+        code,
+        'verify-email',
+      );
       return {
         message: 'Please verify your email first. A new code has been sent.',
         requiresOtp: true,
@@ -158,7 +191,7 @@ export class AuthService {
 
     if (user.is2faEnabled) {
       const code = await this.otpService.generateOtp(user.id);
-      await this.mailService.sendOtp(user.email, user.firstName, code, 'login');
+      await this.authMail.sendOtp(user.email, user.firstName, code, 'login');
       const preAuthToken = await this.issuePreAuthToken(user, 'email');
       return {
         message: 'Check your email for a verification code.',
@@ -177,9 +210,12 @@ export class AuthService {
   async verifyLoginOtp(preAuthToken: string, code: string) {
     let payload: PreAuthPayload;
     try {
-      payload = await this.jwtService.verifyAsync<PreAuthPayload>(preAuthToken, {
-        secret: this.config.get<string>('jwt.accessSecret')!,
-      });
+      payload = await this.jwtService.verifyAsync<PreAuthPayload>(
+        preAuthToken,
+        {
+          secret: this.config.get<string>('jwt.accessSecret')!,
+        },
+      );
     } catch {
       throw new UnauthorizedException('Invalid or expired pre-auth token');
     }
@@ -190,7 +226,9 @@ export class AuthService {
       ? await this.otpService.verifyTotpCode(payload.sub, code)
       : await this.otpService.verifyOtp(payload.sub, code);
 
-    const user = await this.userRepo.findOneOrFail({ where: { id: payload.sub } });
+    const user = await this.userRepo.findOneOrFail({
+      where: { id: payload.sub },
+    });
     await this.userRepo.update(user.id, { lastLoginAt: new Date() });
 
     const tokens = await this.generateTokens(user);
@@ -202,14 +240,19 @@ export class AuthService {
     const user = await this.userRepo.findOne({ where: { id: userId } });
     if (!user) throw new UnauthorizedException('User not found');
     const code = await this.otpService.generateOtp(user.id);
-    await this.mailService.sendOtp(user.email, user.firstName, code, purpose);
+    await this.authMail.sendOtp(user.email, user.firstName, code, purpose);
     return { message: 'A new verification code has been sent to your email.' };
   }
 
-  async setupTotp(user: User)                       { return this.otpService.generateTotpSecret(user); }
+  async setupTotp(user: User) {
+    return this.otpService.generateTotpSecret(user);
+  }
   async confirmTotpSetup(userId: string, code: string) {
     await this.otpService.verifyAndEnableTotp(userId, code);
-    return { message: 'Authenticator app linked successfully.', totpEnabled: true };
+    return {
+      message: 'Authenticator app linked successfully.',
+      totpEnabled: true,
+    };
   }
   async disableTotp(userId: string) {
     await this.otpService.disableTotp(userId);
@@ -219,7 +262,9 @@ export class AuthService {
   async toggle2fa(userId: string, enable: boolean) {
     await this.userRepo.update(userId, { is2faEnabled: enable });
     return {
-      message: enable ? '2-step verification enabled.' : '2-step verification disabled.',
+      message: enable
+        ? '2-step verification enabled.'
+        : '2-step verification disabled.',
       is2faEnabled: enable,
     };
   }
@@ -237,13 +282,25 @@ export class AuthService {
 
   private async issuePreAuthToken(user: User, method: 'email' | 'totp') {
     return this.jwtService.signAsync(
-      { sub: user.id, email: user.email, preAuth: true, method } satisfies PreAuthPayload,
-      { secret: this.config.get<string>('jwt.accessSecret')!, expiresIn: '10m' },
+      {
+        sub: user.id,
+        email: user.email,
+        preAuth: true,
+        method,
+      } satisfies PreAuthPayload,
+      {
+        secret: this.config.get<string>('jwt.accessSecret')!,
+        expiresIn: '10m',
+      },
     );
   }
 
   private async generateTokens(user: User) {
-    const payload: JwtPayload = { sub: user.id, email: user.email, role: user.role };
+    const payload: JwtPayload = {
+      sub: user.id,
+      email: user.email,
+      role: user.role,
+    };
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(payload, {
         secret: this.config.get<string>('jwt.accessSecret')!,
@@ -263,7 +320,15 @@ export class AuthService {
   }
 
   safeUser(user: User) {
-    const { password, refreshToken, otpCode, totpSecret, inviteToken, emailChangeToken, ...safe } = user;
+    const {
+      password,
+      refreshToken,
+      otpCode,
+      totpSecret,
+      inviteToken,
+      emailChangeToken,
+      ...safe
+    } = user;
     return { ...safe, emailChangePending: !!safe.pendingEmail };
   }
 }
