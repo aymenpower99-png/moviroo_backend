@@ -51,6 +51,11 @@ export class DriverProfileService {
     return this.driverRepo.save(driver);
   }
 
+  private _currentMonth(): string {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  }
+
   async getMyProfile(userId: string) {
     const driver = await this.driverRepo.findOne({ where: { userId } });
     if (!driver) return { profileComplete: false };
@@ -63,9 +68,17 @@ export class DriverProfileService {
       ? await this.workAreaRepo.findOne({ where: { id: driver.workAreaId } })
       : null;
 
+    // Only return monthly time if it belongs to the current month — prevents
+    // April's accumulated value from bleeding into May on the client.
+    const monthlyOnlineMs =
+      driver.onlineTimeMonth === this._currentMonth()
+        ? Number(driver.monthlyOnlineMs) || 0
+        : 0;
+
     return {
       profileComplete: true,
       ...driver,
+      monthlyOnlineMs,
       vehicle: vehicle
         ? {
             id: vehicle.id,
@@ -100,9 +113,28 @@ export class DriverProfileService {
   ) {
     const driver = await this.driverRepo.findOne({ where: { userId } });
     if (!driver) throw new NotFoundException('Driver not found');
-    if (prefs.pushEnabled  !== undefined) driver.notifPushEnabled  = prefs.pushEnabled;
-    if (prefs.emailEnabled !== undefined) driver.notifEmailEnabled = prefs.emailEnabled;
-    await this.driverRepo.save(driver);
-    return { pushEnabled: driver.notifPushEnabled, emailEnabled: driver.notifEmailEnabled };
+
+    // Use a targeted UPDATE so TypeORM only touches the columns we explicitly set.
+    // This avoids any risk of null values from unrelated columns causing constraint
+    // violations on the other notification column.
+    const partial: Partial<{ notifPushEnabled: boolean; notifEmailEnabled: boolean }> = {};
+    if (prefs.pushEnabled  !== undefined) partial.notifPushEnabled  = prefs.pushEnabled;
+    if (prefs.emailEnabled !== undefined) partial.notifEmailEnabled = prefs.emailEnabled;
+
+    if (Object.keys(partial).length > 0) {
+      await this.driverRepo.update({ userId }, partial);
+    }
+
+    // Reload to return the actual committed values
+    const updated = await this.driverRepo.findOne({ where: { userId } });
+    
+    // Return explicit booleans - never null or undefined
+    const pushEnabled = updated?.notifPushEnabled;
+    const emailEnabled = updated?.notifEmailEnabled;
+    
+    return {
+      pushEnabled:  pushEnabled === true || pushEnabled === false ? pushEnabled : true,
+      emailEnabled: emailEnabled === true || emailEnabled === false ? emailEnabled : true,
+    };
   }
 }

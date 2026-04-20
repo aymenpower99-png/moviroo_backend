@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { DriverLocation } from './domain/entities/driver-location.entity';
@@ -19,6 +19,7 @@ import { FallbackDispatchService } from './application/services/fallback-dispatc
 import { HeartbeatService } from './application/services/heartbeat.service';
 import { ScheduledDispatchService } from './application/services/scheduled-dispatch.service';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { DriversModule } from '../driver/drivers.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
       WorkArea,
     ]),
     NotificationsModule,
+    forwardRef(() => DriversModule),
   ],
   controllers: [DispatchController],
   providers: [

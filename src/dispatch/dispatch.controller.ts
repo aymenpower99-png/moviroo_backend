@@ -32,6 +32,7 @@ import { RejectOfferDto } from './application/dtos/reject-offer.dto';
 import { RespondToOfferUseCase } from './application/use-cases/respond-to-offer.use-case';
 import { FallbackDispatchService } from './application/services/fallback-dispatch.service';
 import { FcmService } from '../notifications/fcm.service';
+import { DriverAvailabilityService } from '../driver/services/driver-availability.service';
 
 @Controller('dispatch')
 export class DispatchController {
@@ -49,6 +50,7 @@ export class DispatchController {
     private readonly respondUC: RespondToOfferUseCase,
     private readonly fallbackService: FallbackDispatchService,
     private readonly fcmService: FcmService,
+    private readonly availabilityService: DriverAvailabilityService,
   ) {}
 
   /* ─── Driver: update GPS location ───────────── */
@@ -138,6 +140,12 @@ export class DispatchController {
     const lat = body?.lat ?? body?.latitude;
     const lng = body?.lng ?? body?.longitude;
 
+    // Use the availability service to properly set online status + onlineSince
+    await this.availabilityService.setMyAvailability(
+      user.id,
+      DriverAvailabilityStatus.ONLINE,
+    );
+
     // Upsert: create or update the location record (no NotFoundException)
     // Clear forcedOfflineAt so the driver is truly back online
     await this.locRepo.upsert(
@@ -153,12 +161,6 @@ export class DispatchController {
       { conflictPaths: ['driverId'] },
     );
 
-    // ✅ Sync driver profile status
-    await this.driverRepo.update(
-      { userId: user.id },
-      { availabilityStatus: DriverAvailabilityStatus.ONLINE },
-    );
-
     return { message: 'Driver is now ONLINE', driverId: user.id };
   }
 
@@ -167,16 +169,16 @@ export class DispatchController {
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(UserRole.DRIVER)
   async goOffline(@CurrentUser() user: User) {
+    // Use the availability service to properly commit session time + clear onlineSince
+    await this.availabilityService.setMyAvailability(
+      user.id,
+      DriverAvailabilityStatus.OFFLINE,
+    );
+
     // Update real-time location table
     await this.locRepo.update(
       { driverId: user.id },
       { isOnline: false },
-    );
-
-    // ✅ Sync driver profile status
-    await this.driverRepo.update(
-      { userId: user.id },
-      { availabilityStatus: DriverAvailabilityStatus.OFFLINE },
     );
 
     return { message: 'Driver is now OFFLINE', driverId: user.id };

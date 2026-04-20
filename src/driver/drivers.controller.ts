@@ -90,6 +90,20 @@ export class DriversController {
     );
   }
 
+  // ─── Driver: Seed monthly online time (one-time legacy migration) ─────────────
+
+  @Post('me/seed-monthly-time')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.DRIVER)
+  @HttpCode(200)
+  seedMonthlyTime(
+    @Req() req: Request,
+    @Body() body: { monthlyOnlineMs: number; month: string },
+  ) {
+    const userId = (req.user as any).sub as string;
+    return this.driversService.seedMonthlyOnlineTime(userId, body.monthlyOnlineMs, body.month);
+  }
+
   // ─── Admin / Agency: Create Driver ───────────────────────────────────────────
 
   @Post()

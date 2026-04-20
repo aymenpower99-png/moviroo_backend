@@ -34,6 +34,9 @@ export class DriversService {
   updateNotificationPrefs(userId: string, prefs: { pushEnabled?: boolean; emailEnabled?: boolean }) {
     return this.profileService.updateNotificationPrefs(userId, prefs);
   }
+  seedMonthlyOnlineTime(userId: string, monthlyOnlineMs: number, month: string) {
+    return this.availabilityService.seedMonthlyOnlineTime(userId, monthlyOnlineMs, month);
+  }
 
   // ── Internal transitions ──────────────────────────────────────────────────────
   markSetupRequired(userId: string)    { return this.availabilityService.markSetupRequired(userId); }

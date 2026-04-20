@@ -47,6 +47,13 @@ export class HeartbeatService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  // ── Helper ─────────────────────────────────────────────────────────────────
+
+  private _currentMonth(): string {
+    const n = new Date();
+    return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}`;
+  }
+
   /**
    * Mark any driver whose last_seen_at is older than STALE_THRESHOLD_MS
    * as is_online=false and sync Driver.availabilityStatus → OFFLINE.
@@ -78,13 +85,31 @@ export class HeartbeatService implements OnModuleInit, OnModuleDestroy {
         .where('id = :id', { id: loc.id })
         .execute();
 
-      // Sync driver profile status
-      await this.driverRepo
-        .createQueryBuilder()
-        .update()
-        .set({ availabilityStatus: DriverAvailabilityStatus.OFFLINE })
-        .where('user_id = :userId', { userId: loc.driverId })
-        .execute();
+      // Load driver to accumulate session time before marking offline
+      const driver = await this.driverRepo.findOne({ where: { userId: loc.driverId } });
+      if (driver) {
+        const update: Partial<Driver> = { availabilityStatus: DriverAvailabilityStatus.OFFLINE };
+        if (driver.onlineSince) {
+          const deltaMs = Date.now() - new Date(driver.onlineSince).getTime();
+          const currentMonth = this._currentMonth();
+          if (driver.onlineTimeMonth !== currentMonth) {
+            update.monthlyOnlineMs = deltaMs;
+            update.onlineTimeMonth  = currentMonth;
+          } else {
+            update.monthlyOnlineMs = (Number(driver.monthlyOnlineMs) || 0) + deltaMs;
+          }
+          update.onlineSince = null;
+        }
+        await this.driverRepo.update({ userId: loc.driverId }, update);
+      } else {
+        // Fallback: just flip the status
+        await this.driverRepo
+          .createQueryBuilder()
+          .update()
+          .set({ availabilityStatus: DriverAvailabilityStatus.OFFLINE })
+          .where('user_id = :userId', { userId: loc.driverId })
+          .execute();
+      }
 
       // Send FCM push notification to the driver (once — sweep won't find them again
       // because isOnline is now false)

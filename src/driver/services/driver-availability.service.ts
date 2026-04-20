@@ -52,13 +52,47 @@ export class DriverAvailabilityService {
     }
 
     driver.availabilityStatus = status;
-    const saved = await this.driverRepo.save(driver);
+
+    // Build a targeted partial update — only touch the columns we intend to change.
+    // This avoids a full save() which would include ALL driver columns (including
+    // legacy null values for notif_push_enabled / notif_email_enabled) and cause
+    // NOT NULL constraint failures on unrelated fields.
+    const updateData: Partial<Driver> = {
+      availabilityStatus: status,
+    };
+
+    if (status === DriverAvailabilityStatus.ONLINE) {
+      const currentMonth = this._currentMonth();
+      // Reset counter when a new month starts
+      if (driver.onlineTimeMonth !== currentMonth) {
+        updateData.monthlyOnlineMs = 0;
+        updateData.onlineTimeMonth = currentMonth;
+      }
+      updateData.onlineSince = new Date();
+    } else {
+      // Going OFFLINE — commit session time to the monthly accumulator
+      if (driver.onlineSince) {
+        const deltaMs = Date.now() - new Date(driver.onlineSince).getTime();
+        const currentMonth = this._currentMonth();
+        if (driver.onlineTimeMonth !== currentMonth) {
+          // Month boundary mid-session — start fresh for the new month
+          updateData.monthlyOnlineMs = deltaMs;
+          updateData.onlineTimeMonth  = currentMonth;
+        } else {
+          updateData.monthlyOnlineMs = (Number(driver.monthlyOnlineMs) || 0) + deltaMs;
+        }
+        updateData.onlineSince = null;
+      }
+    }
+
+    await this.driverRepo.update({ userId }, updateData);
+    const saved = await this.driverRepo.findOne({ where: { userId } });
 
     if (status === DriverAvailabilityStatus.ONLINE) {
       await this.earningsService.trackAttendance(userId);
     }
 
-    return saved;
+    return saved!;
   }
 
   // ─── Internal: PENDING → SETUP_REQUIRED (called on account activation) ────────
@@ -105,6 +139,38 @@ export class DriverAvailabilityService {
 
     await this.driverRepo.update(driver.id, {
       availabilityStatus: DriverAvailabilityStatus.SETUP_REQUIRED,
+    });
+  }
+
+  // ─── Helper ────────────────────────────────────────────────────────────────
+
+  private _currentMonth(): string {
+    const n = new Date();
+    return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}`;
+  }
+
+  /**
+   * One-time migration: seed monthlyOnlineMs from legacy client-side SharedPreferences.
+   * Only writes if the driver's monthly counter is currently 0 for this month (idempotent).
+   */
+  async seedMonthlyOnlineTime(userId: string, monthlyOnlineMs: number, month: string): Promise<void> {
+    if (!monthlyOnlineMs || monthlyOnlineMs <= 0) return;
+    const currentMonth = this._currentMonth();
+    if (month !== currentMonth) return; // only migrate current-month data
+
+    const driver = await this.driverRepo.findOne({ where: { userId } });
+    if (!driver) return;
+
+    // Idempotent: only seed if backend has 0 for this month
+    const alreadyHasData =
+      driver.onlineTimeMonth === currentMonth && (Number(driver.monthlyOnlineMs) || 0) > 0;
+    if (alreadyHasData) return;
+
+    driver.monthlyOnlineMs = monthlyOnlineMs;
+    driver.onlineTimeMonth = currentMonth;
+    await this.driverRepo.update({ userId }, {
+      monthlyOnlineMs,
+      onlineTimeMonth: currentMonth,
     });
   }
 }

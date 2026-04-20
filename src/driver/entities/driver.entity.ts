@@ -75,11 +75,37 @@ export class Driver {
   @Column({ name: 'cancellation_count', type: 'int', default: 0 })
   cancellationCount: number;
 
-  @Column({ name: 'notif_push_enabled', type: 'boolean', default: true })
-  notifPushEnabled: boolean;
+  @Column({ name: 'notif_push_enabled', type: 'boolean', nullable: true, default: true })
+  notifPushEnabled: boolean | null;
 
-  @Column({ name: 'notif_email_enabled', type: 'boolean', default: true })
-  notifEmailEnabled: boolean;
+  @Column({ name: 'notif_email_enabled', type: 'boolean', nullable: true, default: true })
+  notifEmailEnabled: boolean | null;
+
+  /* ── Monthly Online Time Tracking ──────────────────────────────────────── */
+
+  /** Timestamp when the driver started the current online session. Null when offline. */
+  @Column({ name: 'online_since', type: 'timestamptz', nullable: true, default: null })
+  onlineSince: Date | null;
+
+  /**
+   * Accumulated online time in milliseconds for the current tracking month.
+   * Resets to 0 at the start of each new month.
+   * Stored as bigint; transformer converts to JS number.
+   */
+  @Column({
+    name: 'monthly_online_ms',
+    type: 'bigint',
+    default: 0,
+    transformer: {
+      from: (v: string | null) => (v ? parseInt(v, 10) || 0 : 0),
+      to:   (v: number)        => v,
+    },
+  })
+  monthlyOnlineMs: number;
+
+  /** 'YYYY-MM' string identifying which month monthlyOnlineMs belongs to. */
+  @Column({ name: 'online_time_month', type: 'varchar', length: 7, nullable: true, default: null })
+  onlineTimeMonth: string | null;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
