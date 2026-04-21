@@ -47,29 +47,39 @@ export class ConfirmRideUseCase {
       );
     }
 
-    /* Lock price and transition — keep billing price (finalPrice), fallback to estimate */
+    // Prevent double-confirmation
+    if (ride.confirmedAt) {
+      throw new ConflictException('Ride is already confirmed');
+    }
+
+    /* Lock price */
     ride.priceFinal = ride.priceFinal ?? ride.priceEstimate;
-    ride.status = RideStatus.SEARCHING_DRIVER;
     ride.confirmedAt = new Date();
 
-    await this.rideRepo.save(ride);
-
-    /* ── Auto-dispatch logic ──────────────────────────── */
+    /* ── Decide: immediate dispatch or wait for scheduler ── */
     const now = Date.now();
     const rideTime = ride.scheduledAt ? new Date(ride.scheduledAt).getTime() : now;
     const isImmediate = (rideTime - now) <= IMMEDIATE_THRESHOLD_MS;
 
     if (isImmediate) {
+      // Trip is within 60 min — search for driver immediately
+      ride.status = RideStatus.SEARCHING_DRIVER;
+      await this.rideRepo.save(ride);
+
       this.logger.log(
-        `⚡ Ride ${ride.id} is immediate (scheduledAt within ${IMMEDIATE_THRESHOLD_MS / 60_000}min) — starting dispatch now`,
+        `⚡ Ride ${ride.id} is immediate (within ${IMMEDIATE_THRESHOLD_MS / 60_000}min) — dispatching now`,
       );
-      // Fire-and-forget: dispatch runs in background
       this.fallbackService.runFullDispatch(ride).catch((err) => {
         this.logger.error(`Auto-dispatch failed for ride ${ride.id}`, err?.stack);
       });
     } else {
+      // Future trip — keep PENDING so status is meaningful.
+      // ScheduledDispatchService will transition to SEARCHING_DRIVER 30 min before.
+      ride.status = RideStatus.PENDING;
+      await this.rideRepo.save(ride);
+
       this.logger.log(
-        `🕐 Ride ${ride.id} is scheduled for ${ride.scheduledAt?.toISOString()} — scheduler will handle dispatch`,
+        `🕐 Ride ${ride.id} confirmed for ${ride.scheduledAt?.toISOString()} — scheduler will dispatch 30min before`,
       );
     }
 

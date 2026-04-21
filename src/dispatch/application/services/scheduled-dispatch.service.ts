@@ -1,6 +1,6 @@
 import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { LessThanOrEqual, Repository } from 'typeorm';
+import { IsNull, LessThanOrEqual, Not, Repository } from 'typeorm';
 import { Ride } from '../../../rides/domain/entities/ride.entity';
 import { RideStatus } from '../../../rides/domain/enums/ride-status.enum';
 import { FallbackDispatchService } from './fallback-dispatch.service';
@@ -43,16 +43,18 @@ export class ScheduledDispatchService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Find all rides in SEARCHING_DRIVER status whose scheduledAt
-   * is within the dispatch-ahead window (now + 30 min) and trigger
-   * dispatch for each one that isn't already being dispatched.
+   * Find all PENDING confirmed rides whose scheduledAt is within the
+   * dispatch-ahead window (now + 30 min). Transition them to SEARCHING_DRIVER
+   * and trigger dispatch for each one.
    */
   async scanAndDispatch(): Promise<void> {
     const cutoff = new Date(Date.now() + DISPATCH_AHEAD_MS);
 
+    // Confirmed future rides: PENDING + confirmedAt set + scheduledAt within window
     const rides = await this.rideRepo.find({
       where: {
-        status: RideStatus.SEARCHING_DRIVER,
+        status: RideStatus.PENDING,
+        confirmedAt: Not(IsNull()),
         scheduledAt: LessThanOrEqual(cutoff),
       },
       relations: ['vehicleClass'],
@@ -70,6 +72,10 @@ export class ScheduledDispatchService implements OnModuleInit, OnModuleDestroy {
         this.logger.log(`  ⏭ Ride ${ride.id} already dispatching, skipping`);
         continue;
       }
+
+      // Transition to SEARCHING_DRIVER now that we're actually searching
+      await this.rideRepo.update(ride.id, { status: RideStatus.SEARCHING_DRIVER });
+      ride.status = RideStatus.SEARCHING_DRIVER;
 
       this.logger.log(
         `  🚀 Auto-dispatching ride ${ride.id} (scheduledAt=${ride.scheduledAt?.toISOString()})`,
