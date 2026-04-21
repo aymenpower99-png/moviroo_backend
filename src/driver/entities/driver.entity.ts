@@ -75,6 +75,12 @@ export class Driver {
   @Column({ name: 'cancellation_count', type: 'int', default: 0 })
   cancellationCount: number;
 
+  @Column({ name: 'rejected_offers_count', type: 'int', default: 0 })
+  rejectedOffersCount: number;
+
+  @Column({ name: 'accepted_offers_count', type: 'int', default: 0 })
+  acceptedOffersCount: number;
+
   @Column({ name: 'notif_push_enabled', type: 'boolean', nullable: true, default: true })
   notifPushEnabled: boolean | null;
 

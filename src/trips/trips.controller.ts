@@ -24,7 +24,7 @@ import { User, UserRole } from '../users/entites/user.entity';
 import { Ride } from '../rides/domain/entities/ride.entity';
 import { RideStatus } from '../rides/domain/enums/ride-status.enum';
 import { DriverLocation } from '../dispatch/domain/entities/driver-location.entity';
-import { Driver } from '../driver/entities/driver.entity';
+import { Driver, DriverAvailabilityStatus } from '../driver/entities/driver.entity';
 
 import { StartEnrouteUseCase } from './application/use-cases/start-enroute.use-case';
 import { ArrivedUseCase } from './application/use-cases/arrived.use-case';
@@ -209,8 +209,12 @@ export class TripsController {
       await this.driverRepo.save(driver);
     }
 
-    // Free driver from trip
+    // Free driver: reset is_on_trip + availabilityStatus so they can receive next dispatch
     await this.locRepo.update({ driverId: user.id }, { isOnTrip: false });
+    await this.driverRepo.update(
+      { userId: user.id },
+      { availabilityStatus: DriverAvailabilityStatus.ONLINE },
+    );
 
     this.tripGateway.emitToRide(rideId, 'trip:cancelled', {
       rideId,

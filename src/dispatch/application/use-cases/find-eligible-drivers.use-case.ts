@@ -47,12 +47,52 @@ export class FindEligibleDriversUseCase {
     pickupLon: number,
     pickupAddress: string,
   ): Promise<EligibleDriver[]> {
+    this.logger.log(
+      `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+      `🔍 DISPATCH ELIGIBILITY CHECK\n` +
+      `   Ride:     ${rideId}\n` +
+      `   Class:    ${classId}\n` +
+      `   Radius:   ${maxRadiusKm} km\n` +
+      `   Pickup:   [${pickupLat}, ${pickupLon}] "${pickupAddress}"\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+    );
+
+    // ── PRE-FILTER DIAGNOSTIC ─────────────────────────────────────────────────
+    // Show the full state of driver_locations so we can see exactly what's blocking
+    const [allLocs, onlineLocs, notOnTripLocs, recentLocs] = await Promise.all([
+      this.locRepo.count(),
+      this.locRepo.count({ where: { isOnline: true } }),
+      this.locRepo.createQueryBuilder('dl').where('dl.is_online = true').andWhere('dl.is_on_trip = false').getCount(),
+      this.locRepo.createQueryBuilder('dl').where('dl.is_online = true').andWhere('dl.is_on_trip = false').andWhere("dl.last_seen_at > NOW() - INTERVAL '120 seconds'").getCount(),
+    ]);
+    this.logger.log(
+      `📊 driver_locations table:\n` +
+      `   Total rows:              ${allLocs}\n` +
+      `   is_online=true:          ${onlineLocs}\n` +
+      `   online + not_on_trip:    ${notOnTripLocs}\n` +
+      `   online + not_on_trip + fresh (≤120s): ${recentLocs}`,
+    );
+
+    // Also log full detail for ALL online drivers so we can see stuck states
+    const allOnlineDetail = await this.locRepo.createQueryBuilder('dl').where('dl.is_online = true').getMany();
+    for (const loc of allOnlineDetail) {
+      const ageSeconds = Math.round((Date.now() - new Date(loc.lastSeenAt).getTime()) / 1000);
+      this.logger.log(
+        `   driver_locations row: driverId=${loc.driverId.slice(0, 8)} ` +
+        `is_online=${loc.isOnline} is_on_trip=${loc.isOnTrip} ` +
+        `last_seen=${ageSeconds}s ago lat=${loc.latitude} lon=${loc.longitude}`,
+      );
+    }
+
     // 1. Get drivers already offered for this ride
     const existing = await this.offerRepo.find({
       where: { rideId },
       select: ['driverId'],
     });
     const excludeIds = existing.map((o) => o.driverId);
+    if (excludeIds.length > 0) {
+      this.logger.log(`   Already offered to (excluded): ${excludeIds.map(id => id.slice(0, 8)).join(', ')}`);
+    }
 
     // 2. Determine Work Area from pickup address (match city name in work_areas.ville)
     const allAreas = await this.workAreaRepo.find();
@@ -62,7 +102,9 @@ export class FindEligibleDriversUseCase {
     );
     const rideWorkAreaId = matchedArea?.id ?? null;
     if (matchedArea) {
-      this.logger.log(`Pickup "${pickupAddress}" matched Work Area: ${matchedArea.ville} (${matchedArea.id})`);
+      this.logger.log(`📍 Pickup matched Work Area: ${matchedArea.ville} (${matchedArea.id})`);
+    } else {
+      this.logger.log(`📍 No Work Area matched pickup "${pickupAddress}" — will use GPS-only`);
     }
 
     // 3. Find online, not-on-trip, recent driver locations
@@ -77,38 +119,85 @@ export class FindEligibleDriversUseCase {
     }
 
     const locations = await qb.getMany();
-    this.logger.log(
-      `Found ${locations.length} online drivers with recent location`,
-    );
+    this.logger.log(`✅ Location filter passed: ${locations.length} driver(s)`);
+
+    if (locations.length === 0) {
+      this.logger.warn(
+        `⛔ Zero drivers passed location filter. Likely causes:\n` +
+        `   • Driver never called goOnline (is_online=false)\n` +
+        `   • Driver stuck is_on_trip=true from a previous trip\n` +
+        `   • Heartbeat stale: last_seen_at older than 120s\n` +
+        `   • forcedOfflineAt is set and heartbeat didn't re-enable online`,
+      );
+      return [];
+    }
 
     // Build full candidate list with driver record + vehicle check + GPS
     const allCandidates: (EligibleDriver & { workAreaId: string | null })[] = [];
 
     for (const loc of locations) {
+      const uid = loc.driverId.slice(0, 8);
+
+      // ── Driver profile check ──────────────────────────────────────────────
       const driver = await this.driverRepo.findOne({
         where: { userId: loc.driverId },
       });
-      if (!driver) continue;
+      if (!driver) {
+        this.logger.warn(`❌ driver ${uid}: NO driver profile in drivers table for userId=${loc.driverId}`);
+        continue;
+      }
 
-      // Vehicle: class + available
-      const vehicle = await this.vehicleRepo.findOne({
-        where: {
-          driverId: driver.id,
-          classId,
-          status: VehicleStatus.AVAILABLE,
-        },
-      });
-      if (!vehicle) continue;
+      // ── Vehicle check ─────────────────────────────────────────────────────
+      // First, log all vehicles for this driver for full visibility
+      const allVehicles = await this.vehicleRepo.find({ where: { driverId: driver.id } });
+      if (allVehicles.length === 0) {
+        this.logger.warn(`❌ driver ${uid} (driverId=${driver.id.slice(0, 8)}): NO vehicles assigned`);
+        continue;
+      }
+      this.logger.log(
+        `   driver ${uid} has ${allVehicles.length} vehicle(s): ` +
+        allVehicles.map(v => `[classId=${v.classId.slice(0, 8)} status=${v.status}]`).join(', '),
+      );
+      this.logger.log(`   ride requires classId=${classId.slice(0, 8)} status=${VehicleStatus.AVAILABLE}`);
 
-      // Distance check
+      const vehicle = allVehicles.find(
+        v => v.classId === classId && v.status === VehicleStatus.AVAILABLE,
+      );
+      if (!vehicle) {
+        // Log exactly which check failed per vehicle
+        for (const v of allVehicles) {
+          const classMatch = v.classId === classId;
+          const statusMatch = v.status === VehicleStatus.AVAILABLE;
+          if (!classMatch) {
+            this.logger.warn(
+              `❌ driver ${uid}: vehicle classId=${v.classId.slice(0, 8)} ≠ required ${classId.slice(0, 8)}`,
+            );
+          } else if (!statusMatch) {
+            this.logger.warn(
+              `❌ driver ${uid}: vehicle class matches but status="${v.status}" ≠ "${VehicleStatus.AVAILABLE}" — vehicle is STUCK`,
+            );
+          }
+        }
+        continue;
+      }
+
+      // ── Distance check ────────────────────────────────────────────────────
       const dist = this.haversineKm(
         loc.latitude,
         loc.longitude,
         pickupLat,
         pickupLon,
       );
-      if (dist > maxRadiusKm) continue;
+      if (dist > maxRadiusKm) {
+        this.logger.warn(
+          `❌ driver ${uid}: distance ${dist.toFixed(2)}km > maxRadius ${maxRadiusKm}km`,
+        );
+        continue;
+      }
 
+      this.logger.log(
+        `✅ driver ${uid}: ELIGIBLE — dist=${dist.toFixed(2)}km vehicle=${vehicle.id.slice(0, 8)}`,
+      );
       allCandidates.push({
         userId: loc.driverId,
         driverRecordId: driver.id,

@@ -87,6 +87,14 @@ export class RespondToOfferUseCase {
       { isOnTrip: true },
     );
 
+    // Increment the driver's accepted offers counter for acceptance rate tracking
+    await this.driverRepo
+      .createQueryBuilder()
+      .update(Driver)
+      .set({ acceptedOffersCount: () => '"accepted_offers_count" + 1' })
+      .where('userId = :userId', { userId: currentUser.id })
+      .execute();
+
     this.logger.log(
       `✅ Ride ${ride.id} ASSIGNED → driver=${currentUser.id} vehicle=${vehicle.id}`,
     );
@@ -125,6 +133,14 @@ export class RespondToOfferUseCase {
     if (result.affected === 0) {
       throw new ConflictException('Offer already expired or responded to');
     }
+
+    // Increment the driver's rejected offers counter for acceptance rate tracking
+    await this.driverRepo
+      .createQueryBuilder()
+      .update(Driver)
+      .set({ rejectedOffersCount: () => '"rejected_offers_count" + 1' })
+      .where('userId = :userId', { userId: currentUser.id })
+      .execute();
 
     this.logger.log(`❌ Driver ${currentUser.id} rejected offer ${offerId}`);
     return { message: 'Offer rejected' };
