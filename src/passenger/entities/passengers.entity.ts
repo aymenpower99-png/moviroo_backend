@@ -88,6 +88,12 @@ export class PassengerEntity {
   @Column({ name: 'newsletter_opt_in', type: 'boolean', default: false })
   newsletterOptIn: boolean;
 
+  @Column({ name: 'push_notifications_enabled', type: 'boolean', default: true })
+  pushNotificationsEnabled: boolean;
+
+  @Column({ name: 'email_notifications_enabled', type: 'boolean', default: true })
+  emailNotificationsEnabled: boolean;
+
   @Column({ name: 'referral_code', type: 'varchar', length: 20, unique: true, nullable: true, default: null })
   referralCode: string | null;
 

@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Verification Failed – Moviroo</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #FEF2F2 0%, #FEE2E2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .card {
+      background: #fff;
+      border-radius: 24px;
+      box-shadow: 0 20px 60px rgba(239,68,68,0.12);
+      padding: 56px 48px 48px;
+      width: 100%;
+      max-width: 460px;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+      animation: fadeUp 0.5s ease;
+    }
+    .card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 5px;
+      background: linear-gradient(90deg, #EF4444 0%, #DC2626 100%);
+    }
+    .icon-wrap {
+      width: 80px;
+      height: 80px;
+      background: linear-gradient(135deg, #EF4444 0%, #DC2626 100%);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 24px;
+      box-shadow: 0 8px 24px rgba(239, 68, 68, 0.4);
+    }
+    .icon-wrap svg {
+      width: 38px;
+      height: 38px;
+      stroke: #fff;
+      stroke-width: 3;
+      fill: none;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    h1 { font-size: 24px; font-weight: 800; color: #111827; margin: 0 0 12px; }
+    .subtitle { font-size: 15px; color: #6B7280; line-height: 1.7; margin: 0 0 24px; }
+    .divider { border: none; border-top: 1px solid #F3F4F6; margin: 0 0 24px; }
+    .footer-note { font-size: 12px; color: #9CA3AF; }
+    .footer-note strong { color: #6B7280; }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @media (max-width: 480px) {
+      .card { padding: 40px 28px 36px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon-wrap">
+      <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </div>
+    <h1>Verification Failed</h1>
+    <p class="subtitle">{{ERROR_MESSAGE}}</p>
+    <hr class="divider"/>
+    <p class="footer-note">&copy; {{YEAR}} <strong>Moviroo</strong>. All rights reserved.</p>
+  </div>
+</body>
+</html>

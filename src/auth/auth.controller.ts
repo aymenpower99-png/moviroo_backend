@@ -17,6 +17,8 @@ import { AuthService } from './auth.service';
 import { AuthProfileService } from './auth-profile.service';
 import { AuthEmailChangeService } from './auth-email-change.service';
 import { AuthPasswordService } from './auth-password.service';
+import { AuthPasskeyService } from './auth-passkey.service';
+import { AuthAccountService } from './auth-account.service';
 
 import { HtmlService } from '../common/services/html.service';
 import { RegisterDto } from './dto/register.dto';
@@ -27,6 +29,13 @@ import { VerifyOtpDto, ResendOtpDto, Toggle2faDto } from './dto/verify-otp.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { UpdatePasswordDto } from './dto/update-password.dto';
+import { GoogleSignInDto } from './dto/google-signin.dto';
+import { AppleSignInDto } from './dto/apple-signin.dto';
+import {
+  SwitchPrimary2faDto,
+  DeleteAccountDto,
+  PasskeyVerifyDto,
+} from './dto/security.dto';
 
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { User } from '../users/entites/user.entity';
@@ -39,6 +48,8 @@ export class AuthController {
     private profileService: AuthProfileService,
     private emailChangeService: AuthEmailChangeService,
     private passwordService: AuthPasswordService,
+    private passkeyService: AuthPasskeyService,
+    private accountService: AuthAccountService,
     private htmlService: HtmlService,
   ) {}
 
@@ -49,10 +60,27 @@ export class AuthController {
     return this.authService.register(dto);
   }
 
-  @Post('verify-email')
-  @HttpCode(200)
-  verifyEmail(@Body() dto: VerifyOtpDto) {
-    return this.authService.verifyEmail(dto.userId, dto.code);
+  @Get('verify-email')
+  async verifyEmail(@Query('token') token: string, @Res() res: Response) {
+    try {
+      const result = await this.authService.verifyEmailByToken(token);
+      // If email already verified, show simple success page without tokens
+      if ('accessToken' in result && 'refreshToken' in result) {
+        this.htmlService.sendVerifyEmailSuccess(
+          result.accessToken,
+          result.refreshToken,
+          res,
+        );
+      } else {
+        this.htmlService.sendVerifyEmailSuccessSimple(res);
+      }
+    } catch (err) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : 'This verification link is no longer valid. Please register again.';
+      this.htmlService.sendVerifyEmailError(message, res);
+    }
   }
 
   @Post('login')
@@ -74,6 +102,26 @@ export class AuthController {
     @Query('purpose') purpose: 'verify-email' | 'login' = 'verify-email',
   ) {
     return this.authService.resendOtp(dto.userId, purpose);
+  }
+
+  @Post('resend-verification')
+  @HttpCode(200)
+  resendVerification(@Body() body: { email: string }) {
+    return this.authService.resendVerification(body.email);
+  }
+
+  // ─── OAuth: Google / Apple ─────────────────────────────────────────────────
+
+  @Post('google')
+  @HttpCode(200)
+  googleSignIn(@Body() dto: GoogleSignInDto) {
+    return this.authService.googleSignIn(dto);
+  }
+
+  @Post('apple')
+  @HttpCode(200)
+  appleSignIn(@Body() dto: AppleSignInDto) {
+    return this.authService.appleSignIn(dto);
   }
 
   // ─── Forgot / Reset / Update Password ────────────────────────────────────
@@ -192,7 +240,83 @@ export class AuthController {
   @UseGuards(AuthGuard('jwt'))
   @HttpCode(200)
   toggle2fa(@CurrentUser() user: User, @Body() dto: Toggle2faDto) {
-    return this.authService.toggle2fa(user.id, dto.enabled);
+    return this.authService.toggle2fa(user.id, dto.enabled, dto.otp);
+  }
+
+  // ─── 2FA: Enable email 2FA — request OTP ──────────────────────────────────
+
+  @Post('2fa/email/request-otp')
+  @UseGuards(AuthGuard('jwt'))
+  @HttpCode(200)
+  requestEmail2faEnableOtp(@CurrentUser() user: User) {
+    return this.authService.sendEmail2faEnableOtp(user.id);
+  }
+
+  // ─── 2FA: Primary method switching ─────────────────────────────────────────
+
+  @Post('2fa/primary/email/request-otp')
+  @UseGuards(AuthGuard('jwt'))
+  @HttpCode(200)
+  requestPrimarySwitchEmailOtp(@CurrentUser() user: User) {
+    return this.authService.sendPrimarySwitchEmailOtp(user.id);
+  }
+
+  @Patch('2fa/primary')
+  @UseGuards(AuthGuard('jwt'))
+  @HttpCode(200)
+  switchPrimary2fa(
+    @CurrentUser() user: User,
+    @Body() dto: SwitchPrimary2faDto,
+  ) {
+    return this.authService.switchPrimary2faMethod(
+      user.id,
+      dto.method,
+      dto.code,
+    );
+  }
+
+  // ─── Passkey (device biometric) ─────────────────────────────────────────────
+
+  @Post('passkey/enable')
+  @UseGuards(AuthGuard('jwt'))
+  @HttpCode(200)
+  enablePasskey(@CurrentUser() user: User) {
+    return this.passkeyService.enablePasskey(user.id);
+  }
+
+  @Delete('passkey')
+  @UseGuards(AuthGuard('jwt'))
+  @HttpCode(200)
+  disablePasskey(@CurrentUser() user: User) {
+    return this.passkeyService.disablePasskey(user.id);
+  }
+
+  /**
+   * Called AFTER a successful local Face ID / Fingerprint / PIN prompt on device.
+   * Returns a short-lived action token usable for sensitive operations (delete,
+   * disable 2FA, etc.).
+   */
+  @Post('passkey/verify')
+  @UseGuards(AuthGuard('jwt'))
+  @HttpCode(200)
+  verifyPasskey(@CurrentUser() user: User, @Body() dto: PasskeyVerifyDto) {
+    return this.passkeyService.verifyPasskey(user.id, dto.method);
+  }
+
+  // ─── Delete account ─────────────────────────────────────────────────────────
+
+  @Post('me/delete/request-otp')
+  @UseGuards(AuthGuard('jwt'))
+  @HttpCode(200)
+  requestDeleteOtp(@CurrentUser() user: User) {
+    return this.accountService.requestDeleteOtp(user.id);
+  }
+
+  @Delete('me')
+  @UseGuards(AuthGuard('jwt'))
+  @HttpCode(200)
+  deleteAccount(@CurrentUser() user: User, @Body() dto: DeleteAccountDto) {
+    return this.accountService.deleteAccount(user.id, dto);
   }
 
   // ─── Refresh / Logout ─────────────────────────────────────────────────────

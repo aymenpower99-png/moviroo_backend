@@ -11,7 +11,7 @@ import {
   MembershipLevel,
   PaymentAddress,
 } from './entities/passengers.entity';
-import { UpdatePassengerDto, PaymentAddressDto } from './dto/passenger.dto';
+import { UpdatePassengerDto, PaymentAddressDto, UpdateNotificationsDto } from './dto/passenger.dto';
 
 const MEMBERSHIP_THRESHOLDS: Record<MembershipLevel, number> = {
   [MembershipLevel.GO]:    500,
@@ -68,6 +68,20 @@ export class PassengersService {
     const passenger = await this.findByUserId(userId);
     Object.assign(passenger, dto);
     return this.passengerRepo.save(passenger);
+  }
+
+  async updateNotificationPreferences(
+    userId: string,
+    dto: UpdateNotificationsDto,
+  ): Promise<{ pushNotificationsEnabled: boolean; emailNotificationsEnabled: boolean }> {
+    const passenger = await this.findByUserId(userId);
+    if (dto.pushEnabled !== undefined) passenger.pushNotificationsEnabled = dto.pushEnabled;
+    if (dto.emailEnabled !== undefined) passenger.emailNotificationsEnabled = dto.emailEnabled;
+    await this.passengerRepo.save(passenger);
+    return {
+      pushNotificationsEnabled: passenger.pushNotificationsEnabled,
+      emailNotificationsEnabled: passenger.emailNotificationsEnabled,
+    };
   }
 
   // ─── Payment Addresses ────────────────────────────────────────────────────

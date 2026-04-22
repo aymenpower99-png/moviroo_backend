@@ -1,4 +1,4 @@
-import { IsString, Length, IsUUID, IsBoolean } from 'class-validator';
+import { IsString, Length, IsUUID, IsBoolean, IsOptional } from 'class-validator';
 
 export class VerifyOtpDto {
   @IsUUID()
@@ -17,4 +17,9 @@ export class ResendOtpDto {
 export class Toggle2faDto {
   @IsBoolean()
   enabled: boolean;
+
+  @IsOptional()
+  @IsString()
+  @Length(6, 6)
+  otp?: string;
 }

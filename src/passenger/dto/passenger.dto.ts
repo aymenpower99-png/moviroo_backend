@@ -37,6 +37,16 @@ export class AddPaymentAddressDto {
   address: PaymentAddressDto;
 }
 
+export class UpdateNotificationsDto {
+  @IsOptional()
+  @IsBoolean()
+  pushEnabled?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  emailEnabled?: boolean;
+}
+
 // ── Profile Update ────────────────────────────────────────────────────────────
 
 export class UpdatePassengerDto {

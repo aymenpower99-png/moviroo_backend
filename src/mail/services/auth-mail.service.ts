@@ -16,6 +16,26 @@ export class AuthMailService extends BaseMailService {
     super(config);
   }
 
+  async sendVerifyEmailLink(
+    to: string,
+    firstName: string,
+    token: string,
+  ): Promise<void> {
+    const backendUrl =
+      this.config.get<string>('app.backendUrl') ?? 'http://localhost:3000/api';
+    const verifyLink = `${backendUrl}/auth/verify-email?token=${token}`;
+
+    const html = this.loadTemplate('verify-email.html', {
+      FIRST_NAME: firstName,
+      VERIFY_LINK: verifyLink,
+      EXPIRY_MINUTES: '30',
+      YEAR: new Date().getFullYear().toString(),
+    });
+
+    await this.send(to, 'Moviroo – Verify your email address', html);
+    this.logger.log(`Verify-email link sent to ${to}`);
+  }
+
   async sendOtp(
     to: string,
     firstName: string,

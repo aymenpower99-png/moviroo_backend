@@ -12,7 +12,7 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { PassengersService } from './passengers.service';
-import { UpdatePassengerDto, AddPaymentAddressDto } from './dto/passenger.dto';
+import { UpdatePassengerDto, AddPaymentAddressDto, UpdateNotificationsDto } from './dto/passenger.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 
 @Controller('passengers')
@@ -35,6 +35,15 @@ export class PassengersController {
     @Body() dto: UpdatePassengerDto,
   ) {
     return this.passengersService.updateProfile(user.sub, dto);
+  }
+
+  /** PATCH /passengers/me/notifications */
+  @Patch('me/notifications')
+  updateNotifications(
+    @CurrentUser() user: { sub: string },
+    @Body() dto: UpdateNotificationsDto,
+  ) {
+    return this.passengersService.updateNotificationPreferences(user.sub, dto);
   }
 
   // ─── Payment Addresses ────────────────────────────────────────────────────
