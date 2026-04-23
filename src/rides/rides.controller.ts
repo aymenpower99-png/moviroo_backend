@@ -11,6 +11,7 @@ import {
   NotFoundException,
   ForbiddenException,
   HttpCode,
+  Query,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -24,9 +25,14 @@ import { User, UserRole } from '../users/entites/user.entity';
 import { Ride } from './domain/entities/ride.entity';
 import { CreateRideDto } from './application/dtos/create-ride.dto';
 import { CancelRideDto } from './application/dtos/cancel-ride.dto';
+import {
+  GetVehiclePricesDto,
+  GetVehiclePricesResponse,
+} from './application/dtos/get-vehicle-prices.dto';
 import { CreateRideUseCase } from './application/use-cases/create-ride.use-case';
 import { ConfirmRideUseCase } from './application/use-cases/confirm-ride.use-case';
 import { CancelRideUseCase } from './application/use-cases/cancel-ride.use-case';
+import { GetVehiclePricesUseCase } from './application/use-cases/get-vehicle-prices.use-case';
 import { DispatchOffer } from '../dispatch/domain/entities/dispatch-offer.entity';
 import { TripPayment } from '../billing/entities/trip-payment.entity';
 
@@ -36,6 +42,7 @@ export class RidesController {
     private readonly createRideUC: CreateRideUseCase,
     private readonly confirmRideUC: ConfirmRideUseCase,
     private readonly cancelRideUC: CancelRideUseCase,
+    private readonly getVehiclePricesUC: GetVehiclePricesUseCase,
     @InjectRepository(Ride)
     private readonly rideRepo: Repository<Ride>,
     @InjectRepository(DispatchOffer)
@@ -43,6 +50,15 @@ export class RidesController {
     @InjectRepository(TripPayment)
     private readonly paymentRepo: Repository<TripPayment>,
   ) {}
+
+  /* ─── Get vehicle class prices by coordinates ───────────────────── */
+  @Get('pricing')
+  @UseGuards(AuthGuard('jwt'))
+  async getVehiclePrices(
+    @Query() dto: GetVehiclePricesDto,
+  ): Promise<GetVehiclePricesResponse> {
+    return this.getVehiclePricesUC.execute(dto);
+  }
 
   /* ─── Create a new ride ───────────────────── */
   @Post()
@@ -56,10 +72,7 @@ export class RidesController {
   @Patch(':id/confirm')
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(UserRole.PASSENGER, UserRole.SUPER_ADMIN)
-  confirm(
-    @CurrentUser() user: User,
-    @Param('id', ParseUUIDPipe) id: string,
-  ) {
+  confirm(@CurrentUser() user: User, @Param('id', ParseUUIDPipe) id: string) {
     return this.confirmRideUC.execute(user, id);
   }
 
@@ -88,10 +101,7 @@ export class RidesController {
     });
     if (!ride) throw new NotFoundException('Ride not found');
 
-    if (
-      user.role !== UserRole.SUPER_ADMIN &&
-      ride.passengerId !== user.id
-    ) {
+    if (user.role !== UserRole.SUPER_ADMIN && ride.passengerId !== user.id) {
       throw new ForbiddenException('Not your ride');
     }
     return ride;

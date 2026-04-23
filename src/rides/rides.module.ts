@@ -14,23 +14,35 @@ import { RidesController } from './rides.controller';
 import { CreateRideUseCase } from './application/use-cases/create-ride.use-case';
 import { ConfirmRideUseCase } from './application/use-cases/confirm-ride.use-case';
 import { CancelRideUseCase } from './application/use-cases/cancel-ride.use-case';
+import { GetVehiclePricesUseCase } from './application/use-cases/get-vehicle-prices.use-case';
 
 import { HaversineService } from './infrastructure/services/haversine.service';
 import { GeocodingService } from './infrastructure/services/geocoding.service';
 import { PricingService } from './infrastructure/services/pricing.service';
 
 import { DispatchModule } from '../dispatch/dispatch.module';
+import { ClassesModule } from '../classes/classes.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Ride, PassengerEntity, VehicleClass, DispatchOffer, TripPayment, DriverLocation, Driver]),
+    TypeOrmModule.forFeature([
+      Ride,
+      PassengerEntity,
+      VehicleClass,
+      DispatchOffer,
+      TripPayment,
+      DriverLocation,
+      Driver,
+    ]),
     DispatchModule,
+    ClassesModule,
   ],
   controllers: [RidesController],
   providers: [
     CreateRideUseCase,
     ConfirmRideUseCase,
     CancelRideUseCase,
+    GetVehiclePricesUseCase,
     HaversineService,
     GeocodingService,
     PricingService,
