@@ -396,18 +396,18 @@ export class AuthService {
   async confirmTotpSetup(userId: string, code: string) {
     await this.otpService.verifyAndEnableTotp(userId, code);
 
-    // Auto-select TOTP as primary if user had none yet.
-    const user = await this.userRepo.findOneOrFail({ where: { id: userId } });
-    if (!user.primary2faMethod) {
-      await this.userRepo.update(userId, {
-        primary2faMethod: TwoFactorMethod.TOTP,
-      });
-    }
+    // One-method-at-a-time: activating TOTP disables email 2FA and makes TOTP
+    // the sole primary method, regardless of prior state.
+    await this.userRepo.update(userId, {
+      is2faEnabled: false,
+      primary2faMethod: TwoFactorMethod.TOTP,
+    });
 
     return {
       message: 'Authenticator app linked successfully.',
       totpEnabled: true,
-      primary2faMethod: user.primary2faMethod ?? TwoFactorMethod.TOTP,
+      is2faEnabled: false,
+      primary2faMethod: TwoFactorMethod.TOTP,
     };
   }
 
@@ -437,11 +437,15 @@ export class AuthService {
     const user = await this.userRepo.findOneOrFail({ where: { id: userId } });
 
     const patch: Partial<User> = { is2faEnabled: enable };
+    let totpEnabled = user.totpEnabled;
 
     if (enable) {
-      // Auto-select Email as primary if user had none yet.
-      if (!user.primary2faMethod) {
-        patch.primary2faMethod = TwoFactorMethod.EMAIL;
+      // One-method-at-a-time: enabling email 2FA disables TOTP and makes email
+      // the sole primary method, regardless of prior state.
+      patch.primary2faMethod = TwoFactorMethod.EMAIL;
+      if (user.totpEnabled) {
+        await this.otpService.disableTotp(userId);
+        totpEnabled = false;
       }
     } else {
       // Disabling email 2FA: if it was primary, fall back to TOTP if on, else null.
@@ -457,6 +461,7 @@ export class AuthService {
         ? '2-step verification enabled.'
         : '2-step verification disabled.',
       is2faEnabled: enable,
+      totpEnabled,
       primary2faMethod: patch.primary2faMethod ?? user.primary2faMethod ?? null,
     };
   }
