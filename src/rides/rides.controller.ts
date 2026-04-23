@@ -8,6 +8,7 @@ import {
   Body,
   UseGuards,
   ParseUUIDPipe,
+  ParseFloatPipe,
   NotFoundException,
   ForbiddenException,
   HttpCode,

@@ -1,7 +1,15 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { PricingService, PricingRequest, PricingResult } from '../../infrastructure/services/pricing.service';
+import {
+  PricingService,
+  BatchPricingRequest,
+  BatchPricingItem,
+} from '../../infrastructure/services/pricing.service';
 import { ClassesService } from '../../../classes/classes.service';
-import { GetVehiclePricesDto, GetVehiclePricesResponse, VehicleClassPrice } from '../dtos/get-vehicle-prices.dto';
+import {
+  GetVehiclePricesDto,
+  GetVehiclePricesResponse,
+  VehicleClassPrice,
+} from '../dtos/get-vehicle-prices.dto';
 
 @Injectable()
 export class GetVehiclePricesUseCase {
@@ -12,144 +20,103 @@ export class GetVehiclePricesUseCase {
     private readonly classesService: ClassesService,
   ) {}
 
+  /**
+   * Passenger flow — returns ALL active vehicle classes with prices in ONE call.
+   *
+   * Orchestration only: fetch classes from DB → 1 ML batch call → map to response.
+   * No pricing logic lives here (ML service owns it, with fallback in PricingService).
+   */
   async execute(dto: GetVehiclePricesDto): Promise<GetVehiclePricesResponse> {
-    // Get all active vehicle classes from database
+    // 1. Fetch all active vehicle classes from DB
     const vehicleClasses = await this.classesService.findAll();
 
+    if (vehicleClasses.length === 0) {
+      this.logger.warn('No active vehicle classes found in DB');
+      return {
+        vehicleClasses: [],
+        pickupLat: dto.pickupLat,
+        pickupLon: dto.pickupLon,
+        dropoffLat: dto.dropoffLat,
+        dropoffLon: dto.dropoffLon,
+      };
+    }
+
     this.logger.log(
-      `Calculating prices for ${vehicleClasses.length} vehicle classes`,
+      `Batch pricing for ${vehicleClasses.length} vehicle classes: ${vehicleClasses
+        .map((v) => v.name)
+        .join(', ')}`,
     );
 
-    // Create pricing requests for all vehicle classes
-    const pricingPromises = vehicleClasses.map(async (vehicleClass) => {
-      try {
-        const request: PricingRequest = {
-          pickupLat: dto.pickupLat,
-          pickupLon: dto.pickupLon,
-          dropoffLat: dto.dropoffLat,
-          dropoffLon: dto.dropoffLon,
-          carType: vehicleClass.name,
-          bookingDt: dto.bookingDt,
-        };
+    // 2. Single batch call to ML API for all car types
+    const batchReq: BatchPricingRequest = {
+      pickupLat: dto.pickupLat,
+      pickupLon: dto.pickupLon,
+      dropoffLat: dto.dropoffLat,
+      dropoffLon: dto.dropoffLon,
+      carTypes: vehicleClasses.map((v) => v.name),
+      bookingDt: dto.bookingDt,
+    };
 
-        const pricingResult = await this.pricingService.estimate(request);
+    const batchResult = await this.pricingService.batchEstimate(batchReq);
 
-        // Map to response format
-        const vehicleClassPrice: VehicleClassPrice = {
-          id: vehicleClass.id,
-          name: vehicleClass.name,
-          imageUrl: vehicleClass.imageUrl,
-          seats: vehicleClass.seats,
-          bags: vehicleClass.bags,
-          priceTnd: pricingResult.finalPrice,
-          exactPrice: pricingResult.exactPrice,
-          distanceKm: pricingResult.distanceKm,
-          durationMin: pricingResult.durationMin,
-          surgeMultiplier: pricingResult.surgeMultiplier,
-          loyaltyPoints: pricingResult.loyaltyPoints,
-        };
+    // 3. Index prices by normalized car type for O(1) lookup
+    const priceByCarType = new Map<string, BatchPricingItem>();
+    for (const item of batchResult.items) {
+      priceByCarType.set(normalizeCarType(item.carType), item);
+    }
 
-        return vehicleClassPrice;
-      } catch (error) {
-        // Log error but don't fail the entire request
-        this.logger.error(
-          `Failed to calculate price for vehicle class ${vehicleClass.name}: ${error.message}`,
+    // 4. Merge DB metadata with ML prices
+    const withPrices: VehicleClassPrice[] = vehicleClasses.map((vc) => {
+      const key = normalizeCarType(vc.name);
+      const price = priceByCarType.get(key);
+
+      if (!price) {
+        this.logger.warn(
+          `No price returned for class "${vc.name}" (key=${key}) — using 0`,
         );
-
-        // Return a fallback price using business rules
-        const fallbackPrice = this.getFallbackPrice(
-          dto.pickupLat,
-          dto.pickupLon,
-          dto.dropoffLat,
-          dto.dropoffLon,
-        );
-
-        const vehicleClassPrice: VehicleClassPrice = {
-          id: vehicleClass.id,
-          name: vehicleClass.name,
-          imageUrl: vehicleClass.imageUrl,
-          seats: vehicleClass.seats,
-          bags: vehicleClass.bags,
-          priceTnd: fallbackPrice.finalPrice,
-          exactPrice: fallbackPrice.exactPrice,
-          distanceKm: fallbackPrice.distanceKm,
-          durationMin: fallbackPrice.durationMin,
-          surgeMultiplier: fallbackPrice.surgeMultiplier,
-          loyaltyPoints: fallbackPrice.loyaltyPoints,
-        };
-
-        return vehicleClassPrice;
       }
+
+      return {
+        id: vc.id,
+        name: vc.name,
+        imageUrl: vc.imageUrl,
+        seats: vc.seats,
+        bags: vc.bags,
+        priceTnd: price?.finalPrice ?? 0,
+        exactPrice: price?.exactPrice ?? 0,
+        distanceKm: batchResult.distanceKm,
+        durationMin: batchResult.durationMin,
+        surgeMultiplier: price?.surgeMultiplier ?? 1.0,
+        loyaltyPoints: price?.loyaltyPoints ?? 0,
+      };
     });
 
-    // Execute all pricing calls in parallel
-    const vehicleClassesWithPrices = await Promise.all(pricingPromises);
-
     this.logger.log(
-      `Successfully calculated prices for ${vehicleClassesWithPrices.length} vehicle classes`,
+      `Batch pricing complete (distance=${batchResult.distanceKm.toFixed(2)}km, ` +
+        `duration=${batchResult.durationMin}min)`,
     );
 
     return {
-      vehicleClasses: vehicleClassesWithPrices,
+      vehicleClasses: withPrices,
       pickupLat: dto.pickupLat,
       pickupLon: dto.pickupLon,
       dropoffLat: dto.dropoffLat,
       dropoffLon: dto.dropoffLon,
     };
   }
+}
 
-  /**
-   * Fallback to business rules if ML API fails
-   * This duplicates the logic from PricingService.fallback() for error recovery
-   */
-  private getFallbackPrice(
-    pickupLat: number,
-    pickupLon: number,
-    dropoffLat: number,
-    dropoffLon: number,
-  ): PricingResult {
-    const BASE_FARE = 3.5;
-    const RATE_PER_KM = 0.65;
-    const RATE_PER_MIN = 0.3;
-    const MIN_FARE = 4.0;
-    const AVG_SPEED_KMH = 40;
-
-    // Calculate distance and duration using Haversine formula
-    const toRad = (deg: number) => (deg * Math.PI) / 180;
-    const EARTH_RADIUS_KM = 6371;
-
-    const dLat = toRad(dropoffLat - pickupLat);
-    const dLon = toRad(dropoffLon - pickupLon);
-    const a =
-      Math.sin(dLat / 2) ** 2 +
-      Math.cos(toRad(pickupLat)) *
-        Math.cos(toRad(dropoffLat)) *
-        Math.sin(dLon / 2) ** 2;
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-    const distanceKm = +(EARTH_RADIUS_KM * c).toFixed(2);
-    const durationMin = +((distanceKm / AVG_SPEED_KMH) * 60).toFixed(1);
-
-    const raw =
-      BASE_FARE + distanceKm * RATE_PER_KM + durationMin * RATE_PER_MIN;
-
-    const exactPrice = Math.max(MIN_FARE, +raw.toFixed(2));
-    const finalPrice = Math.ceil(exactPrice / 5) * 5;
-    const loyaltyPoints = Math.ceil((finalPrice * 0.5) / 5) * 5;
-
-    return {
-      finalPrice,
-      exactPrice,
-      loyaltyPoints,
-      surgeMultiplier: 1.0,
-      distanceKm,
-      durationMin: Math.ceil(durationMin),
-      fullResponse: {
-        fallback: true,
-        base_fare: BASE_FARE,
-        distance_cost: +(distanceKm * RATE_PER_KM).toFixed(2),
-        duration_cost: +(durationMin * RATE_PER_MIN).toFixed(2),
-      },
-    };
-  }
+/** Normalize a DB class name ("First Class", "Economy") to ML API key. */
+function normalizeCarType(raw: string): string {
+  const s = String(raw)
+    .toLowerCase()
+    .trim()
+    .replace(/[\s-]+/g, '_');
+  const aliases: Record<string, string> = {
+    firstclass: 'first_class',
+    first: 'first_class',
+    premium: 'first_class',
+    minibus: 'mini_bus',
+  };
+  return aliases[s] ?? s;
 }
