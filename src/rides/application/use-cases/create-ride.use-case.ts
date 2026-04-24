@@ -114,25 +114,6 @@ export class CreateRideUseCase {
     const dropoffGeo = await this.geocoding.reverse(dropoffLat, dropoffLon);
     const geocodeDuration = Date.now() - geocodeStart;
 
-    // Validate confidence scores for geocoding results
-    if (pickupGeo && pickupGeo.confidence < 0.5) {
-      this.logger.warn(
-        `[BOOKING] Low confidence pickup location (${pickupLat}, ${pickupLon}): confidence=${pickupGeo.confidence}`,
-      );
-      throw new BadRequestException(
-        'Pickup location could not be accurately determined. Please provide a more specific address.',
-      );
-    }
-
-    if (dropoffGeo && dropoffGeo.confidence < 0.5) {
-      this.logger.warn(
-        `[BOOKING] Low confidence dropoff location (${dropoffLat}, ${dropoffLon}): confidence=${dropoffGeo.confidence}`,
-      );
-      throw new BadRequestException(
-        'Dropoff location could not be accurately determined. Please provide a more specific address.',
-      );
-    }
-
     if (!pickupGeo) {
       this.logger.error(
         `[BOOKING] Could not validate pickup location: (${pickupLat}, ${pickupLon})`,
@@ -155,10 +136,10 @@ export class CreateRideUseCase {
     const dropoffAddress = dropoffGeo.display_name;
 
     this.logger.log(
-      `[BOOKING] Re-geocoded pickup: (${pickupLat}, ${pickupLon}) → "${pickupAddress}" (source: ${pickupGeo.source})`,
+      `[BOOKING] Re-geocoded pickup: (${pickupLat}, ${pickupLon}) → "${pickupAddress}"`,
     );
     this.logger.log(
-      `[BOOKING] Re-geocoded dropoff: (${dropoffLat}, ${dropoffLon}) → "${dropoffAddress}" (source: ${dropoffGeo.source}) - ${geocodeDuration}ms`,
+      `[BOOKING] Re-geocoded dropoff: (${dropoffLat}, ${dropoffLon}) → "${dropoffAddress}" - ${geocodeDuration}ms`,
     );
 
     /* 5 ── Get price estimate from ML API ──── */
