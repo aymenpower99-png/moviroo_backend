@@ -1,5 +1,8 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject } from '@nestjs/common';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import type { Cache } from 'cache-manager';
 import { HaversineService } from './haversine.service';
+import { withRetry } from '../../../common/utils/retry.util';
 
 export interface PricingRequest {
   pickupLat: number;
@@ -56,15 +59,54 @@ export class PricingService {
   private static readonly RATE_PER_MIN = 0.3;
   private static readonly MIN_FARE = 4.0;
 
-  constructor(private readonly haversine: HaversineService) {}
+  constructor(
+    private readonly haversine: HaversineService,
+    @Inject(CACHE_MANAGER) private cacheManager: Cache,
+  ) {}
 
-  /** Call ML API; fall back to business rules if unavailable */
+  /** Call ML API; fall back to business rules if unavailable - CACHED */
   async estimate(req: PricingRequest): Promise<PricingResult> {
+    const startTime = Date.now();
+    this.logger.log(
+      `[PRICING] Estimate request: ${req.carType} from (${req.pickupLat}, ${req.pickupLon}) to (${req.dropoffLat}, ${req.dropoffLon})`,
+    );
+
+    // Check cache first (shorter TTL for pricing since it can change)
+    const cacheKey = `pricing:${req.pickupLat.toFixed(6)}:${req.pickupLon.toFixed(6)}:${req.dropoffLat.toFixed(6)}:${req.dropoffLon.toFixed(6)}:${req.carType}:${req.bookingDt ?? 'now'}`;
+    const cached = await this.cacheManager.get<PricingResult>(cacheKey);
+    if (cached) {
+      const duration = Date.now() - startTime;
+      this.logger.log(
+        `[PRICING] Cache HIT for pricing: ${req.carType} - ${duration}ms - ${cached.finalPrice} TND`,
+      );
+      return cached;
+    }
+
     try {
-      return await this.callMlApi(req);
+      const apiStart = Date.now();
+      const result = await this.callMlApi(req);
+      const apiDuration = Date.now() - apiStart;
+      const totalDuration = Date.now() - startTime;
+
+      await this.cacheManager.set(cacheKey, result, 180); // 3 minutes
+      this.logger.log(
+        `[PRICING] ML API success: ${req.carType} - ${totalDuration}ms (API: ${apiDuration}ms) - ${result.finalPrice} TND (surge: ${result.surgeMultiplier})`,
+      );
+      return result;
     } catch (err) {
-      this.logger.warn(`ML API unavailable, using fallback pricing: ${err}`);
-      return this.fallback(req);
+      const fallbackStart = Date.now();
+      this.logger.warn(
+        `[PRICING] ML API unavailable, using fallback pricing: ${err}`,
+      );
+      const fallbackResult = this.fallback(req);
+      const fallbackDuration = Date.now() - fallbackStart;
+      const totalDuration = Date.now() - startTime;
+
+      await this.cacheManager.set(cacheKey, fallbackResult, 60); // 1 minute for fallback
+      this.logger.log(
+        `[PRICING] Fallback used: ${req.carType} - ${totalDuration}ms (Fallback: ${fallbackDuration}ms) - ${fallbackResult.finalPrice} TND`,
+      );
+      return fallbackResult;
     }
   }
 
@@ -72,13 +114,51 @@ export class PricingService {
    * Batch pricing: ONE HTTP call to ML API /price/batch for all car types.
    * Used by the passenger flow to fetch prices of every vehicle class at once.
    * Falls back to business rules per car type if ML API is unavailable.
+   * CACHED
    */
   async batchEstimate(req: BatchPricingRequest): Promise<BatchPricingResult> {
+    const startTime = Date.now();
+    this.logger.log(
+      `[PRICING] Batch estimate request: ${req.carTypes.join(', ')} from (${req.pickupLat}, ${req.pickupLon}) to (${req.dropoffLat}, ${req.dropoffLon})`,
+    );
+
+    // Check cache first
+    const carTypesKey = req.carTypes.sort().join(',');
+    const cacheKey = `batch_pricing:${req.pickupLat.toFixed(6)}:${req.pickupLon.toFixed(6)}:${req.dropoffLat.toFixed(6)}:${req.dropoffLon.toFixed(6)}:${carTypesKey}:${req.bookingDt ?? 'now'}`;
+    const cached = await this.cacheManager.get<BatchPricingResult>(cacheKey);
+    if (cached) {
+      const duration = Date.now() - startTime;
+      this.logger.log(
+        `[PRICING] Cache HIT for batch pricing: ${req.carTypes.join(', ')} - ${duration}ms - ${cached.items.length} results`,
+      );
+      return cached;
+    }
+
     try {
-      return await this.callMlApiBatch(req);
+      const apiStart = Date.now();
+      const result = await this.callMlApiBatch(req);
+      const apiDuration = Date.now() - apiStart;
+      const totalDuration = Date.now() - startTime;
+
+      await this.cacheManager.set(cacheKey, result, 180); // 3 minutes
+      this.logger.log(
+        `[PRICING] ML API batch success: ${req.carTypes.join(', ')} - ${totalDuration}ms (API: ${apiDuration}ms) - ${result.distanceKm.toFixed(1)}km, ${result.durationMin}min`,
+      );
+      return result;
     } catch (err) {
-      this.logger.warn(`ML API batch unavailable, using fallback: ${err}`);
-      return this.batchFallback(req);
+      const fallbackStart = Date.now();
+      this.logger.warn(
+        `[PRICING] ML API batch unavailable, using fallback: ${err}`,
+      );
+      const fallbackResult = this.batchFallback(req);
+      const fallbackDuration = Date.now() - fallbackStart;
+      const totalDuration = Date.now() - startTime;
+
+      await this.cacheManager.set(cacheKey, fallbackResult, 60); // 1 minute for fallback
+      this.logger.log(
+        `[PRICING] Fallback used for batch: ${req.carTypes.join(', ')} - ${totalDuration}ms (Fallback: ${fallbackDuration}ms)`,
+      );
+      return fallbackResult;
     }
   }
 
@@ -94,12 +174,18 @@ export class PricingService {
       booking_dt: req.bookingDt ?? new Date().toISOString(),
     };
 
-    const res = await fetch(`${this.ML_API_URL}/price/quick`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(10_000),
-    });
+    const res = await withRetry(
+      () =>
+        fetch(`${this.ML_API_URL}/price/quick`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+          signal: AbortSignal.timeout(10_000),
+        }),
+      `ML API pricing ${req.carType}`,
+      { maxRetries: 2, initialDelayMs: 1000 },
+      this.logger,
+    );
 
     if (!res.ok) {
       throw new Error(`ML API responded with status ${res.status}`);
@@ -132,12 +218,18 @@ export class PricingService {
       booking_dt: req.bookingDt ?? new Date().toISOString(),
     };
 
-    const res = await fetch(`${this.ML_API_URL}/price/batch`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(15_000),
-    });
+    const res = await withRetry(
+      () =>
+        fetch(`${this.ML_API_URL}/price/batch`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+          signal: AbortSignal.timeout(15_000),
+        }),
+      `ML API batch pricing ${req.carTypes.join(',')}`,
+      { maxRetries: 2, initialDelayMs: 1000 },
+      this.logger,
+    );
 
     if (!res.ok) {
       throw new Error(`ML API batch responded with status ${res.status}`);

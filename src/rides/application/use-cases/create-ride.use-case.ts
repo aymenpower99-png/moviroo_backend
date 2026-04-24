@@ -32,17 +32,24 @@ export class CreateRideUseCase {
   ) {}
 
   async execute(currentUser: User, dto: CreateRideDto): Promise<Ride> {
+    const startTime = Date.now();
+    this.logger.log(
+      `[BOOKING] Create ride request: passenger=${currentUser.id} class_id=${dto.class_id}`,
+    );
+
     /* 1 ── Determine passenger ──────────────── */
     const passengerId = this.resolvePassengerId(currentUser, dto);
+    this.logger.log(`[BOOKING] Resolved passenger: ${passengerId}`);
 
     /* 2 ── Verify passenger profile exists ───── */
     const passenger = await this.passengerRepo.findOne({
       where: { userId: passengerId },
     });
     if (!passenger) {
-      throw new NotFoundException(
-        'Passenger profile not found for this user',
+      this.logger.error(
+        `[BOOKING] Passenger profile not found for user: ${passengerId}`,
       );
+      throw new NotFoundException('Passenger profile not found for this user');
     }
 
     /* 3 ── Verify vehicle class ─────────────── */
@@ -50,42 +57,115 @@ export class CreateRideUseCase {
       where: { id: dto.class_id },
     });
     if (!vehicleClass) {
-      throw new NotFoundException(
-        `Vehicle class ${dto.class_id} not found`,
+      this.logger.error(`[BOOKING] Vehicle class not found: ${dto.class_id}`);
+      throw new NotFoundException(`Vehicle class ${dto.class_id} not found`);
+    }
+    this.logger.log(`[BOOKING] Vehicle class verified: ${vehicleClass.name}`);
+
+    /* 4 ── Validate coordinates and re-geocode for display names ──── */
+    const geocodeStart = Date.now();
+    const pickupLat = dto.pickup_lat;
+    const pickupLon = dto.pickup_lon;
+    const dropoffLat = dto.dropoff_lat;
+    const dropoffLon = dto.dropoff_lon;
+
+    // Validate service area (Tunisia bounding box)
+    if (!this.isInServiceArea(pickupLat, pickupLon)) {
+      this.logger.warn(
+        `[BOOKING] Pickup outside service area: (${pickupLat}, ${pickupLon})`,
+      );
+      throw new BadRequestException(
+        'Pickup location is outside the service area (Tunisia)',
+      );
+    }
+    if (!this.isInServiceArea(dropoffLat, dropoffLon)) {
+      this.logger.warn(
+        `[BOOKING] Dropoff outside service area: (${dropoffLat}, ${dropoffLon})`,
+      );
+      throw new BadRequestException(
+        'Dropoff location is outside the service area (Tunisia)',
       );
     }
 
-    /* 4 ── Resolve coordinates / addresses ──── */
-    let pickupLat = dto.pickup_lat;
-    let pickupLon = dto.pickup_lon;
-    let dropoffLat = dto.dropoff_lat;
-    let dropoffLon = dto.dropoff_lon;
-    const pickupAddress = dto.pickup_address;
-    const dropoffAddress = dto.dropoff_address;
-
-    if (pickupLat == null || pickupLon == null) {
-      const geo = await this.geocoding.forward(pickupAddress);
-      if (!geo) {
-        throw new BadRequestException(
-          'Could not geocode pickup address',
-        );
-      }
-      pickupLat = geo.lat;
-      pickupLon = geo.lon;
+    // GPS validation for suspicious locations
+    const pickupSuspicious = this.isSuspiciousLocation(pickupLat, pickupLon);
+    if (pickupSuspicious.suspicious) {
+      this.logger.warn(
+        `[BOOKING] Suspicious pickup location: (${pickupLat}, ${pickupLon}) - ${pickupSuspicious.reason}`,
+      );
+      throw new BadRequestException(
+        `Pickup location appears invalid: ${pickupSuspicious.reason}`,
+      );
     }
 
-    if (dropoffLat == null || dropoffLon == null) {
-      const geo = await this.geocoding.forward(dropoffAddress);
-      if (!geo) {
-        throw new BadRequestException(
-          'Could not geocode dropoff address',
-        );
-      }
-      dropoffLat = geo.lat;
-      dropoffLon = geo.lon;
+    const dropoffSuspicious = this.isSuspiciousLocation(dropoffLat, dropoffLon);
+    if (dropoffSuspicious.suspicious) {
+      this.logger.warn(
+        `[BOOKING] Suspicious dropoff location: (${dropoffLat}, ${dropoffLon}) - ${dropoffSuspicious.reason}`,
+      );
+      throw new BadRequestException(
+        `Dropoff location appears invalid: ${dropoffSuspicious.reason}`,
+      );
     }
+
+    // Re-geocode coordinates to get display names (backend validation)
+    this.logger.log(`[BOOKING] Re-geocoding pickup and dropoff locations`);
+    const pickupGeo = await this.geocoding.reverse(pickupLat, pickupLon);
+    const dropoffGeo = await this.geocoding.reverse(dropoffLat, dropoffLon);
+    const geocodeDuration = Date.now() - geocodeStart;
+
+    // Validate confidence scores for geocoding results
+    if (pickupGeo && pickupGeo.confidence < 0.5) {
+      this.logger.warn(
+        `[BOOKING] Low confidence pickup location (${pickupLat}, ${pickupLon}): confidence=${pickupGeo.confidence}`,
+      );
+      throw new BadRequestException(
+        'Pickup location could not be accurately determined. Please provide a more specific address.',
+      );
+    }
+
+    if (dropoffGeo && dropoffGeo.confidence < 0.5) {
+      this.logger.warn(
+        `[BOOKING] Low confidence dropoff location (${dropoffLat}, ${dropoffLon}): confidence=${dropoffGeo.confidence}`,
+      );
+      throw new BadRequestException(
+        'Dropoff location could not be accurately determined. Please provide a more specific address.',
+      );
+    }
+
+    if (!pickupGeo) {
+      this.logger.error(
+        `[BOOKING] Could not validate pickup location: (${pickupLat}, ${pickupLon})`,
+      );
+      throw new BadRequestException(
+        'Could not validate pickup location via reverse geocoding',
+      );
+    }
+    if (!dropoffGeo) {
+      this.logger.error(
+        `[BOOKING] Could not validate dropoff location: (${dropoffLat}, ${dropoffLon})`,
+      );
+      throw new BadRequestException(
+        'Could not validate dropoff location via reverse geocoding',
+      );
+    }
+
+    // Use backend-validated addresses
+    const pickupAddress = pickupGeo.display_name;
+    const dropoffAddress = dropoffGeo.display_name;
+
+    this.logger.log(
+      `[BOOKING] Re-geocoded pickup: (${pickupLat}, ${pickupLon}) → "${pickupAddress}" (source: ${pickupGeo.source})`,
+    );
+    this.logger.log(
+      `[BOOKING] Re-geocoded dropoff: (${dropoffLat}, ${dropoffLon}) → "${dropoffAddress}" (source: ${dropoffGeo.source}) - ${geocodeDuration}ms`,
+    );
 
     /* 5 ── Get price estimate from ML API ──── */
+    const pricingStart = Date.now();
+    this.logger.log(
+      `[BOOKING] Fetching price estimate for ${vehicleClass.name}`,
+    );
     const pricingResult = await this.pricing.estimate({
       pickupLat,
       pickupLon,
@@ -94,6 +174,10 @@ export class CreateRideUseCase {
       carType: vehicleClass.name.toLowerCase().replace(/\s+/g, '_'),
       bookingDt: dto.scheduled_at,
     });
+    const pricingDuration = Date.now() - pricingStart;
+    this.logger.log(
+      `[BOOKING] Price estimate received: ${pricingResult.finalPrice} TND - ${pricingDuration}ms`,
+    );
 
     /* 6 ── Persist ride ─────────────────────── */
     const isAdminCreated = currentUser.role === UserRole.SUPER_ADMIN;
@@ -120,9 +204,10 @@ export class CreateRideUseCase {
     });
 
     const saved = await this.rideRepo.save(ride);
+    const totalDuration = Date.now() - startTime;
 
     this.logger.log(
-      `Ride ${saved.id} created — passenger=${passengerId} class=${vehicleClass.name} est=${pricingResult.finalPrice} TND`,
+      `[BOOKING] Ride ${saved.id} created successfully - passenger=${passengerId} class=${vehicleClass.name} price=${pricingResult.finalPrice} TND surge=${pricingResult.surgeMultiplier} loyalty=${pricingResult.loyaltyPoints} - ${totalDuration}ms total`,
     );
 
     return this.rideRepo.findOne({
@@ -141,5 +226,82 @@ export class CreateRideUseCase {
       return dto.passenger_id;
     }
     return user.id;
+  }
+
+  /** Check if coordinates are within Tunisia's service area (bounding box) */
+  private isInServiceArea(lat: number, lon: number): boolean {
+    // Tunisia bounding box: lat 30.2-37.5, lon 7.5-11.6
+    return lat >= 30.2 && lat <= 37.5 && lon >= 7.5 && lon <= 11.6;
+  }
+
+  /** Detect if coordinates are suspicious (ocean, invalid, or manipulated) */
+  private isSuspiciousLocation(
+    lat: number,
+    lon: number,
+  ): { suspicious: boolean; reason?: string } {
+    // Check for ocean coordinates using a simple heuristic
+    // Tunisia is landlocked within Mediterranean, coordinates should be valid land
+
+    // Check if coordinates are exactly at origin (suspicious default)
+    if (lat === 0 && lon === 0) {
+      return { suspicious: true, reason: 'Coordinates at origin (0,0)' };
+    }
+
+    // Check for invalid latitude ranges
+    if (lat < -90 || lat > 90) {
+      return { suspicious: true, reason: 'Invalid latitude range' };
+    }
+
+    // Check for invalid longitude ranges
+    if (lon < -180 || lon > 180) {
+      return { suspicious: true, reason: 'Invalid longitude range' };
+    }
+
+    // Check for coordinates with excessive precision (possible GPS spoofing)
+    // Normal GPS has ~6 decimal places (1m precision), 10+ decimal places is suspicious
+    const latStr = lat.toString();
+    const lonStr = lon.toString();
+    const latDecimals = latStr.includes('.') ? latStr.split('.')[1].length : 0;
+    const lonDecimals = lonStr.includes('.') ? lonStr.split('.')[1].length : 0;
+
+    if (latDecimals > 8 || lonDecimals > 8) {
+      return {
+        suspicious: true,
+        reason: 'Excessive coordinate precision (possible spoofing)',
+      };
+    }
+
+    // Check for coordinates outside reasonable bounds for Tunisia
+    // While isInServiceArea checks exact bounds, this checks for obviously wrong coordinates
+    if (lat < 25 || lat > 40 || lon < 5 || lon > 15) {
+      return {
+        suspicious: true,
+        reason: 'Coordinates outside reasonable Tunisia region',
+      };
+    }
+
+    // Check if coordinates are in ocean (simplified check for Mediterranean)
+    // Tunisia's coastline is roughly at these coordinates
+    // This is a basic heuristic - in production, use a proper ocean mask
+    const oceanZones = [
+      { latRange: [33, 38], lonRange: [8, 13] }, // Mediterranean near Tunisia
+    ];
+
+    for (const zone of oceanZones) {
+      if (
+        lat >= zone.latRange[0] &&
+        lat <= zone.latRange[1] &&
+        lon >= zone.lonRange[0] &&
+        lon <= zone.lonRange[1]
+      ) {
+        // This is a very rough approximation - in production use proper GIS data
+        // For now, we'll flag it as potentially suspicious but not block
+        this.logger.warn(
+          `[BOOKING] Coordinates in potential ocean zone: (${lat}, ${lon})`,
+        );
+      }
+    }
+
+    return { suspicious: false };
   }
 }

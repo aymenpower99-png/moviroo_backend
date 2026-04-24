@@ -5,6 +5,8 @@ import {
   IsUUID,
   IsNumber,
   IsDateString,
+  Min,
+  Max,
 } from 'class-validator';
 
 export class CreateRideDto {
@@ -17,30 +19,40 @@ export class CreateRideDto {
   @IsNotEmpty()
   class_id: string;
 
-  @IsString()
+  /** Pickup coordinates (required - backend will re-geocode for display name) */
+  @IsNumber()
+  @Min(-90)
+  @Max(90)
   @IsNotEmpty()
-  pickup_address: string;
+  pickup_lat: number;
 
-  @IsString()
+  @IsNumber()
+  @Min(-180)
+  @Max(180)
   @IsNotEmpty()
-  dropoff_address: string;
+  pickup_lon: number;
 
-  /** Optional – if omitted the address is geocoded automatically */
-  @IsOptional()
+  /** Dropoff coordinates (required - backend will re-geocode for display name) */
   @IsNumber()
-  pickup_lat?: number;
+  @Min(-90)
+  @Max(90)
+  @IsNotEmpty()
+  dropoff_lat: number;
+
+  @IsNumber()
+  @Min(-180)
+  @Max(180)
+  @IsNotEmpty()
+  dropoff_lon: number;
+
+  /** Optional display names (will be overwritten by backend re-geocoding) */
+  @IsOptional()
+  @IsString()
+  pickup_address?: string;
 
   @IsOptional()
-  @IsNumber()
-  pickup_lon?: number;
-
-  @IsOptional()
-  @IsNumber()
-  dropoff_lat?: number;
-
-  @IsOptional()
-  @IsNumber()
-  dropoff_lon?: number;
+  @IsString()
+  dropoff_address?: string;
 
   /** ISO-8601 datetime — when the passenger wants the ride */
   @IsDateString()

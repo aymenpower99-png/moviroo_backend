@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { CacheModule } from '@nestjs/cache-manager';
 
 import { Ride } from './domain/entities/ride.entity';
 import { PassengerEntity } from '../passenger/entities/passengers.entity';
@@ -34,6 +35,11 @@ import { ClassesModule } from '../classes/classes.module';
       DriverLocation,
       Driver,
     ]),
+    CacheModule.register({
+      isGlobal: true,
+      ttl: 300, // 5 minutes default TTL
+      max: 100, // Maximum number of items in cache
+    }),
     DispatchModule,
     ClassesModule,
   ],

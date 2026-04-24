@@ -14,6 +14,7 @@ import {
   HttpCode,
   Query,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { AuthGuard } from '@nestjs/passport';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -36,6 +37,7 @@ import { CancelRideUseCase } from './application/use-cases/cancel-ride.use-case'
 import { GetVehiclePricesUseCase } from './application/use-cases/get-vehicle-prices.use-case';
 import { DispatchOffer } from '../dispatch/domain/entities/dispatch-offer.entity';
 import { TripPayment } from '../billing/entities/trip-payment.entity';
+import { GeocodingService } from './infrastructure/services/geocoding.service';
 
 @Controller('rides')
 export class RidesController {
@@ -44,6 +46,7 @@ export class RidesController {
     private readonly confirmRideUC: ConfirmRideUseCase,
     private readonly cancelRideUC: CancelRideUseCase,
     private readonly getVehiclePricesUC: GetVehiclePricesUseCase,
+    private readonly geocodingService: GeocodingService,
     @InjectRepository(Ride)
     private readonly rideRepo: Repository<Ride>,
     @InjectRepository(DispatchOffer)
@@ -55,10 +58,28 @@ export class RidesController {
   /* ─── Get vehicle class prices by coordinates ───────────────────── */
   @Get('pricing')
   @UseGuards(AuthGuard('jwt'))
+  @Throttle({ default: { limit: 30, ttl: 60 } }) // 30 requests per minute
   async getVehiclePrices(
     @Query() dto: GetVehiclePricesDto,
   ): Promise<GetVehiclePricesResponse> {
     return this.getVehiclePricesUC.execute(dto);
+  }
+
+  /* ─── Reverse geocoding: lat/lon → address ───────────────────────── */
+  @Get('geocode/reverse')
+  @Throttle({ default: { limit: 100, ttl: 60 } }) // 100 requests per minute
+  async reverseGeocode(
+    @Query('lat', ParseFloatPipe) lat: number,
+    @Query('lon', ParseFloatPipe) lon: number,
+  ) {
+    return this.geocodingService.reverse(lat, lon);
+  }
+
+  /* ─── Autocomplete search: query → merged results ───────────────────── */
+  @Get('geocode/autocomplete')
+  @Throttle({ default: { limit: 50, ttl: 60 } }) // 50 requests per minute
+  async autocomplete(@Query('q') query: string) {
+    return this.geocodingService.autocomplete(query);
   }
 
   /* ─── Create a new ride ───────────────────── */
