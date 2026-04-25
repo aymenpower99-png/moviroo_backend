@@ -1,8 +1,18 @@
 import {
-  Controller, Get, Post, Patch, Delete,
-  Param, Body, ParseUUIDPipe, UseGuards,
-  HttpCode, HttpStatus, UploadedFile,
-  UseInterceptors, BadRequestException,
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Delete,
+  Param,
+  Body,
+  ParseUUIDPipe,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
+  UploadedFile,
+  UseInterceptors,
+  BadRequestException,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -63,6 +73,14 @@ export class ClassesController {
     return this.classesService.findAll();
   }
 
+  // ── GET /admin/classes/active-multipliers ─────────────────────────────────
+  // Returns active classes with multipliers for ML pricing
+  // Must be BEFORE :id to avoid route conflict
+  @Get('active-multipliers')
+  getActiveClassesWithMultipliers() {
+    return this.classesService.getActiveClassesWithMultipliers();
+  }
+
   // ── GET /admin/classes/:id/detail ─────────────────────────────────────────
   // Must be BEFORE :id to avoid route conflict
   @Get(':id/detail')
@@ -84,10 +102,7 @@ export class ClassesController {
 
   // ── PATCH /admin/classes/:id ──────────────────────────────────────────────
   @Patch(':id')
-  update(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: UpdateClassDto,
-  ) {
+  update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateClassDto) {
     return this.classesService.update(id, dto);
   }
 

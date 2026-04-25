@@ -48,6 +48,11 @@ export class DispatchRideUseCase {
       `🚀 Dispatch started for ride ${ride.id} (radius=${maxRadiusKm}km)`,
     );
 
+    if (!ride.classId) {
+      this.logger.warn(`Ride ${ride.id} has no classId - skipping dispatch`);
+      return { assigned: false, offersLog: [] };
+    }
+
     const eligible = await this.findDrivers.execute(
       ride.id,
       ride.classId,

@@ -3,6 +3,7 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
 import { HaversineService } from './haversine.service';
 import { withRetry } from '../../../common/utils/retry.util';
+import { ClassesService } from '../../../classes/classes.service';
 
 export interface PricingRequest {
   pickupLat: number;
@@ -62,6 +63,7 @@ export class PricingService {
   constructor(
     private readonly haversine: HaversineService,
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
+    private readonly classesService: ClassesService,
   ) {}
 
   /** Call ML API; fall back to business rules if unavailable - CACHED */
@@ -69,6 +71,14 @@ export class PricingService {
     const startTime = Date.now();
     this.logger.log(
       `[PRICING] Estimate request: ${req.carType} from (${req.pickupLat}, ${req.pickupLon}) to (${req.dropoffLat}, ${req.dropoffLon})`,
+    );
+
+    // Validate coordinates BEFORE any caching or ML call
+    this.validateCoordinates(
+      req.pickupLat,
+      req.pickupLon,
+      req.dropoffLat,
+      req.dropoffLon,
     );
 
     // Check cache first (shorter TTL for pricing since it can change)
@@ -122,6 +132,14 @@ export class PricingService {
       `[PRICING] Batch estimate request: ${req.carTypes.join(', ')} from (${req.pickupLat}, ${req.pickupLon}) to (${req.dropoffLat}, ${req.dropoffLon})`,
     );
 
+    // Validate coordinates BEFORE any caching or ML call
+    this.validateCoordinates(
+      req.pickupLat,
+      req.pickupLon,
+      req.dropoffLat,
+      req.dropoffLon,
+    );
+
     // Check cache first
     const carTypesKey = req.carTypes.sort().join(',');
     const cacheKey = `batch_pricing:${req.pickupLat.toFixed(6)}:${req.pickupLon.toFixed(6)}:${req.dropoffLat.toFixed(6)}:${req.dropoffLon.toFixed(6)}:${carTypesKey}:${req.bookingDt ?? 'now'}`;
@@ -160,6 +178,46 @@ export class PricingService {
       );
       return fallbackResult;
     }
+  }
+
+  /**
+   * Get pricing for ALL active car classes from database.
+   * Fetches car classes dynamically from DB and calls batch pricing.
+   * Used by passenger flow to show all available options.
+   */
+  async estimateAllActiveClasses(
+    pickupLat: number,
+    pickupLon: number,
+    dropoffLat: number,
+    dropoffLon: number,
+    bookingDt?: string,
+  ): Promise<BatchPricingResult> {
+    this.logger.log(
+      `[PRICING] Estimate all active classes from (${pickupLat}, ${pickupLon}) to (${dropoffLat}, ${dropoffLon})`,
+    );
+
+    // Fetch all active car classes with multipliers from database
+    const classes = await this.classesService.getActiveClassesWithMultipliers();
+
+    if (classes.length === 0) {
+      this.logger.warn('[PRICING] No active car classes found in database');
+      throw new Error('No active car classes available');
+    }
+
+    const carTypes = classes.map((c) => normalizeCarType(c.name));
+    this.logger.log(
+      `[PRICING] Found ${classes.length} active classes: ${carTypes.join(', ')}`,
+    );
+
+    // Call batch pricing with all active car types
+    return await this.batchEstimate({
+      pickupLat,
+      pickupLon,
+      dropoffLat,
+      dropoffLon,
+      carTypes,
+      bookingDt,
+    });
   }
 
   /* ── ML API call ──────────────────────────── */
@@ -342,6 +400,60 @@ export class PricingService {
     van: 1.3,
     mini_bus: 1.5,
   };
+
+  /**
+   * Validate that coordinates are valid before sending to ML / OSRM.
+   * Throws BadRequestException with explicit message if invalid.
+   * Rules:
+   *   - Must be defined and finite
+   *   - Cannot be (0,0) — typical fallback for missing data
+   *   - Must be in geographic bounds (-90..90, -180..180)
+   *   - Pickup and dropoff cannot be identical (zero-distance trip)
+   */
+  private validateCoordinates(
+    pickupLat: number,
+    pickupLon: number,
+    dropoffLat: number,
+    dropoffLon: number,
+  ): void {
+    const isInvalid = (lat: number, lon: number) =>
+      lat === undefined ||
+      lat === null ||
+      lon === undefined ||
+      lon === null ||
+      !Number.isFinite(lat) ||
+      !Number.isFinite(lon) ||
+      (lat === 0 && lon === 0) ||
+      lat < -90 ||
+      lat > 90 ||
+      lon < -180 ||
+      lon > 180;
+
+    if (isInvalid(pickupLat, pickupLon)) {
+      this.logger.error(
+        `[PRICING] Invalid pickup coordinates: (${pickupLat}, ${pickupLon})`,
+      );
+      throw new Error(
+        `Invalid pickup coordinates (${pickupLat}, ${pickupLon}). Must be valid lat/lon, not (0,0).`,
+      );
+    }
+
+    if (isInvalid(dropoffLat, dropoffLon)) {
+      this.logger.error(
+        `[PRICING] Invalid dropoff coordinates: (${dropoffLat}, ${dropoffLon})`,
+      );
+      throw new Error(
+        `Invalid dropoff coordinates (${dropoffLat}, ${dropoffLon}). Must be valid lat/lon, not (0,0).`,
+      );
+    }
+
+    if (pickupLat === dropoffLat && pickupLon === dropoffLon) {
+      this.logger.error(
+        `[PRICING] Pickup and dropoff are identical: (${pickupLat}, ${pickupLon})`,
+      );
+      throw new Error('Pickup and dropoff coordinates cannot be identical.');
+    }
+  }
 }
 
 /** Normalize a DB class name ("First Class", "Economy") to ML API key. */

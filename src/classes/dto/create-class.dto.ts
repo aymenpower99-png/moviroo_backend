@@ -1,7 +1,15 @@
 import {
-  IsString, IsOptional, IsBoolean, IsInt,
-  MinLength, MaxLength, Min, Max,
-  IsArray, ValidateNested,
+  IsString,
+  IsOptional,
+  IsBoolean,
+  IsInt,
+  IsNumber,
+  MinLength,
+  MaxLength,
+  Min,
+  Max,
+  IsArray,
+  ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -24,28 +32,42 @@ export class CreateClassDto {
   @MaxLength(500)
   imageUrl?: string;
 
-  @IsOptional() @IsInt() @Min(1) @Max(50)
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(50)
   seats?: number;
 
-  @IsOptional() @IsInt() @Min(0) @Max(20)
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(20)
   bags?: number;
 
-  @IsOptional() @IsBoolean()
+  @IsOptional()
+  @IsBoolean()
   wifi?: boolean;
 
-  @IsOptional() @IsBoolean()
+  @IsOptional()
+  @IsBoolean()
   ac?: boolean;
 
-  @IsOptional() @IsBoolean()
+  @IsOptional()
+  @IsBoolean()
   water?: boolean;
 
-  @IsOptional() @IsInt() @Min(0) @Max(120)
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(120)
   freeWaitingTime?: number;
 
-  @IsOptional() @IsBoolean()
+  @IsOptional()
+  @IsBoolean()
   doorToDoor?: boolean;
 
-  @IsOptional() @IsBoolean()
+  @IsOptional()
+  @IsBoolean()
   meetAndGreet?: boolean;
 
   @IsOptional()
@@ -59,4 +81,10 @@ export class CreateClassDto {
   @ValidateNested({ each: true })
   @Type(() => ExtraFeatureItemDto)
   extraServices?: ExtraFeatureItemDto[];
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0.1)
+  @Max(10.0)
+  multiplier?: number;
 }

@@ -41,25 +41,28 @@ export class GetVehiclePricesUseCase {
       };
     }
 
+    // 2. Normalize and deduplicate car types before sending to ML
+    const rawCarTypes = vehicleClasses.map((v) => v.name);
+    const normalizedTypes = rawCarTypes.map((name) => normalizeCarType(name));
+    const uniqueCarTypes = Array.from(new Set(normalizedTypes));
+
     this.logger.log(
-      `Batch pricing for ${vehicleClasses.length} vehicle classes: ${vehicleClasses
-        .map((v) => v.name)
-        .join(', ')}`,
+      `Batch pricing for ${vehicleClasses.length} vehicle classes (deduplicated to ${uniqueCarTypes.length}): ${uniqueCarTypes.join(', ')}`,
     );
 
-    // 2. Single batch call to ML API for all car types
+    // 3. Single batch call to ML API for all car types
     const batchReq: BatchPricingRequest = {
       pickupLat: dto.pickupLat,
       pickupLon: dto.pickupLon,
       dropoffLat: dto.dropoffLat,
       dropoffLon: dto.dropoffLon,
-      carTypes: vehicleClasses.map((v) => v.name),
+      carTypes: uniqueCarTypes,
       bookingDt: dto.bookingDt,
     };
 
     const batchResult = await this.pricingService.batchEstimate(batchReq);
 
-    // 3. Index prices by normalized car type for O(1) lookup
+    // 4. Index prices by normalized car type for O(1) lookup
     const priceByCarType = new Map<string, BatchPricingItem>();
     for (const item of batchResult.items) {
       priceByCarType.set(normalizeCarType(item.carType), item);
@@ -103,6 +106,27 @@ export class GetVehiclePricesUseCase {
       dropoffLat: dto.dropoffLat,
       dropoffLon: dto.dropoffLon,
     };
+  }
+
+  /**
+   * Alternative method that accepts individual parameters instead of DTO.
+   * Used by the /pricing/all endpoint for passenger flow.
+   */
+  async executeAll(
+    pickupLat: number,
+    pickupLon: number,
+    dropoffLat: number,
+    dropoffLon: number,
+    bookingDt?: string,
+  ): Promise<GetVehiclePricesResponse> {
+    const dto: GetVehiclePricesDto = {
+      pickupLat,
+      pickupLon,
+      dropoffLat,
+      dropoffLon,
+      bookingDt,
+    };
+    return this.execute(dto);
   }
 }
 

@@ -65,6 +65,26 @@ export class RidesController {
     return this.getVehiclePricesUC.execute(dto);
   }
 
+  /* ─── Get pricing for ALL active car classes (passenger flow) ──────── */
+  @Get('pricing/all')
+  @UseGuards(AuthGuard('jwt'))
+  @Throttle({ default: { limit: 30, ttl: 60 } }) // 30 requests per minute
+  async getAllVehiclePrices(
+    @Query('pickupLat', ParseFloatPipe) pickupLat: number,
+    @Query('pickupLon', ParseFloatPipe) pickupLon: number,
+    @Query('dropoffLat', ParseFloatPipe) dropoffLat: number,
+    @Query('dropoffLon', ParseFloatPipe) dropoffLon: number,
+    @Query('bookingDt') bookingDt?: string,
+  ) {
+    return this.getVehiclePricesUC.executeAll(
+      pickupLat,
+      pickupLon,
+      dropoffLat,
+      dropoffLon,
+      bookingDt,
+    );
+  }
+
   /* ─── Reverse geocoding: lat/lon → address ───────────────────────── */
   @Get('geocode/reverse')
   @Throttle({ default: { limit: 100, ttl: 60 } }) // 100 requests per minute
@@ -80,6 +100,13 @@ export class RidesController {
   @Throttle({ default: { limit: 50, ttl: 60 } }) // 50 requests per minute
   async autocomplete(@Query('q') query: string) {
     return this.geocodingService.autocomplete(query);
+  }
+
+  /* ─── Parallel search: query → Mapbox + Nominatim merged results ───── */
+  @Get('geocode/search')
+  @Throttle({ default: { limit: 50, ttl: 60 } }) // 50 requests per minute
+  async search(@Query('q') query: string) {
+    return this.geocodingService.autocompleteParallel(query);
   }
 
   /* ─── Create a new ride ───────────────────── */

@@ -15,9 +15,9 @@ export class CreateRideDto {
   @IsUUID()
   passenger_id?: string;
 
+  @IsOptional()
   @IsUUID()
-  @IsNotEmpty()
-  class_id: string;
+  class_id?: string;
 
   /** Pickup coordinates (required - backend will re-geocode for display name) */
   @IsNumber()

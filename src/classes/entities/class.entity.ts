@@ -37,7 +37,12 @@ export class VehicleClass {
   water: boolean;
 
   // ─── Service Features ─────────────────────────────────────────────────────
-  @Column({ name: 'free_waiting_time', type: 'int', default: 5, comment: 'minutes' })
+  @Column({
+    name: 'free_waiting_time',
+    type: 'int',
+    default: 5,
+    comment: 'minutes',
+  })
   freeWaitingTime: number;
 
   @Column({ name: 'door_to_door', type: 'boolean', default: true })
@@ -51,6 +56,16 @@ export class VehicleClass {
 
   @Column({ name: 'extra_services', type: 'jsonb', default: [] })
   extraServices: { name: string; enabled: boolean }[];
+
+  // ─── Pricing Multiplier (for ML pricing) ───────────────────────────────────
+  @Column({
+    name: 'multiplier',
+    type: 'decimal',
+    precision: 4,
+    scale: 2,
+    default: 1.0,
+  })
+  multiplier: number;
 
   // ─── Relation: One Class → Many Vehicles ──────────────────────────────────
   @OneToMany(() => Vehicle, (vehicle) => vehicle.vehicleClass, { lazy: true })

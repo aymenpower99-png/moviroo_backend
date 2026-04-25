@@ -27,6 +27,7 @@ import { HelpCenterModule } from './help-center/help-center.module';
 import { EarningsModule } from './earnings/earnings.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { ChatModule } from './chat/chat.module';
+import { PlacesModule } from './places/places.module';
 
 @Module({
   imports: [
@@ -57,6 +58,7 @@ import { ChatModule } from './chat/chat.module';
     EarningsModule,
     NotificationsModule,
     ChatModule,
+    PlacesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

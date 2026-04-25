@@ -52,17 +52,30 @@ export class CreateRideUseCase {
       throw new NotFoundException('Passenger profile not found for this user');
     }
 
-    /* 3 ── Verify vehicle class ─────────────── */
-    const vehicleClass = await this.classRepo.findOne({
-      where: { id: dto.class_id },
-    });
-    if (!vehicleClass) {
-      this.logger.error(`[BOOKING] Vehicle class not found: ${dto.class_id}`);
-      throw new NotFoundException(`Vehicle class ${dto.class_id} not found`);
+    /* 3 ── Verify vehicle class (if provided) ─────────────── */
+    let vehicleClass: VehicleClass | null = null;
+    if (dto.class_id) {
+      vehicleClass = await this.classRepo.findOne({
+        where: { id: dto.class_id },
+      });
+      if (!vehicleClass) {
+        this.logger.error(`[BOOKING] Vehicle class not found: ${dto.class_id}`);
+        throw new NotFoundException(`Vehicle class ${dto.class_id} not found`);
+      }
+      this.logger.log(`[BOOKING] Vehicle class verified: ${vehicleClass.name}`);
+    } else {
+      this.logger.log(
+        `[BOOKING] No vehicle class provided - will be set during confirmation`,
+      );
     }
-    this.logger.log(`[BOOKING] Vehicle class verified: ${vehicleClass.name}`);
 
-    /* 4 ── Validate coordinates and re-geocode for display names ──── */
+    /* 4 ── Validate coordinates ───────────────────── */
+    this.validateCoordinates(dto);
+
+    /* 5 ── Validate datetime ───────────────────── */
+    this.validateDatetime(dto);
+
+    /* 6 ── Validate coordinates are in service area ──── */
     const geocodeStart = Date.now();
     const pickupLat = dto.pickup_lat;
     const pickupLon = dto.pickup_lon;
@@ -108,59 +121,50 @@ export class CreateRideUseCase {
       );
     }
 
-    // Re-geocode coordinates to get display names (backend validation)
-    this.logger.log(`[BOOKING] Re-geocoding pickup and dropoff locations`);
-    const pickupGeo = await this.geocoding.reverse(pickupLat, pickupLon);
-    const dropoffGeo = await this.geocoding.reverse(dropoffLat, dropoffLon);
-    const geocodeDuration = Date.now() - geocodeStart;
-
-    if (!pickupGeo) {
-      this.logger.error(
-        `[BOOKING] Could not validate pickup location: (${pickupLat}, ${pickupLon})`,
+    /* 6 ── Get price estimate from ML API (if class provided) ──── */
+    let pricingResult;
+    if (vehicleClass) {
+      const pricingStart = Date.now();
+      this.logger.log(
+        `[BOOKING] Fetching price estimate for ${vehicleClass.name}`,
       );
-      throw new BadRequestException(
-        'Could not validate pickup location via reverse geocoding',
+      pricingResult = await this.pricing.estimate({
+        pickupLat,
+        pickupLon,
+        dropoffLat,
+        dropoffLon,
+        carType: vehicleClass.name.toLowerCase().replace(/\s+/g, '_'),
+        bookingDt: dto.scheduled_at,
+      });
+      const pricingDuration = Date.now() - pricingStart;
+      this.logger.log(
+        `[BOOKING] Price estimate received: ${pricingResult.finalPrice} TND - ${pricingDuration}ms`,
       );
+    } else {
+      this.logger.log(`[BOOKING] No vehicle class - skipping pricing estimate`);
+      pricingResult = {
+        finalPrice: 0,
+        exactPrice: 0,
+        loyaltyPoints: 0,
+        surgeMultiplier: 1.0,
+        distanceKm: 0,
+        durationMin: 0,
+        fullResponse: { skipped: true, reason: 'No vehicle class provided' },
+      };
     }
-    if (!dropoffGeo) {
-      this.logger.error(
-        `[BOOKING] Could not validate dropoff location: (${dropoffLat}, ${dropoffLon})`,
-      );
-      throw new BadRequestException(
-        'Could not validate dropoff location via reverse geocoding',
-      );
-    }
 
-    // Use backend-validated addresses
-    const pickupAddress = pickupGeo.display_name;
-    const dropoffAddress = dropoffGeo.display_name;
+    /* 7 ── Use display names from DTO or generate fallback ─────── */
+    const pickupAddress =
+      dto.pickup_address ||
+      this.generateFallbackAddress(pickupLat, pickupLon, 'Pickup');
+    const dropoffAddress =
+      dto.dropoff_address ||
+      this.generateFallbackAddress(dropoffLat, dropoffLon, 'Dropoff');
 
-    this.logger.log(
-      `[BOOKING] Re-geocoded pickup: (${pickupLat}, ${pickupLon}) → "${pickupAddress}"`,
-    );
-    this.logger.log(
-      `[BOOKING] Re-geocoded dropoff: (${dropoffLat}, ${dropoffLon}) → "${dropoffAddress}" - ${geocodeDuration}ms`,
-    );
+    this.logger.log(`[BOOKING] Using pickup address: "${pickupAddress}"`);
+    this.logger.log(`[BOOKING] Using dropoff address: "${dropoffAddress}"`);
 
-    /* 5 ── Get price estimate from ML API ──── */
-    const pricingStart = Date.now();
-    this.logger.log(
-      `[BOOKING] Fetching price estimate for ${vehicleClass.name}`,
-    );
-    const pricingResult = await this.pricing.estimate({
-      pickupLat,
-      pickupLon,
-      dropoffLat,
-      dropoffLon,
-      carType: vehicleClass.name.toLowerCase().replace(/\s+/g, '_'),
-      bookingDt: dto.scheduled_at,
-    });
-    const pricingDuration = Date.now() - pricingStart;
-    this.logger.log(
-      `[BOOKING] Price estimate received: ${pricingResult.finalPrice} TND - ${pricingDuration}ms`,
-    );
-
-    /* 6 ── Persist ride ─────────────────────── */
+    /* 8 ── Persist ride ─────────────────────── */
     const isAdminCreated = currentUser.role === UserRole.SUPER_ADMIN;
 
     const ride = this.rideRepo.create({
@@ -188,7 +192,7 @@ export class CreateRideUseCase {
     const totalDuration = Date.now() - startTime;
 
     this.logger.log(
-      `[BOOKING] Ride ${saved.id} created successfully - passenger=${passengerId} class=${vehicleClass.name} price=${pricingResult.finalPrice} TND surge=${pricingResult.surgeMultiplier} loyalty=${pricingResult.loyaltyPoints} - ${totalDuration}ms total`,
+      `[BOOKING] Ride ${saved.id} created successfully - passenger=${passengerId} class=${vehicleClass?.name ?? 'pending'} price=${pricingResult.finalPrice} TND surge=${pricingResult.surgeMultiplier} loyalty=${pricingResult.loyaltyPoints} - ${totalDuration}ms total`,
     );
 
     return this.rideRepo.findOne({
@@ -207,6 +211,107 @@ export class CreateRideUseCase {
       return dto.passenger_id;
     }
     return user.id;
+  }
+
+  /** Validate that coordinates are present and valid */
+  private validateCoordinates(dto: CreateRideDto): void {
+    const errors: string[] = [];
+
+    // Check pickup coordinates
+    if (dto.pickup_lat === null || dto.pickup_lat === undefined) {
+      errors.push('pickup_lat is required');
+    } else if (isNaN(dto.pickup_lat)) {
+      errors.push('pickup_lat must be a valid number');
+    } else if (dto.pickup_lat < -90 || dto.pickup_lat > 90) {
+      errors.push('pickup_lat must be between -90 and 90');
+    }
+
+    if (dto.pickup_lon === null || dto.pickup_lon === undefined) {
+      errors.push('pickup_lon is required');
+    } else if (isNaN(dto.pickup_lon)) {
+      errors.push('pickup_lon must be a valid number');
+    } else if (dto.pickup_lon < -180 || dto.pickup_lon > 180) {
+      errors.push('pickup_lon must be between -180 and 180');
+    }
+
+    // Check dropoff coordinates
+    if (dto.dropoff_lat === null || dto.dropoff_lat === undefined) {
+      errors.push('dropoff_lat is required');
+    } else if (isNaN(dto.dropoff_lat)) {
+      errors.push('dropoff_lat must be a valid number');
+    } else if (dto.dropoff_lat < -90 || dto.dropoff_lat > 90) {
+      errors.push('dropoff_lat must be between -90 and 90');
+    }
+
+    if (dto.dropoff_lon === null || dto.dropoff_lon === undefined) {
+      errors.push('dropoff_lon is required');
+    } else if (isNaN(dto.dropoff_lon)) {
+      errors.push('dropoff_lon must be a valid number');
+    } else if (dto.dropoff_lon < -180 || dto.dropoff_lon > 180) {
+      errors.push('dropoff_lon must be between -180 and 180');
+    }
+
+    if (errors.length > 0) {
+      this.logger.error(
+        `[BOOKING] Coordinate validation failed: ${errors.join(', ')}`,
+      );
+      throw new BadRequestException(
+        `Invalid coordinates: ${errors.join(', ')}`,
+      );
+    }
+
+    this.logger.log(`[BOOKING] Coordinates validated successfully`);
+  }
+
+  /** Validate that datetime is present and valid */
+  private validateDatetime(dto: CreateRideDto): void {
+    if (!dto.scheduled_at) {
+      this.logger.error(`[BOOKING] Datetime is required`);
+      throw new BadRequestException('Datetime is required for booking');
+    }
+
+    const scheduledDate = new Date(dto.scheduled_at);
+    const now = new Date();
+
+    // Check if datetime is valid
+    if (isNaN(scheduledDate.getTime())) {
+      this.logger.error(
+        `[BOOKING] Invalid datetime format: ${dto.scheduled_at}`,
+      );
+      throw new BadRequestException('Invalid datetime format');
+    }
+
+    // Check if datetime is in the past
+    if (scheduledDate < now) {
+      this.logger.error(
+        `[BOOKING] Datetime is in the past: ${dto.scheduled_at}`,
+      );
+      throw new BadRequestException('Datetime cannot be in the past');
+    }
+
+    // Check if datetime is too far in the future (max 30 days)
+    const maxFutureDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+    if (scheduledDate > maxFutureDate) {
+      this.logger.error(
+        `[BOOKING] Datetime is too far in the future: ${dto.scheduled_at}`,
+      );
+      throw new BadRequestException(
+        'Datetime cannot be more than 30 days in the future',
+      );
+    }
+
+    this.logger.log(
+      `[BOOKING] Datetime validated successfully: ${dto.scheduled_at}`,
+    );
+  }
+
+  /** Generate fallback address from coordinates when display name is not provided */
+  private generateFallbackAddress(
+    lat: number,
+    lon: number,
+    locationType: string,
+  ): string {
+    return `${locationType} Location (${lat.toFixed(4)}, ${lon.toFixed(4)})`;
   }
 
   /** Check if coordinates are within Tunisia's service area (bounding box) */
