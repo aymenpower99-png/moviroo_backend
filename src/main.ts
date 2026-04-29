@@ -1,18 +1,16 @@
 import { ValidationPipe } from '@nestjs/common';
-import { NestFactory }    from '@nestjs/core';
+import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
-import { AppModule }      from './app.module';
-import * as bodyParser    from 'body-parser';
-import { join }           from 'path';
+import { AppModule } from './app.module';
+import * as bodyParser from 'body-parser';
+import { join } from 'path';
 import { existsSync, mkdirSync } from 'fs';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
   // ─── Ensure upload folders exist ─────────────────────────────
-  const uploadDirs = [
-    join(process.cwd(), 'uploads', 'classes'),
-  ];
+  const uploadDirs = [join(process.cwd(), 'uploads', 'classes')];
   for (const dir of uploadDirs) {
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   }
@@ -26,19 +24,25 @@ async function bootstrap() {
   app.use(bodyParser.urlencoded({ extended: true, limit: '10mb' }));
 
   app.enableCors({
-    origin: ['http://localhost:5173', 'http://localhost:5174'],
+    origin: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'ngrok-skip-browser-warning',
+    ],
     credentials: true,
   });
 
   app.setGlobalPrefix('api');
 
-  app.useGlobalPipes(new ValidationPipe({
-    whitelist: true,
-    forbidNonWhitelisted: true,
-    transform: true,
-  }));
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
+  );
 
   await app.listen(3000);
   console.log('🚀 Moviroo backend running on http://localhost:3000/api');

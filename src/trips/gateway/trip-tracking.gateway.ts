@@ -25,7 +25,6 @@ interface GpsPayload {
 
 @WebSocketGateway({
   cors: { origin: '*' },
-  namespace: '/trips',
 })
 export class TripTrackingGateway
   implements OnGatewayConnection, OnGatewayDisconnect
@@ -53,11 +52,14 @@ export class TripTrackingGateway
   /* ── Connection lifecycle ──── */
 
   handleConnection(client: Socket) {
-    this.logger.debug(`Client connected: ${client.id}`);
+    this.logger.log(`Client connected: ${client.id}`);
+    this.logger.log(`Client handshake: ${JSON.stringify(client.handshake)}`);
+    this.logger.log(`Client rooms on connect: ${Array.from(client.rooms)}`);
   }
 
   handleDisconnect(client: Socket) {
-    this.logger.debug(`Client disconnected: ${client.id}`);
+    this.logger.log(`Client disconnected: ${client.id}`);
+    this.logger.log(`Client rooms on disconnect: ${Array.from(client.rooms)}`);
   }
 
   /* ── Join ride room (both driver & passenger call this) ──── */
@@ -66,9 +68,16 @@ export class TripTrackingGateway
     @ConnectedSocket() client: Socket,
     @MessageBody() data: { ride_id: string },
   ) {
-    if (!data?.ride_id) return;
+    this.logger.log(
+      `Join room request from client ${client.id}: ${JSON.stringify(data)}`,
+    );
+    if (!data?.ride_id) {
+      this.logger.warn(`Join room failed: missing ride_id`);
+      return;
+    }
     client.join(`ride:${data.ride_id}`);
-    this.logger.debug(`${client.id} joined room ride:${data.ride_id}`);
+    this.logger.log(`${client.id} joined room ride:${data.ride_id}`);
+    this.logger.log(`Client rooms after join: ${Array.from(client.rooms)}`);
     return { event: 'joined', data: { ride_id: data.ride_id } };
   }
 
@@ -89,7 +98,16 @@ export class TripTrackingGateway
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: GpsPayload,
   ) {
-    if (!payload?.ride_id || payload.latitude == null || payload.longitude == null) {
+    this.logger.log(
+      `GPS received from client ${client.id}: ride_id=${payload.ride_id}, lat=${payload.latitude}, lng=${payload.longitude}`,
+    );
+
+    if (
+      !payload?.ride_id ||
+      payload.latitude == null ||
+      payload.longitude == null
+    ) {
+      this.logger.warn(`Invalid GPS payload: ${JSON.stringify(payload)}`);
       return { event: 'error', data: { message: 'Invalid GPS payload' } };
     }
 
@@ -104,7 +122,9 @@ export class TripTrackingGateway
       latitude: payload.latitude,
       longitude: payload.longitude,
       speedKmh: payload.speed_kmh ?? 0,
-      recordedAt: payload.recorded_at ? new Date(payload.recorded_at) : new Date(),
+      recordedAt: payload.recorded_at
+        ? new Date(payload.recorded_at)
+        : new Date(),
       sequence: seq,
     });
     this.gpsBuffer.set(rideId, buffer);
@@ -131,17 +151,21 @@ export class TripTrackingGateway
           { rideId },
         )
         .execute();
-    } catch {
-      /* Non-critical: GPS tracking continues even if location update fails */
+    } catch (err) {
+      this.logger.error(`Failed to update driver location: ${err}`);
     }
 
     /* Broadcast to the ride room */
-    this.server.to(`ride:${rideId}`).emit('trip:location_update', {
+    const locationData = {
       latitude: payload.latitude,
       longitude: payload.longitude,
       speed_kmh: payload.speed_kmh ?? 0,
       sequence: seq,
-    });
+    };
+    this.logger.log(
+      `Broadcasting trip:location_update to room ride:${rideId}: ${JSON.stringify(locationData)}`,
+    );
+    this.server.to(`ride:${rideId}`).emit('trip:location_update', locationData);
 
     return { event: 'ack', data: { sequence: seq } };
   }
