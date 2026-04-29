@@ -9,6 +9,7 @@ import { Driver } from '../driver/entities/driver.entity';
 import { PassengerEntity } from '../passenger/entities/passengers.entity';
 import { BillingModule } from '../billing/billing.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { RidesModule } from '../rides/rides.module';
 
 import { TripsController } from './trips.controller';
 import { TripTrackingGateway } from './gateway/trip-tracking.gateway';
@@ -31,6 +32,7 @@ import { SubmitRatingUseCase } from './application/use-cases/submit-rating.use-c
     ]),
     BillingModule,
     NotificationsModule,
+    RidesModule,
   ],
   controllers: [TripsController],
   providers: [

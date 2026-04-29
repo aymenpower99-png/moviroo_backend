@@ -7,13 +7,15 @@ import {
   OnGatewayConnection,
   OnGatewayDisconnect,
 } from '@nestjs/websockets';
-import { Logger } from '@nestjs/common';
+import { Logger, Inject } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Server, Socket } from 'socket.io';
 
 import { TripWaypoint } from '../domain/entities/trip-waypoint.entity';
 import { DriverLocation } from '../../dispatch/domain/entities/driver-location.entity';
+import { Ride } from '../../rides/domain/entities/ride.entity';
+import { RoutingService } from '../../rides/infrastructure/services/routing.service';
 
 interface GpsPayload {
   ride_id: string;
@@ -40,13 +42,20 @@ export class TripTrackingGateway
   /* Sequence counter per ride */
   private sequenceCounters = new Map<string, number>();
 
+  /* Progress cache: rideId → { data, timestamp } for throttling */
+  private progressCache = new Map<string, { data: any; timestamp: number }>();
+
   private static readonly FLUSH_THRESHOLD = 5;
+  private static readonly PROGRESS_CACHE_TTL = 5000; // 5 seconds
 
   constructor(
     @InjectRepository(TripWaypoint)
     private readonly waypointRepo: Repository<TripWaypoint>,
     @InjectRepository(DriverLocation)
     private readonly locRepo: Repository<DriverLocation>,
+    @InjectRepository(Ride)
+    private readonly rideRepo: Repository<Ride>,
+    private readonly routingService: RoutingService,
   ) {}
 
   /* ── Connection lifecycle ──── */
@@ -156,12 +165,74 @@ export class TripTrackingGateway
     }
 
     /* Broadcast to the ride room */
-    const locationData = {
+    const locationData: any = {
       latitude: payload.latitude,
       longitude: payload.longitude,
       speed_kmh: payload.speed_kmh ?? 0,
       sequence: seq,
     };
+
+    // Calculate progress with throttling
+    const cachedProgress = this.progressCache.get(rideId);
+    const now = Date.now();
+
+    let progressData: any = null;
+
+    // Use cached progress if within TTL, otherwise calculate new
+    if (
+      cachedProgress &&
+      now - cachedProgress.timestamp < TripTrackingGateway.PROGRESS_CACHE_TTL
+    ) {
+      progressData = cachedProgress.data;
+      this.logger.log(`[PROGRESS] Using cached progress for ride ${rideId}`);
+    } else {
+      // Calculate new progress
+      try {
+        const ride = await this.rideRepo.findOne({ where: { id: rideId } });
+        if (ride) {
+          const targetLat =
+            ride.status === 'IN_TRIP' ? ride.dropoffLat : ride.pickupLat;
+          const targetLon =
+            ride.status === 'IN_TRIP' ? ride.dropoffLon : ride.pickupLon;
+          const totalDistanceMeters = ride.distanceKm
+            ? ride.distanceKm * 1000
+            : 0;
+
+          if (totalDistanceMeters > 0) {
+            progressData = await this.routingService.calculateProgressForRide(
+              payload.latitude,
+              payload.longitude,
+              targetLat,
+              targetLon,
+              totalDistanceMeters,
+              payload.speed_kmh ?? 0,
+            );
+
+            // Cache the result
+            if (progressData) {
+              this.progressCache.set(rideId, {
+                data: progressData,
+                timestamp: now,
+              });
+            }
+          }
+        }
+      } catch (err) {
+        this.logger.error(`[PROGRESS] Failed to calculate progress: ${err}`);
+      }
+    }
+
+    // Add progress data to broadcast if available
+    if (progressData) {
+      locationData.progress = progressData.progress;
+      locationData.remainingDistanceMeters =
+        progressData.remainingDistanceMeters;
+      locationData.remainingDurationSeconds =
+        progressData.remainingDurationSeconds;
+      locationData.etaMins = progressData.etaMins;
+      locationData.totalDistanceMeters = progressData.totalDistanceMeters;
+    }
+
     this.logger.log(
       `Broadcasting trip:location_update to room ride:${rideId}: ${JSON.stringify(locationData)}`,
     );
@@ -198,6 +269,7 @@ export class TripTrackingGateway
     await this.flushBuffer(rideId);
     this.gpsBuffer.delete(rideId);
     this.sequenceCounters.delete(rideId);
+    this.progressCache.delete(rideId); // Clear progress cache
   }
 
   /* ── Broadcast helpers used by controller/use-cases ──── */

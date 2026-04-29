@@ -25,6 +25,7 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { User, UserRole } from '../users/entites/user.entity';
 
 import { Ride } from './domain/entities/ride.entity';
+import { RideStatus } from './domain/enums/ride-status.enum';
 import { CreateRideDto } from './application/dtos/create-ride.dto';
 import { CancelRideDto } from './application/dtos/cancel-ride.dto';
 import {
@@ -37,7 +38,9 @@ import { CancelRideUseCase } from './application/use-cases/cancel-ride.use-case'
 import { GetVehiclePricesUseCase } from './application/use-cases/get-vehicle-prices.use-case';
 import { DispatchOffer } from '../dispatch/domain/entities/dispatch-offer.entity';
 import { TripPayment } from '../billing/entities/trip-payment.entity';
+import { DriverLocation } from '../dispatch/domain/entities/driver-location.entity';
 import { GeocodingService } from './infrastructure/services/geocoding.service';
+import { RoutingService } from './infrastructure/services/routing.service';
 
 @Controller('rides')
 export class RidesController {
@@ -47,12 +50,15 @@ export class RidesController {
     private readonly cancelRideUC: CancelRideUseCase,
     private readonly getVehiclePricesUC: GetVehiclePricesUseCase,
     private readonly geocodingService: GeocodingService,
+    private readonly routingService: RoutingService,
     @InjectRepository(Ride)
     private readonly rideRepo: Repository<Ride>,
     @InjectRepository(DispatchOffer)
     private readonly offerRepo: Repository<DispatchOffer>,
     @InjectRepository(TripPayment)
     private readonly paymentRepo: Repository<TripPayment>,
+    @InjectRepository(DriverLocation)
+    private readonly driverLocationRepo: Repository<DriverLocation>,
   ) {}
 
   /* ─── Get vehicle class prices by coordinates ───────────────────── */
@@ -154,6 +160,69 @@ export class RidesController {
       throw new ForbiddenException('Not your ride');
     }
     return ride;
+  }
+
+  /* ─── Get ride progress (real-time ETA and progress) ───────────────── */
+  @Get(':id/progress')
+  @UseGuards(AuthGuard('jwt'))
+  @Throttle({ default: { limit: 20, ttl: 60 } }) // 20 requests per minute
+  async getProgress(
+    @CurrentUser() user: User,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    const ride = await this.rideRepo.findOne({ where: { id } });
+    if (!ride) throw new NotFoundException('Ride not found');
+
+    // Authorization: passenger or driver of the ride
+    if (
+      user.role !== UserRole.SUPER_ADMIN &&
+      ride.passengerId !== user.id &&
+      ride.driverId !== user.id
+    ) {
+      throw new ForbiddenException('Not your ride');
+    }
+
+    // Get driver's current location
+    const driverLocation = await this.driverLocationRepo.findOne({
+      where: { driverId: ride.driverId || '' },
+    });
+
+    if (!driverLocation) {
+      return {
+        progress: 0,
+        remainingDistanceMeters: ride.distanceKm ? ride.distanceKm * 1000 : 0,
+        remainingDurationSeconds: ride.durationMin ? ride.durationMin * 60 : 0,
+        totalDistanceMeters: ride.distanceKm ? ride.distanceKm * 1000 : 0,
+        etaMins: ride.durationMin || 0,
+      };
+    }
+
+    // Determine target based on ride status
+    const targetLat =
+      ride.status === RideStatus.IN_TRIP ? ride.dropoffLat : ride.pickupLat;
+    const targetLon =
+      ride.status === RideStatus.IN_TRIP ? ride.dropoffLon : ride.pickupLon;
+    const totalDistanceMeters = ride.distanceKm ? ride.distanceKm * 1000 : 0;
+
+    // Calculate progress using RoutingService
+    const progressResult = await this.routingService.calculateProgressForRide(
+      driverLocation.latitude,
+      driverLocation.longitude,
+      targetLat,
+      targetLon,
+      totalDistanceMeters,
+      driverLocation.speedKmh,
+    );
+
+    return (
+      progressResult || {
+        progress: 0,
+        remainingDistanceMeters: totalDistanceMeters,
+        remainingDurationSeconds: ride.durationMin ? ride.durationMin * 60 : 0,
+        totalDistanceMeters,
+        etaMins: ride.durationMin || 0,
+      }
+    );
   }
 
   /* ─── List rides ──────────────────────────── */

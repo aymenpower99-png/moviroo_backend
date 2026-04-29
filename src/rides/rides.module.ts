@@ -20,6 +20,7 @@ import { GetVehiclePricesUseCase } from './application/use-cases/get-vehicle-pri
 import { HaversineService } from './infrastructure/services/haversine.service';
 import { GeocodingService } from './infrastructure/services/geocoding.service';
 import { PricingService } from './infrastructure/services/pricing.service';
+import { RoutingService } from './infrastructure/services/routing.service';
 
 import { DispatchModule } from '../dispatch/dispatch.module';
 import { ClassesModule } from '../classes/classes.module';
@@ -52,7 +53,13 @@ import { ClassesModule } from '../classes/classes.module';
     HaversineService,
     GeocodingService,
     PricingService,
+    RoutingService,
   ],
-  exports: [CreateRideUseCase, ConfirmRideUseCase, CancelRideUseCase],
+  exports: [
+    CreateRideUseCase,
+    ConfirmRideUseCase,
+    CancelRideUseCase,
+    RoutingService,
+  ],
 })
 export class RidesModule {}
