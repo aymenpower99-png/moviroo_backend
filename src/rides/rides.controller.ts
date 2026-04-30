@@ -13,6 +13,7 @@ import {
   ForbiddenException,
   HttpCode,
   Query,
+  Logger,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { AuthGuard } from '@nestjs/passport';
@@ -44,6 +45,8 @@ import { RoutingService } from './infrastructure/services/routing.service';
 
 @Controller('rides')
 export class RidesController {
+  private readonly logger = new Logger(RidesController.name);
+
   constructor(
     private readonly createRideUC: CreateRideUseCase,
     private readonly confirmRideUC: ConfirmRideUseCase,
@@ -159,7 +162,72 @@ export class RidesController {
     if (user.role !== UserRole.SUPER_ADMIN && ride.passengerId !== user.id) {
       throw new ForbiddenException('Not your ride');
     }
-    return ride;
+
+    /* Get driver location if assigned and compute ETA dynamically */
+    let driverLocation: {
+      latitude: number;
+      longitude: number;
+      last_updated_at: Date;
+    } | null = null;
+    let progress: number | null = null;
+    let etaMins: number | null = null;
+    let remainingDistanceMeters: number | null = null;
+
+    if (ride.driverId) {
+      const loc = await this.driverLocationRepo.findOne({
+        where: { driverId: ride.driverId },
+      });
+      if (loc) {
+        driverLocation = {
+          latitude: loc.latitude,
+          longitude: loc.longitude,
+          last_updated_at: loc.lastSeenAt,
+        };
+        progress = loc.progress ?? null;
+
+        /* Compute ETA dynamically using RoutingService (same logic as WebSocket) */
+        const targetLat =
+          ride.status === RideStatus.IN_TRIP ? ride.dropoffLat : ride.pickupLat;
+        const targetLon =
+          ride.status === RideStatus.IN_TRIP ? ride.dropoffLon : ride.pickupLon;
+        const totalDistanceMeters = ride.distanceKm
+          ? ride.distanceKm * 1000
+          : 0;
+
+        if (totalDistanceMeters > 0) {
+          try {
+            const progressData =
+              await this.routingService.calculateProgressForRide(
+                loc.latitude,
+                loc.longitude,
+                targetLat,
+                targetLon,
+                totalDistanceMeters,
+                loc.speedKmh ?? 0,
+              );
+
+            /* Override with FRESH computed values (not stale DB snapshot) */
+            if (progressData) {
+              progress = progressData.progress;
+              etaMins = progressData.etaMins;
+              remainingDistanceMeters = progressData.remainingDistanceMeters;
+            }
+          } catch (err) {
+            this.logger.error(
+              `Failed to calculate progress for ride ${id}: ${err}`,
+            );
+          }
+        }
+      }
+    }
+
+    return {
+      ...ride,
+      driver_location: driverLocation,
+      progress: progress,
+      etaMins: etaMins,
+      remainingDistanceMeters: remainingDistanceMeters,
+    };
   }
 
   /* ─── Get ride progress (real-time ETA and progress) ───────────────── */

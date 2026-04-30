@@ -24,7 +24,10 @@ import { User, UserRole } from '../users/entites/user.entity';
 import { Ride } from '../rides/domain/entities/ride.entity';
 import { RideStatus } from '../rides/domain/enums/ride-status.enum';
 import { DriverLocation } from '../dispatch/domain/entities/driver-location.entity';
-import { Driver, DriverAvailabilityStatus } from '../driver/entities/driver.entity';
+import {
+  Driver,
+  DriverAvailabilityStatus,
+} from '../driver/entities/driver.entity';
 
 import { StartEnrouteUseCase } from './application/use-cases/start-enroute.use-case';
 import { ArrivedUseCase } from './application/use-cases/arrived.use-case';
@@ -34,6 +37,7 @@ import { SubmitRatingUseCase } from './application/use-cases/submit-rating.use-c
 import { SubmitRatingDto } from './application/dtos/submit-rating.dto';
 import { TripTrackingGateway } from './gateway/trip-tracking.gateway';
 import { DriverNotificationService } from '../notifications/services/driver-notification.service';
+import { RoutingService } from '../rides/infrastructure/services/routing.service';
 
 @Controller('trips')
 export class TripsController {
@@ -46,6 +50,7 @@ export class TripsController {
     private readonly endTripUC: EndTripUseCase,
     private readonly submitRatingUC: SubmitRatingUseCase,
     private readonly tripGateway: TripTrackingGateway,
+    private readonly routingService: RoutingService,
     @InjectRepository(Ride)
     private readonly rideRepo: Repository<Ride>,
     @InjectRepository(DriverLocation)
@@ -243,13 +248,60 @@ export class TripsController {
     if (!ride) throw new NotFoundException('Ride not found');
 
     /* Get driver location if assigned */
-    let driverLocation: { latitude: number; longitude: number } | null = null;
+    let driverLocation: {
+      latitude: number;
+      longitude: number;
+      last_updated_at: Date;
+    } | null = null;
+    let progress: number | null = null;
+    let etaMins: number | null = null;
+    let remainingDistanceMeters: number | null = null;
+
     if (ride.driverId) {
       const loc = await this.locRepo.findOne({
         where: { driverId: ride.driverId },
       });
       if (loc) {
-        driverLocation = { latitude: loc.latitude, longitude: loc.longitude };
+        driverLocation = {
+          latitude: loc.latitude,
+          longitude: loc.longitude,
+          last_updated_at: loc.lastSeenAt,
+        };
+        progress = loc.progress ?? null;
+
+        /* Compute ETA dynamically using RoutingService (same logic as WebSocket) */
+        const targetLat =
+          ride.status === 'IN_TRIP' ? ride.dropoffLat : ride.pickupLat;
+        const targetLon =
+          ride.status === 'IN_TRIP' ? ride.dropoffLon : ride.pickupLon;
+        const totalDistanceMeters = ride.distanceKm
+          ? ride.distanceKm * 1000
+          : 0;
+
+        if (totalDistanceMeters > 0) {
+          try {
+            const progressData =
+              await this.routingService.calculateProgressForRide(
+                loc.latitude,
+                loc.longitude,
+                targetLat,
+                targetLon,
+                totalDistanceMeters,
+                loc.speedKmh ?? 0,
+              );
+
+            /* Override with FRESH computed values (not stale DB snapshot) */
+            if (progressData) {
+              progress = progressData.progress;
+              etaMins = progressData.etaMins;
+              remainingDistanceMeters = progressData.remainingDistanceMeters;
+            }
+          } catch (err) {
+            this.logger.error(
+              `Failed to calculate progress for ride ${rideId}: ${err}`,
+            );
+          }
+        }
       }
     }
 
@@ -257,6 +309,9 @@ export class TripsController {
       id: ride.id,
       status: ride.status,
       driver_location: driverLocation,
+      progress: progress,
+      etaMins: etaMins,
+      remainingDistanceMeters: remainingDistanceMeters,
       pickup: {
         address: ride.pickupAddress,
         lat: ride.pickupLat,

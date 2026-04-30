@@ -143,36 +143,7 @@ export class TripTrackingGateway
       await this.flushBuffer(rideId);
     }
 
-    /* Update driver_locations in real-time */
-    /* We don't know the driver_id from the socket, so update by ride → driver_id relation */
-    try {
-      await this.locRepo
-        .createQueryBuilder()
-        .update(DriverLocation)
-        .set({
-          latitude: payload.latitude,
-          longitude: payload.longitude,
-          speedKmh: payload.speed_kmh ?? 0,
-          lastSeenAt: new Date(),
-        })
-        .where(
-          `driver_id IN (SELECT driver_id FROM rides WHERE id = :rideId)`,
-          { rideId },
-        )
-        .execute();
-    } catch (err) {
-      this.logger.error(`Failed to update driver location: ${err}`);
-    }
-
-    /* Broadcast to the ride room */
-    const locationData: any = {
-      latitude: payload.latitude,
-      longitude: payload.longitude,
-      speed_kmh: payload.speed_kmh ?? 0,
-      sequence: seq,
-    };
-
-    // Calculate progress with throttling
+    /* Calculate progress with throttling */
     const cachedProgress = this.progressCache.get(rideId);
     const now = Date.now();
 
@@ -221,6 +192,36 @@ export class TripTrackingGateway
         this.logger.error(`[PROGRESS] Failed to calculate progress: ${err}`);
       }
     }
+
+    /* Update driver_locations in real-time */
+    /* We don't know the driver_id from the socket, so update by ride → driver_id relation */
+    try {
+      await this.locRepo
+        .createQueryBuilder()
+        .update(DriverLocation)
+        .set({
+          latitude: payload.latitude,
+          longitude: payload.longitude,
+          speedKmh: payload.speed_kmh ?? 0,
+          lastSeenAt: new Date(),
+          progress: progressData?.progress ?? null,
+        })
+        .where(
+          `driver_id IN (SELECT driver_id FROM rides WHERE id = :rideId)`,
+          { rideId },
+        )
+        .execute();
+    } catch (err) {
+      this.logger.error(`Failed to update driver location: ${err}`);
+    }
+
+    /* Broadcast to the ride room */
+    const locationData: any = {
+      latitude: payload.latitude,
+      longitude: payload.longitude,
+      speed_kmh: payload.speed_kmh ?? 0,
+      sequence: seq,
+    };
 
     // Add progress data to broadcast if available
     if (progressData) {
