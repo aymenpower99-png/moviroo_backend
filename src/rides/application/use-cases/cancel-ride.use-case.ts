@@ -13,7 +13,10 @@ import { RideStatus } from '../../domain/enums/ride-status.enum';
 import { User, UserRole } from '../../../users/entites/user.entity';
 import { CancelRideDto } from '../dtos/cancel-ride.dto';
 import { DriverLocation } from '../../../dispatch/domain/entities/driver-location.entity';
-import { Driver, DriverAvailabilityStatus } from '../../../driver/entities/driver.entity';
+import {
+  Driver,
+  DriverAvailabilityStatus,
+} from '../../../driver/entities/driver.entity';
 
 @Injectable()
 export class CancelRideUseCase {
@@ -66,18 +69,18 @@ export class CancelRideUseCase {
     await this.rideRepo.save(ride);
 
     // If a driver was assigned, free them so they can receive the next dispatch.
-    // Without this, is_on_trip stays true and the driver is invisible to dispatch.
+    // Without this, driver would be marked as busy by ride.status=ASSIGNED.
     if (ride.driverId) {
       await this.locRepo.update(
         { driverId: ride.driverId },
-        { isOnTrip: false, lastSeenAt: new Date() },
+        { lastSeenAt: new Date() },
       );
       await this.driverRepo.update(
         { userId: ride.driverId },
         { availabilityStatus: DriverAvailabilityStatus.ONLINE },
       );
       this.logger.log(
-        `♻️ Ride ${rideId} cancelled (was ASSIGNED) → driver ${ride.driverId.slice(0, 8)} freed: is_on_trip=false, status=ONLINE`,
+        `♻️ Ride ${rideId} cancelled (was ASSIGNED) → driver ${ride.driverId.slice(0, 8)} freed: status=ONLINE`,
       );
     }
 

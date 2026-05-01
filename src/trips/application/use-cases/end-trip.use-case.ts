@@ -11,7 +11,10 @@ import { Ride } from '../../../rides/domain/entities/ride.entity';
 import { RideStatus } from '../../../rides/domain/enums/ride-status.enum';
 import { TripWaypoint } from '../../domain/entities/trip-waypoint.entity';
 import { DriverLocation } from '../../../dispatch/domain/entities/driver-location.entity';
-import { Driver, DriverAvailabilityStatus } from '../../../driver/entities/driver.entity';
+import {
+  Driver,
+  DriverAvailabilityStatus,
+} from '../../../driver/entities/driver.entity';
 import { PassengerEntity } from '../../../passenger/entities/passengers.entity';
 import { BillingService } from '../../../billing/services/billing.service';
 
@@ -71,7 +74,10 @@ export class EndTripUseCase {
 
     /* ── 2. Calculate real duration ──── */
     const tripStartedAt = ride.tripStartedAt ?? now;
-    const realDurationMin = +((now.getTime() - tripStartedAt.getTime()) / 60000).toFixed(1);
+    const realDurationMin = +(
+      (now.getTime() - tripStartedAt.getTime()) /
+      60000
+    ).toFixed(1);
 
     /* ── 3. Update ride ──── */
     ride.status = RideStatus.COMPLETED;
@@ -91,7 +97,7 @@ export class EndTripUseCase {
     /* ── 4. Free the driver — back ONLINE ──── */
     await this.locRepo.update(
       { driverId: driverUserId },
-      { isOnTrip: false, isOnline: true, lastSeenAt: new Date() },
+      { isOnline: true, lastSeenAt: new Date() },
     );
     await this.driverRepo.update(
       { userId: driverUserId },
@@ -112,11 +118,15 @@ export class EndTripUseCase {
       await this.passengerRepo
         .createQueryBuilder()
         .update(PassengerEntity)
-        .set({ membershipPoints: () => `"membership_points" + ${pointsEarned}` })
+        .set({
+          membershipPoints: () => `"membership_points" + ${pointsEarned}`,
+        })
         .where('user_id = :uid', { uid: ride.passengerId })
         .execute();
 
-      this.logger.log(`Passenger ${ride.passengerId}: +${pointsEarned} loyalty points`);
+      this.logger.log(
+        `Passenger ${ride.passengerId}: +${pointsEarned} loyalty points`,
+      );
     }
 
     /* ── 7. Increment passenger totalBookings ──── */
@@ -135,13 +145,20 @@ export class EndTripUseCase {
     try {
       await this.billingService.createTripPayment(ride);
     } catch (err) {
-      this.logger.error(`Failed to create TripPayment for ride ${rideId}: ${err}`);
+      this.logger.error(
+        `Failed to create TripPayment for ride ${rideId}: ${err}`,
+      );
     }
 
     return ride;
   }
 
-  private haversine(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  private haversine(
+    lat1: number,
+    lon1: number,
+    lat2: number,
+    lon2: number,
+  ): number {
     const R = 6371;
     const toRad = (d: number) => (d * Math.PI) / 180;
     const dLat = toRad(lat2 - lat1);

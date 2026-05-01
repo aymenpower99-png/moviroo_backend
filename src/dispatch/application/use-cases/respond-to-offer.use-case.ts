@@ -39,7 +39,7 @@ export class RespondToOfferUseCase {
    * Driver accepts an offer:
    *  1. Mark offer ACCEPTED (atomic — only if still PENDING)
    *  2. Set ride: status=ASSIGNED, driver_id, vehicle_id
-   *  3. Set driver_locations: is_on_trip=true
+   *  Note: is_on_trip removed - ride status ASSIGNED now indicates driver is busy
    */
   async accept(currentUser: User, offerId: string): Promise<Ride> {
     const offer = await this.offerRepo.findOne({
@@ -81,12 +81,6 @@ export class RespondToOfferUseCase {
     ride.vehicleId = vehicle.id;
     await this.rideRepo.save(ride);
 
-    // Mark driver as on trip
-    await this.locRepo.update(
-      { driverId: currentUser.id },
-      { isOnTrip: true },
-    );
-
     // Increment the driver's accepted offers counter for acceptance rate tracking
     await this.driverRepo
       .createQueryBuilder()
@@ -100,11 +94,17 @@ export class RespondToOfferUseCase {
     );
 
     // Send push confirmation to driver (respects notifPushEnabled toggle)
-    const fullRide = await this.rideRepo.findOne({
+    const fullRide = (await this.rideRepo.findOne({
       where: { id: ride.id },
       relations: ['passenger', 'driver', 'vehicle', 'vehicleClass'],
-    }) as Ride;
-    const passengerName = [(fullRide as any)?.passenger?.firstName, (fullRide as any)?.passenger?.lastName].filter(Boolean).join(' ') || 'the passenger';
+    })) as Ride;
+    const passengerName =
+      [
+        (fullRide as any)?.passenger?.firstName,
+        (fullRide as any)?.passenger?.lastName,
+      ]
+        .filter(Boolean)
+        .join(' ') || 'the passenger';
     this.driverNotif.rideAccepted(currentUser.id, ride.id, passengerName);
 
     return fullRide;

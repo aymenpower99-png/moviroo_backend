@@ -4,6 +4,7 @@ import { Repository, Between } from 'typeorm';
 import { Ride } from '../rides/domain/entities/ride.entity';
 import { Driver } from '../driver/entities/driver.entity';
 import { CommissionTier } from '../billing/entities/commission-tier.entity';
+import { DriverOnlineHistory } from './entities/driver-online-history.entity';
 import { RideStatus } from '../rides/domain/enums/ride-status.enum';
 
 @Injectable()
@@ -15,6 +16,8 @@ export class EarningsService {
     private readonly driverRepo: Repository<Driver>,
     @InjectRepository(CommissionTier)
     private readonly tierRepo: Repository<CommissionTier>,
+    @InjectRepository(DriverOnlineHistory)
+    private readonly onlineHistoryRepo: Repository<DriverOnlineHistory>,
   ) {}
 
   /**
@@ -25,7 +28,7 @@ export class EarningsService {
     const driver = await this.driverRepo.findOne({ where: { userId } });
     if (!driver) throw new NotFoundException('Driver profile not found');
 
-    const { startDate, endDate } = this.parseMonthRange(monthStr);
+    const { startDate, endDate, month } = this.parseMonthRange(monthStr);
     const salary = Number(driver.fixedMonthlySalary) || 0;
 
     // Count completed rides this month
@@ -58,9 +61,14 @@ export class EarningsService {
     });
 
     // Next tier
-    const unreachedTier = allTiers.find((t) => completedRides < t.requiredRides);
+    const unreachedTier = allTiers.find(
+      (t) => completedRides < t.requiredRides,
+    );
     const nextTier = unreachedTier
-      ? { name: unreachedTier.name, ridesNeeded: unreachedTier.requiredRides - completedRides }
+      ? {
+          name: unreachedTier.name,
+          ridesNeeded: unreachedTier.requiredRides - completedRides,
+        }
       : null;
 
     // Net earnings = salary + commission
@@ -68,6 +76,12 @@ export class EarningsService {
 
     // Daily rides breakdown for chart
     const dailyRides = await this.getDailyRides(userId, startDate, endDate);
+
+    // Get online time for the month from driver_online_history
+    const onlineHistory = await this.onlineHistoryRepo.findOne({
+      where: { driverId: userId, month },
+    });
+    const onlineTimeMs = onlineHistory?.onlineTimeMs || 0;
 
     return {
       salary,
@@ -77,6 +91,7 @@ export class EarningsService {
       tiers,
       nextTier,
       dailyRides,
+      onlineTimeMs,
     };
   }
 
@@ -145,7 +160,11 @@ export class EarningsService {
 
   /* ── Helpers ── */
 
-  private parseMonthRange(monthStr?: string): { startDate: Date; endDate: Date } {
+  private parseMonthRange(monthStr?: string): {
+    startDate: Date;
+    endDate: Date;
+    month: string;
+  } {
     let year: number, month: number;
     if (monthStr) {
       const [y, m] = monthStr.split('-').map(Number);
@@ -164,7 +183,8 @@ export class EarningsService {
     }
     const startDate = new Date(year, month - 1, 1);
     const endDate = new Date(year, month, 0, 23, 59, 59, 999);
-    return { startDate, endDate };
+    const monthStrFormatted = `${year}-${month.toString().padStart(2, '0')}`;
+    return { startDate, endDate, month: monthStrFormatted };
   }
 
   private async getDailyRides(userId: string, startDate: Date, endDate: Date) {
@@ -183,4 +203,3 @@ export class EarningsService {
     return rides.map((r) => ({ day: r.day, rides: r.rides }));
   }
 }
-

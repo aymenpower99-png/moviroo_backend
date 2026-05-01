@@ -89,7 +89,7 @@ export class HeartbeatService implements OnModuleInit, OnModuleDestroy {
       await this.locRepo
         .createQueryBuilder()
         .update()
-        .set({ isOnline: false, isOnTrip: false, forcedOfflineAt: new Date() })
+        .set({ isOnline: false, forcedOfflineAt: new Date() })
         .where('id = :id', { id: loc.id })
         .execute();
 
@@ -102,15 +102,8 @@ export class HeartbeatService implements OnModuleInit, OnModuleDestroy {
           availabilityStatus: DriverAvailabilityStatus.OFFLINE,
         };
         if (driver.onlineSince) {
-          const deltaMs = Date.now() - new Date(driver.onlineSince).getTime();
-          const currentMonth = this._currentMonth();
-          if (driver.onlineTimeMonth !== currentMonth) {
-            update.monthlyOnlineMs = deltaMs;
-            update.onlineTimeMonth = currentMonth;
-          } else {
-            update.monthlyOnlineMs =
-              (Number(driver.monthlyOnlineMs) || 0) + deltaMs;
-          }
+          // Note: Monthly online time tracking moved to driver_online_history table
+          // Session time accumulation is handled by DriverAvailabilityService
           update.onlineSince = null;
         }
         await this.driverRepo.update({ userId: loc.driverId }, update);

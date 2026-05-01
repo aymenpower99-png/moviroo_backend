@@ -64,9 +64,6 @@ export class DriverLocation {
   @Column({ name: 'is_online', type: 'boolean', default: false })
   isOnline: boolean;
 
-  @Column({ name: 'is_on_trip', type: 'boolean', default: false })
-  isOnTrip: boolean;
-
   @Column({ name: 'last_seen_at', type: 'timestamptz', default: () => 'NOW()' })
   lastSeenAt: Date;
 

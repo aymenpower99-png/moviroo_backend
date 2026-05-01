@@ -22,16 +22,6 @@ export class DriverAdminService {
   // ─── Create ───────────────────────────────────────────────────────────────────
 
   async create(dto: CreateDriverDto): Promise<Driver> {
-    if (dto.driverLicenseNumber) {
-      const dup = await this.driverRepo.findOne({
-        where: { driverLicenseNumber: dto.driverLicenseNumber },
-      });
-      if (dup)
-        throw new BadRequestException(
-          `License "${dto.driverLicenseNumber}" already registered.`,
-        );
-    }
-
     const userExists = await this.driverRepo.findOne({
       where: { userId: dto.userId },
     });
@@ -40,15 +30,14 @@ export class DriverAdminService {
         'A driver profile already exists for this user.',
       );
 
-    if (dto.phone) {
-      await this.userRepo.update(dto.userId, { phone: dto.phone });
-    }
+    // Update user's role to DRIVER and phone if provided
+    await this.userRepo.update(dto.userId, {
+      role: 'driver' as any,
+      ...(dto.phone && { phone: dto.phone }),
+    });
 
     const driver = this.driverRepo.create({
       userId: dto.userId,
-      driverLicenseNumber: dto.driverLicenseNumber,
-      driverLicenseFrontUrl: dto.driverLicenseFrontUrl,
-      driverLicenseBackUrl: dto.driverLicenseBackUrl,
       availabilityStatus: DriverAvailabilityStatus.PENDING,
       ...(dto.fixedMonthlySalary !== undefined && {
         fixedMonthlySalary: dto.fixedMonthlySalary,
@@ -175,32 +164,7 @@ export class DriverAdminService {
   async update(id: string, dto: UpdateDriverDto): Promise<any> {
     const driver = await this.findDriverOrFail(id);
 
-    if (
-      dto.driverLicenseNumber &&
-      dto.driverLicenseNumber !== driver.driverLicenseNumber
-    ) {
-      const dup = await this.driverRepo.findOne({
-        where: { driverLicenseNumber: dto.driverLicenseNumber },
-      });
-      if (dup)
-        throw new BadRequestException(
-          `License "${dto.driverLicenseNumber}" already in use.`,
-        );
-    }
-
     Object.assign(driver, {
-      ...(dto.driverLicenseNumber !== undefined && {
-        driverLicenseNumber: dto.driverLicenseNumber,
-      }),
-      ...(dto.driverLicenseExpiry !== undefined && {
-        driverLicenseExpiry: new Date(dto.driverLicenseExpiry),
-      }),
-      ...(dto.driverLicenseFrontUrl !== undefined && {
-        driverLicenseFrontUrl: dto.driverLicenseFrontUrl,
-      }),
-      ...(dto.driverLicenseBackUrl !== undefined && {
-        driverLicenseBackUrl: dto.driverLicenseBackUrl,
-      }),
       ...(dto.availabilityStatus !== undefined && {
         availabilityStatus: dto.availabilityStatus,
       }),

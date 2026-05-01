@@ -4,7 +4,10 @@ import { Repository } from 'typeorm';
 import { DriverLocation } from '../../domain/entities/driver-location.entity';
 import { DispatchOffer } from '../../domain/entities/dispatch-offer.entity';
 import { Driver } from '../../../driver/entities/driver.entity';
-import { Vehicle, VehicleStatus } from '../../../vehicles/entities/vehicle.entity';
+import {
+  Vehicle,
+  VehicleStatus,
+} from '../../../vehicles/entities/vehicle.entity';
 import { WorkArea } from '../../../work-area/entities/work-area.entity';
 
 export interface EligibleDriver {
@@ -49,12 +52,12 @@ export class FindEligibleDriversUseCase {
   ): Promise<EligibleDriver[]> {
     this.logger.log(
       `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-      `🔍 DISPATCH ELIGIBILITY CHECK\n` +
-      `   Ride:     ${rideId}\n` +
-      `   Class:    ${classId}\n` +
-      `   Radius:   ${maxRadiusKm} km\n` +
-      `   Pickup:   [${pickupLat}, ${pickupLon}] "${pickupAddress}"\n` +
-      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+        `🔍 DISPATCH ELIGIBILITY CHECK\n` +
+        `   Ride:     ${rideId}\n` +
+        `   Class:    ${classId}\n` +
+        `   Radius:   ${maxRadiusKm} km\n` +
+        `   Pickup:   [${pickupLat}, ${pickupLon}] "${pickupAddress}"\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
     );
 
     // ── PRE-FILTER DIAGNOSTIC ─────────────────────────────────────────────────
@@ -62,25 +65,51 @@ export class FindEligibleDriversUseCase {
     const [allLocs, onlineLocs, notOnTripLocs, recentLocs] = await Promise.all([
       this.locRepo.count(),
       this.locRepo.count({ where: { isOnline: true } }),
-      this.locRepo.createQueryBuilder('dl').where('dl.is_online = true').andWhere('dl.is_on_trip = false').getCount(),
-      this.locRepo.createQueryBuilder('dl').where('dl.is_online = true').andWhere('dl.is_on_trip = false').andWhere("dl.last_seen_at > NOW() - INTERVAL '120 seconds'").getCount(),
+      this.locRepo
+        .createQueryBuilder('dl')
+        .where('dl.is_online = true')
+        .andWhere(
+          `NOT EXISTS (
+          SELECT 1 FROM rides 
+          WHERE driver_id = dl.driver_id 
+          AND status IN ('ASSIGNED', 'EN_ROUTE_TO_PICKUP', 'ARRIVED', 'IN_TRIP')
+        )`,
+        )
+        .getCount(),
+      this.locRepo
+        .createQueryBuilder('dl')
+        .where('dl.is_online = true')
+        .andWhere(
+          `NOT EXISTS (
+          SELECT 1 FROM rides 
+          WHERE driver_id = dl.driver_id 
+          AND status IN ('ASSIGNED', 'EN_ROUTE_TO_PICKUP', 'ARRIVED', 'IN_TRIP')
+        )`,
+        )
+        .andWhere("dl.last_seen_at > NOW() - INTERVAL '120 seconds'")
+        .getCount(),
     ]);
     this.logger.log(
       `📊 driver_locations table:\n` +
-      `   Total rows:              ${allLocs}\n` +
-      `   is_online=true:          ${onlineLocs}\n` +
-      `   online + not_on_trip:    ${notOnTripLocs}\n` +
-      `   online + not_on_trip + fresh (≤120s): ${recentLocs}`,
+        `   Total rows:              ${allLocs}\n` +
+        `   is_online=true:          ${onlineLocs}\n` +
+        `   online + not on trip:    ${notOnTripLocs}\n` +
+        `   online + not on trip + fresh (≤120s): ${recentLocs}`,
     );
 
     // Also log full detail for ALL online drivers so we can see stuck states
-    const allOnlineDetail = await this.locRepo.createQueryBuilder('dl').where('dl.is_online = true').getMany();
+    const allOnlineDetail = await this.locRepo
+      .createQueryBuilder('dl')
+      .where('dl.is_online = true')
+      .getMany();
     for (const loc of allOnlineDetail) {
-      const ageSeconds = Math.round((Date.now() - new Date(loc.lastSeenAt).getTime()) / 1000);
+      const ageSeconds = Math.round(
+        (Date.now() - new Date(loc.lastSeenAt).getTime()) / 1000,
+      );
       this.logger.log(
         `   driver_locations row: driverId=${loc.driverId.slice(0, 8)} ` +
-        `is_online=${loc.isOnline} is_on_trip=${loc.isOnTrip} ` +
-        `last_seen=${ageSeconds}s ago lat=${loc.latitude} lon=${loc.longitude}`,
+          `is_online=${loc.isOnline} ` +
+          `last_seen=${ageSeconds}s ago lat=${loc.latitude} lon=${loc.longitude}`,
       );
     }
 
@@ -91,7 +120,9 @@ export class FindEligibleDriversUseCase {
     });
     const excludeIds = existing.map((o) => o.driverId);
     if (excludeIds.length > 0) {
-      this.logger.log(`   Already offered to (excluded): ${excludeIds.map(id => id.slice(0, 8)).join(', ')}`);
+      this.logger.log(
+        `   Already offered to (excluded): ${excludeIds.map((id) => id.slice(0, 8)).join(', ')}`,
+      );
     }
 
     // 2. Determine Work Area from pickup address (match city name in work_areas.ville)
@@ -102,16 +133,26 @@ export class FindEligibleDriversUseCase {
     );
     const rideWorkAreaId = matchedArea?.id ?? null;
     if (matchedArea) {
-      this.logger.log(`📍 Pickup matched Work Area: ${matchedArea.ville} (${matchedArea.id})`);
+      this.logger.log(
+        `📍 Pickup matched Work Area: ${matchedArea.ville} (${matchedArea.id})`,
+      );
     } else {
-      this.logger.log(`📍 No Work Area matched pickup "${pickupAddress}" — will use GPS-only`);
+      this.logger.log(
+        `📍 No Work Area matched pickup "${pickupAddress}" — will use GPS-only`,
+      );
     }
 
     // 3. Find online, not-on-trip, recent driver locations
     const qb = this.locRepo
       .createQueryBuilder('dl')
       .where('dl.is_online = true')
-      .andWhere('dl.is_on_trip = false')
+      .andWhere(
+        `NOT EXISTS (
+        SELECT 1 FROM rides 
+        WHERE driver_id = dl.driver_id 
+        AND status IN ('ASSIGNED', 'EN_ROUTE_TO_PICKUP', 'ARRIVED', 'IN_TRIP')
+      )`,
+      )
       .andWhere("dl.last_seen_at > NOW() - INTERVAL '120 seconds'");
 
     if (excludeIds.length > 0) {
@@ -124,16 +165,18 @@ export class FindEligibleDriversUseCase {
     if (locations.length === 0) {
       this.logger.warn(
         `⛔ Zero drivers passed location filter. Likely causes:\n` +
-        `   • Driver never called goOnline (is_online=false)\n` +
-        `   • Driver stuck is_on_trip=true from a previous trip\n` +
-        `   • Heartbeat stale: last_seen_at older than 120s\n` +
-        `   • forcedOfflineAt is set and heartbeat didn't re-enable online`,
+          `   • Driver never called goOnline (is_online=false)\n` +
+          `   • Driver has active ride (ASSIGNED, EN_ROUTE_TO_PICKUP, ARRIVED, or IN_TRIP)\n` +
+          `   • Heartbeat stale: last_seen_at older than 120s\n` +
+          `   • forcedOfflineAt is set and heartbeat didn't re-enable online`,
       );
       return [];
     }
 
     // Build full candidate list with driver record + vehicle check + GPS
-    const allCandidates: (EligibleDriver & { workAreaId: string | null })[] = [];
+    const allCandidates: (EligibleDriver & { workAreaId: string | null })[] =
+      [];
+    [];
 
     for (const loc of locations) {
       const uid = loc.driverId.slice(0, 8);
@@ -143,25 +186,35 @@ export class FindEligibleDriversUseCase {
         where: { userId: loc.driverId },
       });
       if (!driver) {
-        this.logger.warn(`❌ driver ${uid}: NO driver profile in drivers table for userId=${loc.driverId}`);
+        this.logger.warn(
+          `❌ driver ${uid}: NO driver profile in drivers table for userId=${loc.driverId}`,
+        );
         continue;
       }
 
       // ── Vehicle check ─────────────────────────────────────────────────────
       // First, log all vehicles for this driver for full visibility
-      const allVehicles = await this.vehicleRepo.find({ where: { driverId: driver.id } });
+      const allVehicles = await this.vehicleRepo.find({
+        where: { driverId: driver.id },
+      });
       if (allVehicles.length === 0) {
-        this.logger.warn(`❌ driver ${uid} (driverId=${driver.id.slice(0, 8)}): NO vehicles assigned`);
+        this.logger.warn(
+          `❌ driver ${uid} (driverId=${driver.id.slice(0, 8)}): NO vehicles assigned`,
+        );
         continue;
       }
       this.logger.log(
         `   driver ${uid} has ${allVehicles.length} vehicle(s): ` +
-        allVehicles.map(v => `[classId=${v.classId.slice(0, 8)} status=${v.status}]`).join(', '),
+          allVehicles
+            .map((v) => `[classId=${v.classId.slice(0, 8)} status=${v.status}]`)
+            .join(', '),
       );
-      this.logger.log(`   ride requires classId=${classId.slice(0, 8)} status=${VehicleStatus.AVAILABLE}`);
+      this.logger.log(
+        `   ride requires classId=${classId.slice(0, 8)} status=${VehicleStatus.AVAILABLE}`,
+      );
 
       const vehicle = allVehicles.find(
-        v => v.classId === classId && v.status === VehicleStatus.AVAILABLE,
+        (v) => v.classId === classId && v.status === VehicleStatus.AVAILABLE,
       );
       if (!vehicle) {
         // Log exactly which check failed per vehicle
@@ -247,4 +300,3 @@ export class FindEligibleDriversUseCase {
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   }
 }
-

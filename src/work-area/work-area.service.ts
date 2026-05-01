@@ -1,19 +1,29 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { WorkArea } from './entities/work-area.entity';
-import { Driver, DriverAvailabilityStatus } from '../driver/entities/driver.entity';
+import {
+  Driver,
+  DriverAvailabilityStatus,
+} from '../driver/entities/driver.entity';
 import { Vehicle, VehicleStatus } from '../vehicles/entities/vehicle.entity';
 import { User } from '../users/entites/user.entity';
+import { Ride } from '../rides/domain/entities/ride.entity';
 import { CreateWorkAreaDto } from './dto/create-work-area.dto';
 
 @Injectable()
 export class WorkAreaService {
   constructor(
-    @InjectRepository(WorkArea)  private workAreaRepo: Repository<WorkArea>,
-    @InjectRepository(Driver)    private driverRepo:   Repository<Driver>,
-    @InjectRepository(Vehicle)   private vehicleRepo:  Repository<Vehicle>,
-    @InjectRepository(User)      private userRepo:     Repository<User>,
+    @InjectRepository(WorkArea) private workAreaRepo: Repository<WorkArea>,
+    @InjectRepository(Driver) private driverRepo: Repository<Driver>,
+    @InjectRepository(Vehicle) private vehicleRepo: Repository<Vehicle>,
+    @InjectRepository(User) private userRepo: Repository<User>,
+    @InjectRepository(Ride) private rideRepo: Repository<Ride>,
   ) {}
 
   async create(dto: CreateWorkAreaDto): Promise<WorkArea> {
@@ -32,11 +42,14 @@ export class WorkAreaService {
     return this.workAreaRepo.save(area);
   }
 
-  async update(id: string, dto: { country?: string; ville?: string }): Promise<WorkArea> {
+  async update(
+    id: string,
+    dto: { country?: string; ville?: string },
+  ): Promise<WorkArea> {
     const area = await this.workAreaRepo.findOne({ where: { id } });
     if (!area) throw new NotFoundException(`Work area "${id}" not found.`);
 
-    const newVille   = (dto.ville   ?? area.ville).trim();
+    const newVille = (dto.ville ?? area.ville).trim();
     const newCountry = (dto.country ?? area.country).trim();
 
     // Check for duplicate (excluding self)
@@ -51,7 +64,7 @@ export class WorkAreaService {
       }
     }
 
-    area.ville   = newVille;
+    area.ville = newVille;
     area.country = newCountry;
     return this.workAreaRepo.save(area);
   }
@@ -67,17 +80,29 @@ export class WorkAreaService {
     return { message: 'Work area deleted.' };
   }
 
-  async assignToDriver(driverId: string, workAreaId: string | null): Promise<Driver> {
+  async assignToDriver(
+    driverId: string,
+    workAreaId: string | null,
+  ): Promise<Driver> {
     const driver = await this.driverRepo.findOne({ where: { id: driverId } });
     if (!driver) throw new NotFoundException(`Driver "${driverId}" not found.`);
 
     if (workAreaId) {
-      const area = await this.workAreaRepo.findOne({ where: { id: workAreaId } });
-      if (!area) throw new NotFoundException(`Work area "${workAreaId}" not found.`);
+      const area = await this.workAreaRepo.findOne({
+        where: { id: workAreaId },
+      });
+      if (!area)
+        throw new NotFoundException(`Work area "${workAreaId}" not found.`);
     }
 
     // Cannot change work area while driver is actively on a trip
-    if (driver.availabilityStatus === DriverAvailabilityStatus.ON_TRIP) {
+    const activeRide = await this.rideRepo.findOne({
+      where: {
+        driverId: driver.userId,
+        status: In(['ASSIGNED', 'EN_ROUTE_TO_PICKUP', 'ARRIVED', 'IN_TRIP']),
+      },
+    });
+    if (activeRide) {
       throw new BadRequestException(
         'Cannot change work area while driver is On Trip.',
       );
@@ -85,7 +110,9 @@ export class WorkAreaService {
 
     driver.workAreaId = workAreaId ?? null;
 
-    const vehicle = await this.vehicleRepo.findOne({ where: { driverId: driver.id } });
+    const vehicle = await this.vehicleRepo.findOne({
+      where: { driverId: driver.id },
+    });
 
     if (workAreaId) {
       // ASSIGNING: promote SETUP_REQUIRED → OFFLINE only when vehicle is also Available
@@ -111,12 +138,14 @@ export class WorkAreaService {
   }
 
   async findDriversWithWorkArea() {
-    const drivers  = await this.driverRepo.find({ order: { createdAt: 'DESC' } });
-    const areas    = await this.workAreaRepo.find();
+    const drivers = await this.driverRepo.find({
+      order: { createdAt: 'DESC' },
+    });
+    const areas = await this.workAreaRepo.find();
     const vehicles = await this.vehicleRepo.find();
 
     // Fetch user names for all drivers
-    const userIds = drivers.map(d => d.userId).filter(Boolean);
+    const userIds = drivers.map((d) => d.userId).filter(Boolean);
     const users = userIds.length
       ? await this.userRepo
           .createQueryBuilder('u')
@@ -125,23 +154,25 @@ export class WorkAreaService {
           .getMany()
       : [];
 
-    const userById    = new Map(users.map(u => [u.id, u]));
-    const areaById    = new Map(areas.map(a => [a.id, a]));
-    const vehByDriver = new Map(vehicles.map(v => [v.driverId ?? '', v]));
+    const userById = new Map(users.map((u) => [u.id, u]));
+    const areaById = new Map(areas.map((a) => [a.id, a]));
+    const vehByDriver = new Map(vehicles.map((v) => [v.driverId ?? '', v]));
 
-    return drivers.map(d => {
-      const area = d.workAreaId ? areaById.get(d.workAreaId) ?? null : null;
-      const veh  = vehByDriver.get(d.id) ?? null;
+    return drivers.map((d) => {
+      const area = d.workAreaId ? (areaById.get(d.workAreaId) ?? null) : null;
+      const veh = vehByDriver.get(d.id) ?? null;
       const user = userById.get(d.userId) ?? null;
       const firstName = (user as any)?.firstName ?? '';
-      const lastName  = (user as any)?.lastName  ?? '';
+      const lastName = (user as any)?.lastName ?? '';
       return {
-        id:                 d.id,
-        name:               `${firstName} ${lastName}`.trim() || '—',
-        vehicle:            veh ? `${veh.make} ${veh.model}` : null,
+        id: d.id,
+        name: `${firstName} ${lastName}`.trim() || '—',
+        vehicle: veh ? `${veh.make} ${veh.model}` : null,
         availabilityStatus: d.availabilityStatus,
-        workAreaId:         d.workAreaId ?? null,
-        workArea:           area ? { id: area.id, country: area.country, ville: area.ville } : null,
+        workAreaId: d.workAreaId ?? null,
+        workArea: area
+          ? { id: area.id, country: area.country, ville: area.ville }
+          : null,
       };
     });
   }

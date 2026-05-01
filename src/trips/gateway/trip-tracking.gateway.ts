@@ -121,6 +121,52 @@ export class TripTrackingGateway
     }
 
     const rideId = payload.ride_id;
+
+    // Validate ride status - only accept GPS for active trips
+    const ride = await this.rideRepo.findOne({ where: { id: rideId } });
+    if (!ride) {
+      this.logger.warn(`Ride ${rideId} not found - rejecting GPS`);
+      return { event: 'error', data: { message: 'Ride not found' } };
+    }
+
+    const activeTripStatuses = [
+      'ASSIGNED',
+      'EN_ROUTE_TO_PICKUP',
+      'ARRIVED',
+      'IN_TRIP',
+    ];
+    if (!activeTripStatuses.includes(ride.status)) {
+      this.logger.warn(
+        `Ride ${rideId} status is ${ride.status} (not an active trip) - rejecting GPS and waypoint insertion`,
+      );
+      // Still update driver_location for real-time tracking, but don't insert waypoints
+      try {
+        await this.locRepo
+          .createQueryBuilder()
+          .update(DriverLocation)
+          .set({
+            latitude: payload.latitude,
+            longitude: payload.longitude,
+            speedKmh: payload.speed_kmh ?? 0,
+            lastSeenAt: new Date(),
+          })
+          .where(
+            `driver_id IN (SELECT driver_id FROM rides WHERE id = :rideId)`,
+            { rideId },
+          )
+          .execute();
+      } catch (err) {
+        this.logger.error(`Failed to update driver location: ${err}`);
+      }
+      return {
+        event: 'ack',
+        data: {
+          sequence: 0,
+          message: 'Ride not active - GPS logged but waypoints skipped',
+        },
+      };
+    }
+
     const seq = (this.sequenceCounters.get(rideId) ?? 0) + 1;
     this.sequenceCounters.set(rideId, seq);
 

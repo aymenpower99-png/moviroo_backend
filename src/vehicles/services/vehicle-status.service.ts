@@ -1,9 +1,12 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository }       from 'typeorm';
-import { Vehicle, VehicleStatus }               from '../entities/vehicle.entity';
-import { Driver, DriverAvailabilityStatus }      from '../../driver/entities/driver.entity';
-import { VehicleCrudService }                    from './vehicle-crud.service';
+import { Repository } from 'typeorm';
+import { Vehicle, VehicleStatus } from '../entities/vehicle.entity';
+import {
+  Driver,
+  DriverAvailabilityStatus,
+} from '../../driver/entities/driver.entity';
+import { VehicleCrudService } from './vehicle-crud.service';
 
 @Injectable()
 export class VehicleStatusService {
@@ -25,7 +28,9 @@ export class VehicleStatusService {
     const vehicle = await this.crudService.findOne(id);
 
     if (vehicle.status === VehicleStatus.ON_TRIP) {
-      throw new BadRequestException('Cannot reassign driver while vehicle is On Trip.');
+      throw new BadRequestException(
+        'Cannot reassign driver while vehicle is On Trip.',
+      );
     }
     if (vehicle.status === VehicleStatus.MAINTENANCE) {
       throw new BadRequestException(
@@ -83,7 +88,9 @@ export class VehicleStatusService {
   async endTrip(id: string): Promise<Vehicle> {
     const vehicle = await this.crudService.findOne(id);
     if (vehicle.status !== VehicleStatus.ON_TRIP) {
-      throw new BadRequestException(`Vehicle is not On Trip. Current: ${vehicle.status}`);
+      throw new BadRequestException(
+        `Vehicle is not On Trip. Current: ${vehicle.status}`,
+      );
     }
     vehicle.status = VehicleStatus.AVAILABLE;
     return this.vehicleRepo.save(vehicle);
@@ -102,12 +109,13 @@ export class VehicleStatusService {
 
     // Force assigned driver back to SETUP_REQUIRED
     if (vehicle.driverId) {
-      const driver = await this.driverRepo.findOne({ where: { id: vehicle.driverId } });
+      const driver = await this.driverRepo.findOne({
+        where: { id: vehicle.driverId },
+      });
       if (driver) {
         const activeStatuses: DriverAvailabilityStatus[] = [
           DriverAvailabilityStatus.OFFLINE,
           DriverAvailabilityStatus.ONLINE,
-          DriverAvailabilityStatus.ON_TRIP,
         ];
         if (activeStatuses.includes(driver.availabilityStatus)) {
           await this.driverRepo.update(driver.id, {
@@ -120,7 +128,7 @@ export class VehicleStatusService {
       }
     }
 
-    vehicle.status   = VehicleStatus.MAINTENANCE;
+    vehicle.status = VehicleStatus.MAINTENANCE;
     vehicle.driverId = null;
     return this.vehicleRepo.save(vehicle);
   }

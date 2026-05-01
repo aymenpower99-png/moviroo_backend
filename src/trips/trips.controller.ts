@@ -214,8 +214,7 @@ export class TripsController {
       await this.driverRepo.save(driver);
     }
 
-    // Free driver: reset is_on_trip + availabilityStatus so they can receive next dispatch
-    await this.locRepo.update({ driverId: user.id }, { isOnTrip: false });
+    // Free driver: reset availabilityStatus so they can receive next dispatch
     await this.driverRepo.update(
       { userId: user.id },
       { availabilityStatus: DriverAvailabilityStatus.ONLINE },

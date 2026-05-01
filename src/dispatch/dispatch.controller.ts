@@ -147,54 +147,6 @@ export class DispatchController {
     const lat = body?.lat ?? body?.latitude;
     const lng = body?.lng ?? body?.longitude;
 
-    // Recovery guard: if the driver is stuck from an abandoned ride
-    // (is_on_trip=true or availabilityStatus=ON_TRIP with no active trip),
-    // reset them so goOnline succeeds and dispatch can find them.
-    const loc = await this.locRepo.findOne({ where: { driverId: user.id } });
-    if (loc?.isOnTrip) {
-      // Check if they actually have an active ride assigned
-      const activeRide = await this.rideRepo.findOne({
-        where: {
-          driverId: user.id,
-          status: In([
-            RideStatus.ASSIGNED,
-            RideStatus.EN_ROUTE_TO_PICKUP,
-            RideStatus.ARRIVED,
-            RideStatus.IN_TRIP,
-          ]),
-        },
-      });
-      if (!activeRide) {
-        this.logger.warn(
-          `⚠️ Driver ${user.id.slice(0, 8)} has is_on_trip=true but no active ride — resetting (stuck state recovery)`,
-        );
-        await this.locRepo.update({ driverId: user.id }, { isOnTrip: false });
-      }
-    }
-    const driver = await this.driverRepo.findOne({ where: { userId: user.id } });
-    if (driver?.availabilityStatus === DriverAvailabilityStatus.ON_TRIP) {
-      const activeRide = await this.rideRepo.findOne({
-        where: {
-          driverId: user.id,
-          status: In([
-            RideStatus.ASSIGNED,
-            RideStatus.EN_ROUTE_TO_PICKUP,
-            RideStatus.ARRIVED,
-            RideStatus.IN_TRIP,
-          ]),
-        },
-      });
-      if (!activeRide) {
-        this.logger.warn(
-          `⚠️ Driver ${user.id.slice(0, 8)} has availabilityStatus=ON_TRIP but no active ride — resetting`,
-        );
-        await this.driverRepo.update(
-          { userId: user.id },
-          { availabilityStatus: DriverAvailabilityStatus.OFFLINE },
-        );
-      }
-    }
-
     // Use the availability service to properly set online status + onlineSince
     await this.availabilityService.setMyAvailability(
       user.id,

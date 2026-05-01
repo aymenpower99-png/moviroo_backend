@@ -4,16 +4,21 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { Driver, DriverAvailabilityStatus } from '../entities/driver.entity';
 import { Vehicle, VehicleStatus } from '../../vehicles/entities/vehicle.entity';
 import { EarningsService } from '../../earnings/earnings.service';
+import { DriverOnlineHistory } from '../../earnings/entities/driver-online-history.entity';
+import { Ride } from '../../rides/domain/entities/ride.entity';
 
 @Injectable()
 export class DriverAvailabilityService {
   constructor(
-    @InjectRepository(Driver)  private driverRepo:  Repository<Driver>,
+    @InjectRepository(Driver) private driverRepo: Repository<Driver>,
     @InjectRepository(Vehicle) private vehicleRepo: Repository<Vehicle>,
+    @InjectRepository(DriverOnlineHistory)
+    private onlineHistoryRepo: Repository<DriverOnlineHistory>,
+    @InjectRepository(Ride) private rideRepo: Repository<Ride>,
     private readonly earningsService: EarningsService,
   ) {}
 
@@ -25,20 +30,25 @@ export class DriverAvailabilityService {
   ): Promise<Driver> {
     const driver = await this.driverRepo.findOne({ where: { userId } });
     if (!driver)
-      throw new NotFoundException('Driver profile not found. Please complete your profile first.');
+      throw new NotFoundException(
+        'Driver profile not found. Please complete your profile first.',
+      );
 
     if (driver.availabilityStatus === DriverAvailabilityStatus.PENDING)
-      throw new ForbiddenException('You must activate your account before changing availability.');
+      throw new ForbiddenException(
+        'You must activate your account before changing availability.',
+      );
 
     if (driver.availabilityStatus === DriverAvailabilityStatus.SETUP_REQUIRED)
-      throw new ForbiddenException('You must add a vehicle and work area before going online.');
-
-    if (driver.availabilityStatus === DriverAvailabilityStatus.ON_TRIP)
-      throw new ForbiddenException('You cannot change availability while on a trip.');
+      throw new ForbiddenException(
+        'You must add a vehicle and work area before going online.',
+      );
 
     // If going ONLINE, verify vehicle is still AVAILABLE
     if (status === DriverAvailabilityStatus.ONLINE) {
-      const vehicle = await this.vehicleRepo.findOne({ where: { driverId: driver.id } });
+      const vehicle = await this.vehicleRepo.findOne({
+        where: { driverId: driver.id },
+      });
       if (!vehicle || vehicle.status !== VehicleStatus.AVAILABLE) {
         throw new ForbiddenException(
           'Your vehicle is not available. Please contact your administrator.',
@@ -61,26 +71,34 @@ export class DriverAvailabilityService {
       availabilityStatus: status,
     };
 
+    const currentMonth = this._currentMonth();
+
     if (status === DriverAvailabilityStatus.ONLINE) {
-      const currentMonth = this._currentMonth();
-      // Reset counter when a new month starts
-      if (driver.onlineTimeMonth !== currentMonth) {
-        updateData.monthlyOnlineMs = 0;
-        updateData.onlineTimeMonth = currentMonth;
-      }
       updateData.onlineSince = new Date();
     } else {
-      // Going OFFLINE — commit session time to the monthly accumulator
+      // Going OFFLINE — commit session time to driver_online_history
       if (driver.onlineSince) {
         const deltaMs = Date.now() - new Date(driver.onlineSince).getTime();
-        const currentMonth = this._currentMonth();
-        if (driver.onlineTimeMonth !== currentMonth) {
-          // Month boundary mid-session — start fresh for the new month
-          updateData.monthlyOnlineMs = deltaMs;
-          updateData.onlineTimeMonth  = currentMonth;
+
+        // Update or insert into driver_online_history
+        let history = await this.onlineHistoryRepo.findOne({
+          where: { driverId: driver.userId, month: currentMonth },
+        });
+
+        if (history) {
+          history.onlineTimeMs += deltaMs;
+          history.updatedAt = new Date();
+          await this.onlineHistoryRepo.save(history);
         } else {
-          updateData.monthlyOnlineMs = (Number(driver.monthlyOnlineMs) || 0) + deltaMs;
+          await this.onlineHistoryRepo.save({
+            driverId: driver.userId,
+            month: currentMonth,
+            onlineTimeMs: deltaMs,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          });
         }
+
         updateData.onlineSince = null;
       }
     }
@@ -109,10 +127,13 @@ export class DriverAvailabilityService {
   async markOfflineIfReady(driverId: string): Promise<void> {
     const driver = await this.driverRepo.findOne({ where: { id: driverId } });
     if (!driver) return;
-    if (driver.availabilityStatus !== DriverAvailabilityStatus.SETUP_REQUIRED) return;
+    if (driver.availabilityStatus !== DriverAvailabilityStatus.SETUP_REQUIRED)
+      return;
 
     // Both conditions must be met: vehicle assigned AND it is AVAILABLE AND work area set
-    const vehicle = await this.vehicleRepo.findOne({ where: { driverId: driver.id } });
+    const vehicle = await this.vehicleRepo.findOne({
+      where: { driverId: driver.id },
+    });
     if (!vehicle) return;
     if (vehicle.status !== VehicleStatus.AVAILABLE) return;
     if (!driver.workAreaId) return;
@@ -132,7 +153,6 @@ export class DriverAvailabilityService {
     const activeStatuses: DriverAvailabilityStatus[] = [
       DriverAvailabilityStatus.OFFLINE,
       DriverAvailabilityStatus.ONLINE,
-      DriverAvailabilityStatus.ON_TRIP,
     ];
 
     if (!activeStatuses.includes(driver.availabilityStatus)) return;
@@ -153,7 +173,11 @@ export class DriverAvailabilityService {
    * One-time migration: seed monthlyOnlineMs from legacy client-side SharedPreferences.
    * Only writes if the driver's monthly counter is currently 0 for this month (idempotent).
    */
-  async seedMonthlyOnlineTime(userId: string, monthlyOnlineMs: number, month: string): Promise<void> {
+  async seedMonthlyOnlineTime(
+    userId: string,
+    monthlyOnlineMs: number,
+    month: string,
+  ): Promise<void> {
     if (!monthlyOnlineMs || monthlyOnlineMs <= 0) return;
     const currentMonth = this._currentMonth();
     if (month !== currentMonth) return; // only migrate current-month data
@@ -161,16 +185,25 @@ export class DriverAvailabilityService {
     const driver = await this.driverRepo.findOne({ where: { userId } });
     if (!driver) return;
 
-    // Idempotent: only seed if backend has 0 for this month
-    const alreadyHasData =
-      driver.onlineTimeMonth === currentMonth && (Number(driver.monthlyOnlineMs) || 0) > 0;
-    if (alreadyHasData) return;
-
-    driver.monthlyOnlineMs = monthlyOnlineMs;
-    driver.onlineTimeMonth = currentMonth;
-    await this.driverRepo.update({ userId }, {
-      monthlyOnlineMs,
-      onlineTimeMonth: currentMonth,
+    // Idempotent: only seed if driver_online_history has 0 for this month
+    const existing = await this.onlineHistoryRepo.findOne({
+      where: { driverId: userId, month: currentMonth },
     });
+    if (existing && existing.onlineTimeMs > 0) return;
+
+    // Insert or update driver_online_history
+    if (existing) {
+      existing.onlineTimeMs = monthlyOnlineMs;
+      existing.updatedAt = new Date();
+      await this.onlineHistoryRepo.save(existing);
+    } else {
+      await this.onlineHistoryRepo.save({
+        driverId: userId,
+        month: currentMonth,
+        onlineTimeMs: monthlyOnlineMs,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+    }
   }
 }
