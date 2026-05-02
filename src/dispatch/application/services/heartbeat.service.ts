@@ -5,12 +5,14 @@ import {
   OnModuleDestroy,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { LessThan, Repository } from 'typeorm';
+import { In, LessThan, Repository } from 'typeorm';
 import { DriverLocation } from '../../domain/entities/driver-location.entity';
 import {
   Driver,
   DriverAvailabilityStatus,
 } from '../../../driver/entities/driver.entity';
+import { Ride } from '../../../rides/domain/entities/ride.entity';
+import { RideStatus } from '../../../rides/domain/enums/ride-status.enum';
 import { FcmService } from '../../../notifications/services/fcm.service';
 
 /** How often (ms) we scan for stale drivers */
@@ -33,6 +35,8 @@ export class HeartbeatService implements OnModuleInit, OnModuleDestroy {
     private readonly locRepo: Repository<DriverLocation>,
     @InjectRepository(Driver)
     private readonly driverRepo: Repository<Driver>,
+    @InjectRepository(Ride)
+    private readonly rideRepo: Repository<Ride>,
     private readonly fcmService: FcmService,
   ) {}
 
@@ -85,6 +89,26 @@ export class HeartbeatService implements OnModuleInit, OnModuleDestroy {
     );
 
     for (const loc of stale) {
+      // Check if driver has an active ride — skip forcing offline if so
+      const activeRide = await this.rideRepo.findOne({
+        where: {
+          driverId: loc.driverId,
+          status: In([
+            RideStatus.ASSIGNED,
+            RideStatus.EN_ROUTE_TO_PICKUP,
+            RideStatus.ARRIVED,
+            RideStatus.IN_TRIP,
+          ]),
+        },
+      });
+
+      if (activeRide) {
+        this.logger.log(
+          `  → Driver ${loc.driverId.slice(0, 8)} has active ride (${activeRide.status}) — skipping offline sweep`,
+        );
+        continue;
+      }
+
       // Mark location offline + set forced flag to prevent heartbeat from re-enabling
       await this.locRepo
         .createQueryBuilder()

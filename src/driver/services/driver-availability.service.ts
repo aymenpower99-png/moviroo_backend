@@ -10,6 +10,7 @@ import { Vehicle, VehicleStatus } from '../../vehicles/entities/vehicle.entity';
 import { EarningsService } from '../../earnings/earnings.service';
 import { DriverOnlineHistory } from '../../earnings/entities/driver-online-history.entity';
 import { Ride } from '../../rides/domain/entities/ride.entity';
+import { RideStatus } from '../../rides/domain/enums/ride-status.enum';
 
 @Injectable()
 export class DriverAvailabilityService {
@@ -61,6 +62,26 @@ export class DriverAvailabilityService {
       }
     }
 
+    // If going OFFLINE, check for active rides first
+    if (status === DriverAvailabilityStatus.OFFLINE) {
+      const activeRide = await this.rideRepo.findOne({
+        where: {
+          driverId: userId,
+          status: In([
+            RideStatus.ASSIGNED,
+            RideStatus.EN_ROUTE_TO_PICKUP,
+            RideStatus.ARRIVED,
+            RideStatus.IN_TRIP,
+          ]),
+        },
+      });
+      if (activeRide) {
+        throw new ForbiddenException(
+          'You are currently in a trip and cannot go offline.',
+        );
+      }
+    }
+
     driver.availabilityStatus = status;
 
     // Build a targeted partial update — only touch the columns we intend to change.
@@ -80,23 +101,31 @@ export class DriverAvailabilityService {
       if (driver.onlineSince) {
         const deltaMs = Date.now() - new Date(driver.onlineSince).getTime();
 
-        // Update or insert into driver_online_history
-        let history = await this.onlineHistoryRepo.findOne({
-          where: { driverId: driver.userId, month: currentMonth },
-        });
-
-        if (history) {
-          history.onlineTimeMs += deltaMs;
-          history.updatedAt = new Date();
-          await this.onlineHistoryRepo.save(history);
+        // Validate deltaMs to prevent corrupted session times
+        if (deltaMs < 0 || deltaMs > 24 * 60 * 60 * 1000) {
+          // Negative or >24 hours is suspicious - skip accumulation
+          console.warn(
+            `Suspicious deltaMs for driver ${driver.userId}: ${deltaMs}ms. Skipping accumulation.`,
+          );
         } else {
-          await this.onlineHistoryRepo.save({
-            driverId: driver.userId,
-            month: currentMonth,
-            onlineTimeMs: deltaMs,
-            createdAt: new Date(),
-            updatedAt: new Date(),
+          // Update or insert into driver_online_history
+          let history = await this.onlineHistoryRepo.findOne({
+            where: { driverId: driver.userId, month: currentMonth },
           });
+
+          if (history) {
+            history.onlineTimeMs += deltaMs;
+            history.updatedAt = new Date();
+            await this.onlineHistoryRepo.save(history);
+          } else {
+            await this.onlineHistoryRepo.save({
+              driverId: driver.userId,
+              month: currentMonth,
+              onlineTimeMs: deltaMs,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            });
+          }
         }
 
         updateData.onlineSince = null;
@@ -179,6 +208,15 @@ export class DriverAvailabilityService {
     month: string,
   ): Promise<void> {
     if (!monthlyOnlineMs || monthlyOnlineMs <= 0) return;
+
+    // Validate: reject unreasonable values (max 31 days in milliseconds)
+    const MAX_MONTHLY_MS = 31 * 24 * 60 * 60 * 1000; // ~2.68 billion ms
+    if (monthlyOnlineMs > MAX_MONTHLY_MS) {
+      throw new ForbiddenException(
+        `Invalid monthly online time value: ${monthlyOnlineMs}ms exceeds maximum allowed (${MAX_MONTHLY_MS}ms ≈ 31 days)`,
+      );
+    }
+
     const currentMonth = this._currentMonth();
     if (month !== currentMonth) return; // only migrate current-month data
 

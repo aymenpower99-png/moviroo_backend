@@ -1,4 +1,9 @@
-import { IsEmail, IsString } from 'class-validator';
+import { IsEmail, IsString, IsEnum } from 'class-validator';
+
+export enum AppType {
+  DRIVER = 'driver',
+  PASSENGER = 'passenger',
+}
 
 export class LoginDto {
   @IsEmail()
@@ -6,10 +11,7 @@ export class LoginDto {
 
   @IsString()
   password: string;
+
+  @IsEnum(AppType)
+  appType: AppType;
 }
-
-
-
-
-
-

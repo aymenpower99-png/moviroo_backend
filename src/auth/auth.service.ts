@@ -24,7 +24,7 @@ import {
   MembershipLevel,
 } from '../passenger/entities/passengers.entity';
 import { RegisterDto } from './dto/register.dto';
-import { LoginDto } from './dto/login.dto';
+import { LoginDto, AppType } from './dto/login.dto';
 import { GoogleSignInDto } from './dto/google-signin.dto';
 import { AppleSignInDto } from './dto/apple-signin.dto';
 import { OtpService } from '../otp/otp.service';
@@ -273,6 +273,19 @@ export class AuthService {
       throw new ForbiddenException(
         'Your account has been blocked. Please contact support.',
       );
+
+    // Role validation based on app type
+    if (dto.appType === AppType.DRIVER && user.role !== UserRole.DRIVER) {
+      throw new ForbiddenException(
+        'Access denied. This app is for drivers only.',
+      );
+    }
+
+    if (dto.appType === AppType.PASSENGER && user.role !== UserRole.PASSENGER) {
+      throw new ForbiddenException(
+        'Access denied. This app is for passengers only.',
+      );
+    }
 
     if (user.role === UserRole.DRIVER) {
       const driverProfile = await this.driverRepo.findOne({
