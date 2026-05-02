@@ -85,6 +85,10 @@ export class DriverAvailabilityService {
         throw new ForbiddenException(
           'You are currently in a trip and cannot go offline.',
         );
+      } else {
+        this.logger.log(
+          `[DRIVER_AVAILABILITY] Driver ${userId} has no active rides - allowing offline`,
+        );
       }
     }
 

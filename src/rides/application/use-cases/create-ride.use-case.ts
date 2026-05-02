@@ -200,7 +200,7 @@ export class CreateRideUseCase {
       `[BOOKING] Ride ${saved.id} created successfully - passenger=${passengerId} class=${vehicleClass?.name ?? 'pending'} price=${pricingResult.finalPrice} TND surge=${pricingResult.surgeMultiplier} loyalty=${pricingResult.loyaltyPoints} - ${totalDuration}ms total`,
     );
 
-    /* 9 ── Calculate and store Mapbox route ───────────────────── */
+    /* 9 ── Calculate and store Mapbox route in RouteHistory ───────────────────── */
     try {
       const routeResult = await this.routing.calculateRoute(
         pickupLat,
@@ -210,14 +210,16 @@ export class CreateRideUseCase {
       );
 
       if (routeResult) {
-        await this.routing.storeRouteInRide(
+        // Store trip route (pickup → dropoff) with sequence 2
+        await this.routing.storeRouteInHistory(
           saved.id,
           routeResult.geometry,
           routeResult.distanceMeters,
           routeResult.durationSeconds,
+          2, // Sequence 2 = trip route
         );
         this.logger.log(
-          `[BOOKING] Mapbox route stored for ride ${saved.id}: ${routeResult.distanceMeters.toFixed(0)}m, ${routeResult.durationSeconds.toFixed(0)}s`,
+          `[BOOKING] Mapbox route stored in RouteHistory for ride ${saved.id}: ${routeResult.distanceMeters.toFixed(0)}m, ${routeResult.durationSeconds.toFixed(0)}s (sequence 2)`,
         );
       } else {
         this.logger.warn(

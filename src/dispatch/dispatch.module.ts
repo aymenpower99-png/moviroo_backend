@@ -20,6 +20,7 @@ import { HeartbeatService } from './application/services/heartbeat.service';
 import { ScheduledDispatchService } from './application/services/scheduled-dispatch.service';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { DriversModule } from '../driver/drivers.module';
+import { RidesModule } from '../rides/rides.module';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { DriversModule } from '../driver/drivers.module';
     ]),
     NotificationsModule,
     forwardRef(() => DriversModule),
+    forwardRef(() => RidesModule),
   ],
   controllers: [DispatchController],
   providers: [

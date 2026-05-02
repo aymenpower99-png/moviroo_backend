@@ -1,9 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { RouteCalculationService } from './route-calculation.service';
 import { RouteProgressService } from './route-progress.service';
-import { RouteStorageService } from './route-storage.service';
 import { RouteCacheService } from './route-cache.service';
 import { RouteCooldownService } from './route-cooldown.service';
+import { RouteHistoryRepository } from '../../repositories/route-history.repository';
 import type { RouteResult } from './route-calculation.service';
 import type { ProgressResult } from './route-progress.service';
 
@@ -20,9 +20,9 @@ export class RoutingService {
   constructor(
     private readonly routeCalculation: RouteCalculationService,
     private readonly routeProgress: RouteProgressService,
-    private readonly routeStorage: RouteStorageService,
     private readonly routeCache: RouteCacheService,
     private readonly routeCooldown: RouteCooldownService,
+    private readonly routeHistoryRepo: RouteHistoryRepository,
   ) {}
 
   // Route Calculation methods
@@ -117,18 +117,31 @@ export class RoutingService {
     );
   }
 
-  // Storage methods
-  async storeRouteInRide(
+  // RouteHistory methods
+  async storeRouteInHistory(
     rideId: string,
     routeGeometry: string,
     routeDistanceMeters: number,
     routeDurationSeconds: number,
+    sequenceNumber: number,
   ): Promise<void> {
-    return this.routeStorage.storeRouteInRide(
+    await this.routeHistoryRepo.saveRoute(
       rideId,
       routeGeometry,
       routeDistanceMeters,
       routeDurationSeconds,
+      sequenceNumber,
+    );
+  }
+
+  async getRoutesFromHistory(rideId: string) {
+    return this.routeHistoryRepo.findByRideId(rideId);
+  }
+
+  async getRouteFromHistoryBySequence(rideId: string, sequenceNumber: number) {
+    return this.routeHistoryRepo.findByRideIdAndSequence(
+      rideId,
+      sequenceNumber,
     );
   }
 

@@ -16,6 +16,7 @@ import { TripWaypoint } from '../domain/entities/trip-waypoint.entity';
 import { DriverLocation } from '../../dispatch/domain/entities/driver-location.entity';
 import { Ride } from '../../rides/domain/entities/ride.entity';
 import { RoutingService } from '../../rides/infrastructure/services/routing/routing.service';
+import { RouteHistoryRepository } from '../../rides/infrastructure/repositories/route-history.repository';
 
 interface GpsPayload {
   ride_id: string;
@@ -56,6 +57,7 @@ export class TripTrackingGateway
     @InjectRepository(Ride)
     private readonly rideRepo: Repository<Ride>,
     private readonly routingService: RoutingService,
+    private readonly routeHistoryRepo: RouteHistoryRepository,
   ) {}
 
   /* ── Connection lifecycle ──── */
@@ -207,21 +209,48 @@ export class TripTrackingGateway
       try {
         const ride = await this.rideRepo.findOne({ where: { id: rideId } });
         if (ride) {
-          // Try to use new route-based progress if route data is available
-          if (
-            ride.routeGeometry &&
-            ride.routeDistanceMeters &&
-            ride.routeDurationSeconds
-          ) {
+          // Select route based on ride status using RouteHistory
+          let routeGeometry: string | null = null;
+          let routeDistanceMeters: number | null = null;
+          let routeDurationSeconds: number | null = null;
+
+          if (ride.status === 'EN_ROUTE_TO_PICKUP') {
+            // Use pickup route (sequence 1)
+            const pickupRoute =
+              await this.routeHistoryRepo.findByRideIdAndSequence(rideId, 1);
+            if (pickupRoute) {
+              routeGeometry = pickupRoute.routeGeometry;
+              routeDistanceMeters = pickupRoute.routeDistanceMeters;
+              routeDurationSeconds = pickupRoute.routeDurationSeconds;
+              this.logger.log(
+                `[PROGRESS] Using pickup route from RouteHistory (sequence 1) for EN_ROUTE_TO_PICKUP`,
+              );
+            }
+          } else if (ride.status === 'IN_TRIP') {
+            // Use trip route (sequence 2)
+            const tripRoute =
+              await this.routeHistoryRepo.findByRideIdAndSequence(rideId, 2);
+            if (tripRoute) {
+              routeGeometry = tripRoute.routeGeometry;
+              routeDistanceMeters = tripRoute.routeDistanceMeters;
+              routeDurationSeconds = tripRoute.routeDurationSeconds;
+              this.logger.log(
+                `[PROGRESS] Using trip route from RouteHistory (sequence 2) for IN_TRIP`,
+              );
+            }
+          }
+
+          // Try to use route-based progress if route data is available
+          if (routeGeometry && routeDistanceMeters && routeDurationSeconds) {
             this.logger.log(
               `[PROGRESS] Using route-based progress for ride ${rideId}`,
             );
             progressData = this.routingService.calculateProgressRouteBased(
               payload.latitude,
               payload.longitude,
-              ride.routeGeometry,
-              ride.routeDistanceMeters,
-              ride.routeDurationSeconds,
+              routeGeometry,
+              routeDistanceMeters,
+              routeDurationSeconds,
             );
           } else {
             // Fallback to old straight-line method if route data is not available

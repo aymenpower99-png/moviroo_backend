@@ -16,6 +16,7 @@ import { Driver } from '../../../driver/entities/driver.entity';
 import { Vehicle } from '../../../vehicles/entities/vehicle.entity';
 import { User } from '../../../users/entites/user.entity';
 import { DriverNotificationService } from '../../../notifications/services/driver-notification.service';
+import { RoutingService } from '../../../rides/infrastructure/services/routing/routing.service';
 
 @Injectable()
 export class RespondToOfferUseCase {
@@ -33,6 +34,7 @@ export class RespondToOfferUseCase {
     @InjectRepository(Vehicle)
     private readonly vehicleRepo: Repository<Vehicle>,
     private readonly driverNotif: DriverNotificationService,
+    private readonly routingService: RoutingService,
   ) {}
 
   /**
@@ -80,6 +82,40 @@ export class RespondToOfferUseCase {
     ride.driverId = currentUser.id;
     ride.vehicleId = vehicle.id;
     await this.rideRepo.save(ride);
+
+    // Calculate and store pickup route (driver → pickup) in RouteHistory
+    try {
+      const driverLoc = await this.locRepo.findOne({
+        where: { driverId: currentUser.id },
+      });
+      if (driverLoc && driverLoc.latitude && driverLoc.longitude) {
+        this.logger.log(
+          `📍 Calculating pickup route: driver (${driverLoc.latitude}, ${driverLoc.longitude}) → pickup (${ride.pickupLat}, ${ride.pickupLon})`,
+        );
+        const pickupRoute = await this.routingService.calculateRoute(
+          driverLoc.latitude,
+          driverLoc.longitude,
+          ride.pickupLat,
+          ride.pickupLon,
+        );
+        if (pickupRoute) {
+          // Store pickup route with sequence 1
+          await this.routingService.storeRouteInHistory(
+            ride.id,
+            pickupRoute.geometry,
+            pickupRoute.distanceMeters,
+            pickupRoute.durationSeconds,
+            1, // Sequence 1 = pickup route
+          );
+          this.logger.log(
+            `✅ Pickup route stored in RouteHistory: ${pickupRoute.distanceMeters.toFixed(0)}m, ${pickupRoute.durationSeconds.toFixed(0)}s (sequence 1)`,
+          );
+        }
+      }
+    } catch (err) {
+      // Non-fatal: continue without pickup route, will use fallback
+      this.logger.warn(`⚠️ Failed to calculate/store pickup route: ${err}`);
+    }
 
     // Increment the driver's accepted offers counter for acceptance rate tracking
     await this.driverRepo
