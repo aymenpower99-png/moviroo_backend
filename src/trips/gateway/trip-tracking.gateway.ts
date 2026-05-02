@@ -15,7 +15,7 @@ import { Server, Socket } from 'socket.io';
 import { TripWaypoint } from '../domain/entities/trip-waypoint.entity';
 import { DriverLocation } from '../../dispatch/domain/entities/driver-location.entity';
 import { Ride } from '../../rides/domain/entities/ride.entity';
-import { RoutingService } from '../../rides/infrastructure/services/routing.service';
+import { RoutingService } from '../../rides/infrastructure/services/routing/routing.service';
 
 interface GpsPayload {
   ride_id: string;
@@ -207,31 +207,53 @@ export class TripTrackingGateway
       try {
         const ride = await this.rideRepo.findOne({ where: { id: rideId } });
         if (ride) {
-          const targetLat =
-            ride.status === 'IN_TRIP' ? ride.dropoffLat : ride.pickupLat;
-          const targetLon =
-            ride.status === 'IN_TRIP' ? ride.dropoffLon : ride.pickupLon;
-          const totalDistanceMeters = ride.distanceKm
-            ? ride.distanceKm * 1000
-            : 0;
-
-          if (totalDistanceMeters > 0) {
-            progressData = await this.routingService.calculateProgressForRide(
+          // Try to use new route-based progress if route data is available
+          if (
+            ride.routeGeometry &&
+            ride.routeDistanceMeters &&
+            ride.routeDurationSeconds
+          ) {
+            this.logger.log(
+              `[PROGRESS] Using route-based progress for ride ${rideId}`,
+            );
+            progressData = this.routingService.calculateProgressRouteBased(
               payload.latitude,
               payload.longitude,
-              targetLat,
-              targetLon,
-              totalDistanceMeters,
-              payload.speed_kmh ?? 0,
+              ride.routeGeometry,
+              ride.routeDistanceMeters,
+              ride.routeDurationSeconds,
             );
+          } else {
+            // Fallback to old straight-line method if route data is not available
+            this.logger.log(
+              `[PROGRESS] Using fallback (straight-line) progress for ride ${rideId}`,
+            );
+            const targetLat =
+              ride.status === 'IN_TRIP' ? ride.dropoffLat : ride.pickupLat;
+            const targetLon =
+              ride.status === 'IN_TRIP' ? ride.dropoffLon : ride.pickupLon;
+            const totalDistanceMeters = ride.distanceKm
+              ? ride.distanceKm * 1000
+              : 0;
 
-            // Cache the result
-            if (progressData) {
-              this.progressCache.set(rideId, {
-                data: progressData,
-                timestamp: now,
-              });
+            if (totalDistanceMeters > 0) {
+              progressData = await this.routingService.calculateProgressForRide(
+                payload.latitude,
+                payload.longitude,
+                targetLat,
+                targetLon,
+                totalDistanceMeters,
+                payload.speed_kmh ?? 0,
+              );
             }
+          }
+
+          // Cache the result
+          if (progressData) {
+            this.progressCache.set(rideId, {
+              data: progressData,
+              timestamp: now,
+            });
           }
         }
       } catch (err) {

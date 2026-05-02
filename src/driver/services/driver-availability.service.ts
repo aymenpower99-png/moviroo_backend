@@ -2,6 +2,7 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
@@ -14,6 +15,8 @@ import { RideStatus } from '../../rides/domain/enums/ride-status.enum';
 
 @Injectable()
 export class DriverAvailabilityService {
+  private readonly logger = new Logger(DriverAvailabilityService.name);
+
   constructor(
     @InjectRepository(Driver) private driverRepo: Repository<Driver>,
     @InjectRepository(Vehicle) private vehicleRepo: Repository<Vehicle>,
@@ -66,7 +69,7 @@ export class DriverAvailabilityService {
     if (status === DriverAvailabilityStatus.OFFLINE) {
       const activeRide = await this.rideRepo.findOne({
         where: {
-          driverId: userId,
+          driverId: driver.id, // Use driver.id (User UUID) not userId
           status: In([
             RideStatus.ASSIGNED,
             RideStatus.EN_ROUTE_TO_PICKUP,
@@ -76,6 +79,9 @@ export class DriverAvailabilityService {
         },
       });
       if (activeRide) {
+        this.logger.error(
+          `[DRIVER_AVAILABILITY] Driver ${userId} cannot go offline - has active ride ${activeRide.id} with status ${activeRide.status}`,
+        );
         throw new ForbiddenException(
           'You are currently in a trip and cannot go offline.',
         );
@@ -114,9 +120,18 @@ export class DriverAvailabilityService {
           });
 
           if (history) {
-            history.onlineTimeMs += deltaMs;
-            history.updatedAt = new Date();
-            await this.onlineHistoryRepo.save(history);
+            // Validate accumulated total doesn't exceed reasonable monthly max
+            const MAX_MONTHLY_MS = 31 * 24 * 60 * 60 * 1000; // ~2.68 billion ms
+            const newTotal = history.onlineTimeMs + deltaMs;
+            if (newTotal > MAX_MONTHLY_MS) {
+              this.logger.error(
+                `[DRIVER_AVAILABILITY] Driver ${driver.userId} accumulated time ${newTotal}ms exceeds monthly max ${MAX_MONTHLY_MS}ms - skipping accumulation. Current: ${history.onlineTimeMs}ms, delta: ${deltaMs}ms`,
+              );
+            } else {
+              history.onlineTimeMs += deltaMs;
+              history.updatedAt = new Date();
+              await this.onlineHistoryRepo.save(history);
+            }
           } else {
             await this.onlineHistoryRepo.save({
               driverId: driver.userId,

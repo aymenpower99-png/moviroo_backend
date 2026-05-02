@@ -40,8 +40,8 @@ import { GetVehiclePricesUseCase } from './application/use-cases/get-vehicle-pri
 import { DispatchOffer } from '../dispatch/domain/entities/dispatch-offer.entity';
 import { TripPayment } from '../billing/entities/trip-payment.entity';
 import { DriverLocation } from '../dispatch/domain/entities/driver-location.entity';
-import { GeocodingService } from './infrastructure/services/geocoding.service';
-import { RoutingService } from './infrastructure/services/routing.service';
+import { GeocodingService } from './infrastructure/services/geocoding/geocoding.service';
+import { RoutingService } from './infrastructure/services/routing/routing.service';
 
 @Controller('rides')
 export class RidesController {

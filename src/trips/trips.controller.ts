@@ -37,7 +37,7 @@ import { SubmitRatingUseCase } from './application/use-cases/submit-rating.use-c
 import { SubmitRatingDto } from './application/dtos/submit-rating.dto';
 import { TripTrackingGateway } from './gateway/trip-tracking.gateway';
 import { DriverNotificationService } from '../notifications/services/driver-notification.service';
-import { RoutingService } from '../rides/infrastructure/services/routing.service';
+import { RoutingService } from '../rides/infrastructure/services/routing/routing.service';
 
 @Controller('trips')
 export class TripsController {

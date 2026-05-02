@@ -12,8 +12,12 @@ import { RideStatus } from '../../domain/enums/ride-status.enum';
 import { User, UserRole } from '../../../users/entites/user.entity';
 import { PassengerEntity } from '../../../passenger/entities/passengers.entity';
 import { VehicleClass } from '../../../classes/entities/class.entity';
-import { GeocodingService } from '../../infrastructure/services/geocoding.service';
-import { PricingService } from '../../infrastructure/services/pricing.service';
+import { GeocodingService } from '../../infrastructure/services/geocoding/geocoding.service';
+import {
+  PricingService,
+  PricingRequest,
+} from '../../infrastructure/services/pricing/pricing.service';
+import { RoutingService } from '../../infrastructure/services/routing/routing.service';
 import { CreateRideDto } from '../dtos/create-ride.dto';
 
 @Injectable()
@@ -29,6 +33,7 @@ export class CreateRideUseCase {
     private readonly classRepo: Repository<VehicleClass>,
     private readonly geocoding: GeocodingService,
     private readonly pricing: PricingService,
+    private readonly routing: RoutingService,
   ) {}
 
   async execute(currentUser: User, dto: CreateRideDto): Promise<Ride> {
@@ -195,6 +200,37 @@ export class CreateRideUseCase {
       `[BOOKING] Ride ${saved.id} created successfully - passenger=${passengerId} class=${vehicleClass?.name ?? 'pending'} price=${pricingResult.finalPrice} TND surge=${pricingResult.surgeMultiplier} loyalty=${pricingResult.loyaltyPoints} - ${totalDuration}ms total`,
     );
 
+    /* 9 ── Calculate and store Mapbox route ───────────────────── */
+    try {
+      const routeResult = await this.routing.calculateRoute(
+        pickupLat,
+        pickupLon,
+        dropoffLat,
+        dropoffLon,
+      );
+
+      if (routeResult) {
+        await this.routing.storeRouteInRide(
+          saved.id,
+          routeResult.geometry,
+          routeResult.distanceMeters,
+          routeResult.durationSeconds,
+        );
+        this.logger.log(
+          `[BOOKING] Mapbox route stored for ride ${saved.id}: ${routeResult.distanceMeters.toFixed(0)}m, ${routeResult.durationSeconds.toFixed(0)}s`,
+        );
+      } else {
+        this.logger.warn(
+          `[BOOKING] Failed to calculate Mapbox route for ride ${saved.id}`,
+        );
+      }
+    } catch (err) {
+      this.logger.error(
+        `[BOOKING] Error calculating/storing route for ride ${saved.id}: ${err}`,
+      );
+      // Don't fail the ride creation if route calculation fails
+    }
+
     return this.rideRepo.findOne({
       where: { id: saved.id },
       relations: ['passenger', 'vehicleClass'],
@@ -343,19 +379,10 @@ export class CreateRideUseCase {
       return { suspicious: true, reason: 'Invalid longitude range' };
     }
 
-    // Check for coordinates with excessive precision (possible GPS spoofing)
-    // Normal GPS has ~6 decimal places (1m precision), 10+ decimal places is suspicious
-    const latStr = lat.toString();
-    const lonStr = lon.toString();
-    const latDecimals = latStr.includes('.') ? latStr.split('.')[1].length : 0;
-    const lonDecimals = lonStr.includes('.') ? lonStr.split('.')[1].length : 0;
-
-    if (latDecimals > 8 || lonDecimals > 8) {
-      return {
-        suspicious: true,
-        reason: 'Excessive coordinate precision (possible spoofing)',
-      };
-    }
+    // Note: Coordinate precision check removed — JavaScript floating point
+    // naturally produces up to 17 significant digits for any number, so
+    // map-picked and GPS coordinates routinely have 12-15 decimal places.
+    // This is NOT an indicator of spoofing.
 
     // Check for coordinates outside reasonable bounds for Tunisia
     // While isInServiceArea checks exact bounds, this checks for obviously wrong coordinates

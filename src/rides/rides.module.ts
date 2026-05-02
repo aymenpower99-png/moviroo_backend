@@ -18,9 +18,20 @@ import { CancelRideUseCase } from './application/use-cases/cancel-ride.use-case'
 import { GetVehiclePricesUseCase } from './application/use-cases/get-vehicle-prices.use-case';
 
 import { HaversineService } from './infrastructure/services/haversine.service';
-import { GeocodingService } from './infrastructure/services/geocoding.service';
-import { PricingService } from './infrastructure/services/pricing.service';
-import { RoutingService } from './infrastructure/services/routing.service';
+import { GeocodingService } from './infrastructure/services/geocoding/geocoding.service';
+import { GeocodingMapboxService } from './infrastructure/services/geocoding/geocoding-mapbox.service';
+import { GeocodingNominatimService } from './infrastructure/services/geocoding/geocoding-nominatim.service';
+import { PricingService } from './infrastructure/services/pricing/pricing.service';
+import { PricingMlService } from './infrastructure/services/pricing/pricing-ml.service';
+import { PricingFallbackService } from './infrastructure/services/pricing/pricing-fallback.service';
+import { RoutingService } from './infrastructure/services/routing/routing.service';
+import { RouteCalculationService } from './infrastructure/services/routing/route-calculation.service';
+import { RouteProgressService } from './infrastructure/services/routing/route-progress.service';
+import { RouteStorageService } from './infrastructure/services/routing/route-storage.service';
+import { RouteCacheService } from './infrastructure/services/routing/route-cache.service';
+import { RouteCooldownService } from './infrastructure/services/routing/route-cooldown.service';
+import { RouteSnappingService } from './infrastructure/services/route-snapping.service';
+import { GpsSmoothingService } from './infrastructure/services/gps-smoothing.service';
 
 import { DispatchModule } from '../dispatch/dispatch.module';
 import { ClassesModule } from '../classes/classes.module';
@@ -52,8 +63,19 @@ import { ClassesModule } from '../classes/classes.module';
     GetVehiclePricesUseCase,
     HaversineService,
     GeocodingService,
+    GeocodingMapboxService,
+    GeocodingNominatimService,
     PricingService,
+    PricingMlService,
+    PricingFallbackService,
     RoutingService,
+    RouteCalculationService,
+    RouteProgressService,
+    RouteStorageService,
+    RouteCacheService,
+    RouteCooldownService,
+    RouteSnappingService,
+    GpsSmoothingService,
   ],
   exports: [
     CreateRideUseCase,

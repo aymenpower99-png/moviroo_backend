@@ -1,72 +1,44 @@
 import { Injectable, Logger, Inject } from '@nestjs/common';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
-import { HaversineService } from './haversine.service';
-import { withRetry } from '../../../common/utils/retry.util';
-import { ClassesService } from '../../../classes/classes.service';
+import {
+  PricingMlService,
+  PricingRequest,
+  PricingResult,
+  BatchPricingRequest,
+  BatchPricingResult,
+  BatchPricingItem,
+} from './pricing-ml.service';
+import { PricingFallbackService } from './pricing-fallback.service';
+import { ClassesService } from '../../../../classes/classes.service';
 
-export interface PricingRequest {
-  pickupLat: number;
-  pickupLon: number;
-  dropoffLat: number;
-  dropoffLon: number;
-  carType: string;
-  bookingDt?: string;
-}
+// Re-export types for backward compatibility
+export type {
+  PricingRequest,
+  PricingResult,
+  BatchPricingRequest,
+  BatchPricingResult,
+  BatchPricingItem,
+};
 
-export interface PricingResult {
-  finalPrice: number; // facture price (rounded to 5 TND)
-  exactPrice: number; // exact calculated price
-  loyaltyPoints: number; // points earned for this ride
-  surgeMultiplier: number;
-  distanceKm: number;
-  durationMin: number; // whole minutes (ceil)
-  fullResponse: Record<string, any>;
-}
-
-export interface BatchPricingRequest {
-  pickupLat: number;
-  pickupLon: number;
-  dropoffLat: number;
-  dropoffLon: number;
-  carTypes: string[];
-  bookingDt?: string;
-}
-
-export interface BatchPricingItem {
-  carType: string; // e.g. "economy", "comfort"
-  finalPrice: number;
-  exactPrice: number;
-  loyaltyPoints: number;
-  surgeMultiplier: number;
-}
-
-export interface BatchPricingResult {
-  distanceKm: number;
-  durationMin: number;
-  items: BatchPricingItem[]; // one per carType (same order as request)
-  fullResponse: Record<string, any>;
-}
-
+/**
+ * Main Pricing Service Facade
+ * This service aggregates all pricing-related services for backward compatibility
+ */
 @Injectable()
 export class PricingService {
   private readonly logger = new Logger(PricingService.name);
-  private readonly ML_API_URL =
-    process.env.ML_API_URL ?? 'http://localhost:8000';
-
-  /* Business-rule fallback constants (mirror config.py) */
-  private static readonly BASE_FARE = 3.5;
-  private static readonly RATE_PER_KM = 0.65;
-  private static readonly RATE_PER_MIN = 0.3;
-  private static readonly MIN_FARE = 4.0;
 
   constructor(
-    private readonly haversine: HaversineService,
+    private readonly pricingMl: PricingMlService,
+    private readonly pricingFallback: PricingFallbackService,
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
     private readonly classesService: ClassesService,
   ) {}
 
-  /** Call ML API; fall back to business rules if unavailable - CACHED */
+  /**
+   * Call ML API; fall back to business rules if unavailable - CACHED
+   */
   async estimate(req: PricingRequest): Promise<PricingResult> {
     const startTime = Date.now();
     this.logger.log(
@@ -94,7 +66,7 @@ export class PricingService {
 
     try {
       const apiStart = Date.now();
-      const result = await this.callMlApi(req);
+      const result = await this.pricingMl.callMlApi(req);
       const apiDuration = Date.now() - apiStart;
       const totalDuration = Date.now() - startTime;
 
@@ -108,7 +80,7 @@ export class PricingService {
       this.logger.warn(
         `[PRICING] ML API unavailable, using fallback pricing: ${err}`,
       );
-      const fallbackResult = this.fallback(req);
+      const fallbackResult = this.pricingFallback.fallback(req);
       const fallbackDuration = Date.now() - fallbackStart;
       const totalDuration = Date.now() - startTime;
 
@@ -154,7 +126,7 @@ export class PricingService {
 
     try {
       const apiStart = Date.now();
-      const result = await this.callMlApiBatch(req);
+      const result = await this.pricingMl.callMlApiBatch(req);
       const apiDuration = Date.now() - apiStart;
       const totalDuration = Date.now() - startTime;
 
@@ -168,7 +140,7 @@ export class PricingService {
       this.logger.warn(
         `[PRICING] ML API batch unavailable, using fallback: ${err}`,
       );
-      const fallbackResult = this.batchFallback(req);
+      const fallbackResult = this.pricingFallback.batchFallback(req);
       const fallbackDuration = Date.now() - fallbackStart;
       const totalDuration = Date.now() - startTime;
 
@@ -219,187 +191,6 @@ export class PricingService {
       bookingDt,
     });
   }
-
-  /* ── ML API call ──────────────────────────── */
-
-  private async callMlApi(req: PricingRequest): Promise<PricingResult> {
-    const body = {
-      lat_origin: req.pickupLat,
-      lon_origin: req.pickupLon,
-      lat_dest: req.dropoffLat,
-      lon_dest: req.dropoffLon,
-      car_type: req.carType,
-      booking_dt: req.bookingDt ?? new Date().toISOString(),
-    };
-
-    const res = await withRetry(
-      () =>
-        fetch(`${this.ML_API_URL}/price/quick`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-          signal: AbortSignal.timeout(10_000),
-        }),
-      `ML API pricing ${req.carType}`,
-      { maxRetries: 2, initialDelayMs: 1000 },
-      this.logger,
-    );
-
-    if (!res.ok) {
-      throw new Error(`ML API responded with status ${res.status}`);
-    }
-
-    const data = (await res.json()) as Record<string, any>;
-
-    return {
-      finalPrice: data.final_price,
-      exactPrice: data.final_price_exact ?? data.final_price,
-      loyaltyPoints: data.loyalty_points ?? 0,
-      surgeMultiplier: data.surge_multiplier,
-      distanceKm: data.distance_km,
-      durationMin: Math.ceil(data.duration_min),
-      fullResponse: data,
-    };
-  }
-
-  /* ── ML API batch call ─────────────────────── */
-
-  private async callMlApiBatch(
-    req: BatchPricingRequest,
-  ): Promise<BatchPricingResult> {
-    const body = {
-      lat_origin: req.pickupLat,
-      lon_origin: req.pickupLon,
-      lat_dest: req.dropoffLat,
-      lon_dest: req.dropoffLon,
-      car_types: req.carTypes,
-      booking_dt: req.bookingDt ?? new Date().toISOString(),
-    };
-
-    const res = await withRetry(
-      () =>
-        fetch(`${this.ML_API_URL}/price/batch`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-          signal: AbortSignal.timeout(15_000),
-        }),
-      `ML API batch pricing ${req.carTypes.join(',')}`,
-      { maxRetries: 2, initialDelayMs: 1000 },
-      this.logger,
-    );
-
-    if (!res.ok) {
-      throw new Error(`ML API batch responded with status ${res.status}`);
-    }
-
-    const data = (await res.json()) as Record<string, any>;
-    const common = (data.common ?? {}) as Record<string, any>;
-    const prices = (data.prices ?? []) as Array<Record<string, any>>;
-
-    const items: BatchPricingItem[] = prices.map((p) => ({
-      carType: String(p.car_type),
-      finalPrice: Number(p.final_price_rounded ?? p.final_price),
-      exactPrice: Number(p.final_price ?? p.final_price_rounded),
-      loyaltyPoints: Number(p.loyalty_points ?? 0),
-      surgeMultiplier: Number(p.surge_multiplier ?? 1),
-    }));
-
-    return {
-      distanceKm: Number(common.distance_km ?? 0),
-      durationMin: Math.ceil(Number(common.duration_min ?? 0)),
-      items,
-      fullResponse: data,
-    };
-  }
-
-  /* ── Fallback (pure business rules) ────────── */
-
-  private fallback(req: PricingRequest): PricingResult {
-    const { distanceKm, durationMin } = this.haversine.calculate(
-      req.pickupLat,
-      req.pickupLon,
-      req.dropoffLat,
-      req.dropoffLon,
-    );
-
-    const raw =
-      PricingService.BASE_FARE +
-      distanceKm * PricingService.RATE_PER_KM +
-      durationMin * PricingService.RATE_PER_MIN;
-
-    const exactPrice = Math.max(PricingService.MIN_FARE, +raw.toFixed(2));
-    const finalPrice = Math.ceil(exactPrice / 5) * 5;
-    const loyaltyPoints = Math.ceil((finalPrice * 0.5) / 5) * 5;
-
-    return {
-      finalPrice,
-      exactPrice,
-      loyaltyPoints,
-      surgeMultiplier: 1.0,
-      distanceKm,
-      durationMin: Math.ceil(durationMin),
-      fullResponse: {
-        fallback: true,
-        base_fare: PricingService.BASE_FARE,
-        distance_cost: +(distanceKm * PricingService.RATE_PER_KM).toFixed(2),
-        duration_cost: +(durationMin * PricingService.RATE_PER_MIN).toFixed(2),
-      },
-    };
-  }
-
-  /* ── Batch fallback (one pass, per-car-type multiplier) ────── */
-
-  private batchFallback(req: BatchPricingRequest): BatchPricingResult {
-    const { distanceKm, durationMin } = this.haversine.calculate(
-      req.pickupLat,
-      req.pickupLon,
-      req.dropoffLat,
-      req.dropoffLon,
-    );
-
-    const rawComfort =
-      PricingService.BASE_FARE +
-      distanceKm * PricingService.RATE_PER_KM +
-      durationMin * PricingService.RATE_PER_MIN;
-
-    const items: BatchPricingItem[] = req.carTypes.map((ct) => {
-      const mult = PricingService.CAR_MULT[normalizeCarType(ct)] ?? 1.0;
-      const raw = rawComfort * mult;
-      const exactPrice = Math.max(PricingService.MIN_FARE, +raw.toFixed(2));
-      const finalPrice = Math.ceil(exactPrice / 5) * 5;
-      const loyaltyPoints = Math.ceil((finalPrice * 0.5) / 5) * 5;
-      return {
-        carType: ct,
-        finalPrice,
-        exactPrice,
-        loyaltyPoints,
-        surgeMultiplier: 1.0,
-      };
-    });
-
-    return {
-      distanceKm,
-      durationMin: Math.ceil(durationMin),
-      items,
-      fullResponse: {
-        fallback: true,
-        base_fare: PricingService.BASE_FARE,
-        distance_cost: +(distanceKm * PricingService.RATE_PER_KM).toFixed(2),
-        duration_cost: +(durationMin * PricingService.RATE_PER_MIN).toFixed(2),
-      },
-    };
-  }
-
-  /* Mirror of MULT_CAR in config.py (fallback only) */
-  private static readonly CAR_MULT: Record<string, number> = {
-    economy: 0.75,
-    standard: 0.9,
-    comfort: 1.0,
-    first_class: 1.6,
-    van: 1.3,
-    mini_bus: 1.5,
-  };
 
   /**
    * Validate that coordinates are valid before sending to ML / OSRM.

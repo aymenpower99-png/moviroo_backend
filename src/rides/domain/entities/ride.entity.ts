@@ -117,6 +117,32 @@ export class Ride {
   })
   durationMinReal: number | null;
 
+  /* ── Route Data (Mapbox) ─────────────────────── */
+
+  @Column({
+    name: 'route_geometry',
+    type: 'text',
+    nullable: true,
+    default: null,
+  })
+  routeGeometry: string | null;
+
+  @Column({
+    name: 'route_distance_meters',
+    type: 'double precision',
+    nullable: true,
+    default: null,
+  })
+  routeDistanceMeters: number | null;
+
+  @Column({
+    name: 'route_duration_seconds',
+    type: 'double precision',
+    nullable: true,
+    default: null,
+  })
+  routeDurationSeconds: number | null;
+
   /* ── Pricing ───────────────────────────────── */
 
   @Column({

@@ -1,9 +1,22 @@
-import { MigrationInterface, QueryRunner } from "typeorm";
+import { MigrationInterface, QueryRunner } from 'typeorm';
 
 export class AddDriverOnlineHistory1778000000001 implements MigrationInterface {
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    // Check if table already exists
+    const tableExists = await queryRunner.query(`
+            SELECT table_name
+            FROM information_schema.tables
+            WHERE table_name = 'driver_online_history';
+        `);
 
-    public async up(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`
+    if (tableExists.length > 0) {
+      console.log(
+        'driver_online_history table already exists - skipping migration',
+      );
+      return;
+    }
+
+    await queryRunner.query(`
             CREATE TABLE driver_online_history (
                 id SERIAL PRIMARY KEY,
                 driver_id UUID REFERENCES drivers(id) ON DELETE CASCADE,
@@ -17,14 +30,13 @@ export class AddDriverOnlineHistory1778000000001 implements MigrationInterface {
             CREATE INDEX idx_driver_online_history_driver_id ON driver_online_history(driver_id);
             CREATE INDEX idx_driver_online_history_month ON driver_online_history(month);
         `);
-    }
+  }
 
-    public async down(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`
             DROP INDEX IF EXISTS idx_driver_online_history_month;
             DROP INDEX IF EXISTS idx_driver_online_history_driver_id;
             DROP TABLE IF EXISTS driver_online_history;
         `);
-    }
-
+  }
 }

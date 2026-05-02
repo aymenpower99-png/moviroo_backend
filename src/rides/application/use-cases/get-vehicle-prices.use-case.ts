@@ -1,9 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import {
   PricingService,
+  PricingRequest,
+  PricingResult,
   BatchPricingRequest,
+  BatchPricingResult,
   BatchPricingItem,
-} from '../../infrastructure/services/pricing.service';
+} from '../../infrastructure/services/pricing/pricing.service';
 import { ClassesService } from '../../../classes/classes.service';
 import {
   GetVehiclePricesDto,
