@@ -92,66 +92,76 @@ export class DriverAvailabilityService {
       }
     }
 
-    driver.availabilityStatus = status;
-
-    // Build a targeted partial update — only touch the columns we intend to change.
-    // This avoids a full save() which would include ALL driver columns (including
-    // legacy null values for notif_push_enabled / notif_email_enabled) and cause
-    // NOT NULL constraint failures on unrelated fields.
-    const updateData: Partial<Driver> = {
-      availabilityStatus: status,
-    };
-
     const currentMonth = this._currentMonth();
 
     if (status === DriverAvailabilityStatus.ONLINE) {
-      updateData.onlineSince = new Date();
+      // Going ONLINE — set onlineSince to now.
+      // Use atomic conditional update so we don't reset onlineSince if the driver
+      // is already online (which would lose accumulated session time).
+      await this.driverRepo
+        .createQueryBuilder()
+        .update(Driver)
+        .set({
+          availabilityStatus: DriverAvailabilityStatus.ONLINE,
+          onlineSince: () => 'COALESCE(online_since, NOW())',
+        })
+        .where('user_id = :userId', { userId })
+        .execute();
     } else {
-      // Going OFFLINE — commit session time to driver_online_history
-      if (driver.onlineSince) {
-        const deltaMs = Date.now() - new Date(driver.onlineSince).getTime();
+      // Going OFFLINE — use a transaction with row-level lock to atomically
+      // read the current onlineSince, clear it, and accumulate the delta.
+      // Pessimistic_write lock ensures concurrent callers block until we commit,
+      // and by then onlineSince is already null so they skip accumulation.
+      await this.driverRepo.manager.transaction(async (tx) => {
+        const locked = await tx
+          .createQueryBuilder(Driver, 'd')
+          .setLock('pessimistic_write')
+          .where('d.user_id = :userId', { userId })
+          .getOne();
 
-        // Validate deltaMs to prevent corrupted session times
-        if (deltaMs < 0 || deltaMs > 24 * 60 * 60 * 1000) {
-          // Negative or >24 hours is suspicious - skip accumulation
-          console.warn(
-            `Suspicious deltaMs for driver ${driver.userId}: ${deltaMs}ms. Skipping accumulation.`,
+        if (!locked) return;
+
+        if (!locked.onlineSince) {
+          // Already offline (race lost, or was never online) — just ensure status flag.
+          await tx.update(
+            Driver,
+            { userId },
+            { availabilityStatus: DriverAvailabilityStatus.OFFLINE },
           );
-        } else {
-          // Update or insert into driver_online_history
-          let history = await this.onlineHistoryRepo.findOne({
-            where: { driverId: driver.userId, month: currentMonth },
-          });
-
-          if (history) {
-            // Validate accumulated total doesn't exceed reasonable monthly max
-            const MAX_MONTHLY_MS = 31 * 24 * 60 * 60 * 1000; // ~2.68 billion ms
-            const newTotal = history.onlineTimeMs + deltaMs;
-            if (newTotal > MAX_MONTHLY_MS) {
-              this.logger.error(
-                `[DRIVER_AVAILABILITY] Driver ${driver.userId} accumulated time ${newTotal}ms exceeds monthly max ${MAX_MONTHLY_MS}ms - skipping accumulation. Current: ${history.onlineTimeMs}ms, delta: ${deltaMs}ms`,
-              );
-            } else {
-              history.onlineTimeMs += deltaMs;
-              history.updatedAt = new Date();
-              await this.onlineHistoryRepo.save(history);
-            }
-          } else {
-            await this.onlineHistoryRepo.save({
-              driverId: driver.userId,
-              month: currentMonth,
-              onlineTimeMs: deltaMs,
-              createdAt: new Date(),
-              updatedAt: new Date(),
-            });
-          }
+          return;
         }
 
-        updateData.onlineSince = null;
-      }
+        const prevOnlineSince = locked.onlineSince;
+
+        // Clear onlineSince and set status to OFFLINE atomically within the lock.
+        await tx.update(
+          Driver,
+          { userId },
+          {
+            availabilityStatus: DriverAvailabilityStatus.OFFLINE,
+            onlineSince: null,
+          },
+        );
+
+        const deltaMs = Date.now() - new Date(prevOnlineSince).getTime();
+
+        if (deltaMs < 0 || deltaMs > 24 * 60 * 60 * 1000) {
+          this.logger.warn(
+            `[DRIVER_AVAILABILITY] Suspicious deltaMs for driver ${userId}: ${deltaMs}ms. Skipping accumulation.`,
+          );
+          return;
+        }
+
+        // Accumulate inside the same transaction so it rolls back on error.
+        await this._accumulateSessionTimeTx(
+          tx.getRepository(DriverOnlineHistory),
+          userId,
+          currentMonth,
+          deltaMs,
+        );
+      });
     }
 
-    await this.driverRepo.update({ userId }, updateData);
     const saved = await this.driverRepo.findOne({ where: { userId } });
 
     if (status === DriverAvailabilityStatus.ONLINE) {
@@ -215,6 +225,98 @@ export class DriverAvailabilityService {
   private _currentMonth(): string {
     const n = new Date();
     return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}`;
+  }
+
+  /**
+   * Accumulate a validated session delta into driver_online_history for the given month.
+   * Accepts a repository so it can participate in an outer transaction.
+   * Uses an atomic UPDATE with a SQL-side cap check so concurrent calls cannot
+   * inflate the total beyond MAX_MONTHLY_MS (~31 days). Falls back to insert if
+   * no row exists for the (driverId, month) pair.
+   */
+  private async _accumulateSessionTimeTx(
+    repo: Repository<DriverOnlineHistory>,
+    userId: string,
+    month: string,
+    deltaMs: number,
+  ): Promise<void> {
+    const MAX_MONTHLY_MS = 31 * 24 * 60 * 60 * 1000; // ~2.68 billion ms
+
+    // Atomic conditional UPDATE: only add deltaMs if total would not exceed cap.
+    const updateResult = await repo
+      .createQueryBuilder()
+      .update(DriverOnlineHistory)
+      .set({
+        onlineTimeMs: () => `"onlineTimeMs" + ${deltaMs}`,
+        updatedAt: new Date(),
+      })
+      .where(
+        '"driverId" = :driverId AND month = :month AND ("onlineTimeMs" + :deltaMs) <= :max',
+        { driverId: userId, month, deltaMs, max: MAX_MONTHLY_MS },
+      )
+      .execute();
+
+    if (updateResult.affected && updateResult.affected > 0) {
+      return;
+    }
+
+    const existing = await repo.findOne({
+      where: { driverId: userId, month },
+    });
+
+    if (existing) {
+      this.logger.error(
+        `[DRIVER_AVAILABILITY] Driver ${userId} accumulated time would exceed monthly max ${MAX_MONTHLY_MS}ms ` +
+          `(current=${existing.onlineTimeMs}ms, delta=${deltaMs}ms) — skipping accumulation.`,
+      );
+      return;
+    }
+
+    if (deltaMs > MAX_MONTHLY_MS) {
+      this.logger.error(
+        `[DRIVER_AVAILABILITY] Driver ${userId} initial deltaMs ${deltaMs}ms exceeds monthly max — skipping insert.`,
+      );
+      return;
+    }
+    try {
+      await repo.save({
+        driverId: userId,
+        month,
+        onlineTimeMs: deltaMs,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+    } catch (err) {
+      // Race: another concurrent insert won — retry the conditional update once.
+      await repo
+        .createQueryBuilder()
+        .update(DriverOnlineHistory)
+        .set({
+          onlineTimeMs: () => `"onlineTimeMs" + ${deltaMs}`,
+          updatedAt: new Date(),
+        })
+        .where(
+          '"driverId" = :driverId AND month = :month AND ("onlineTimeMs" + :deltaMs) <= :max',
+          { driverId: userId, month, deltaMs, max: MAX_MONTHLY_MS },
+        )
+        .execute();
+    }
+  }
+
+  /**
+   * Non-transactional wrapper for external callers (e.g., HeartbeatService sweep).
+   */
+  async accumulateSessionTime(
+    userId: string,
+    month: string,
+    deltaMs: number,
+  ): Promise<void> {
+    await this._accumulateSessionTimeTx(
+      this.onlineHistoryRepo,
+      userId,
+      month,
+      deltaMs,
+    );
   }
 
   /**

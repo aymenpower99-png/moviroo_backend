@@ -8,6 +8,7 @@ import { Driver } from '../driver/entities/driver.entity';
 import { Vehicle } from '../vehicles/entities/vehicle.entity';
 import { User } from '../users/entites/user.entity';
 import { WorkArea } from '../work-area/entities/work-area.entity';
+import { DriverOnlineHistory } from '../earnings/entities/driver-online-history.entity';
 
 import { DispatchController } from './dispatch.controller';
 
@@ -32,6 +33,7 @@ import { RidesModule } from '../rides/rides.module';
       Vehicle,
       User,
       WorkArea,
+      DriverOnlineHistory,
     ]),
     NotificationsModule,
     forwardRef(() => DriversModule),

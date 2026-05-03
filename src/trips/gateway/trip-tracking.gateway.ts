@@ -6,6 +6,7 @@ import {
   ConnectedSocket,
   OnGatewayConnection,
   OnGatewayDisconnect,
+  OnGatewayInit,
 } from '@nestjs/websockets';
 import { Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -28,7 +29,7 @@ import type { GpsPayload } from './trip-gateway.types';
   cors: { origin: '*' },
 })
 export class TripTrackingGateway
-  implements OnGatewayConnection, OnGatewayDisconnect
+  implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
 {
   @WebSocketServer()
   server: Server;
@@ -45,9 +46,9 @@ export class TripTrackingGateway
   private progressCache = new Map<string, { data: any; timestamp: number }>();
 
   /* Handler instances */
-  private readonly locationHandler: TripLocationHandler;
-  private readonly bufferHandler: TripBufferHandler;
-  private readonly reroutingHandler: TripReroutingHandler;
+  private locationHandler: TripLocationHandler;
+  private bufferHandler: TripBufferHandler;
+  private reroutingHandler: TripReroutingHandler;
 
   constructor(
     @InjectRepository(TripWaypoint)
@@ -59,28 +60,32 @@ export class TripTrackingGateway
     private readonly routingService: RoutingService,
     private readonly routeHistoryRepo: RouteHistoryRepository,
     private readonly routeSnappingService: RouteSnappingService,
-  ) {
-    // Initialize handlers
+  ) {}
+
+  afterInit(server: Server) {
+    this.logger.log('WebSocket Gateway initialized');
+
+    // Initialize handlers after server is set by @WebSocketServer decorator
     this.reroutingHandler = new TripReroutingHandler(
-      routeSnappingService,
-      routingService,
-      routeHistoryRepo,
+      this.routeSnappingService,
+      this.routingService,
+      this.routeHistoryRepo,
       this.progressCache,
       this.server,
     );
 
     this.bufferHandler = new TripBufferHandler(
-      waypointRepo,
+      this.waypointRepo,
       this.gpsBuffer,
       this.sequenceCounters,
       this.progressCache,
     );
 
     this.locationHandler = new TripLocationHandler(
-      rideRepo,
-      locRepo,
-      routingService,
-      routeHistoryRepo,
+      this.rideRepo,
+      this.locRepo,
+      this.routingService,
+      this.routeHistoryRepo,
       this.reroutingHandler,
       this.bufferHandler,
       this.gpsBuffer,

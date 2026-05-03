@@ -11,6 +11,7 @@ import {
   Driver,
   DriverAvailabilityStatus,
 } from '../../../driver/entities/driver.entity';
+import { DriverOnlineHistory } from '../../../earnings/entities/driver-online-history.entity';
 import { Ride } from '../../../rides/domain/entities/ride.entity';
 import { RideStatus } from '../../../rides/domain/enums/ride-status.enum';
 import { FcmService } from '../../../notifications/services/fcm.service';
@@ -37,6 +38,8 @@ export class HeartbeatService implements OnModuleInit, OnModuleDestroy {
     private readonly driverRepo: Repository<Driver>,
     @InjectRepository(Ride)
     private readonly rideRepo: Repository<Ride>,
+    @InjectRepository(DriverOnlineHistory)
+    private readonly onlineHistoryRepo: Repository<DriverOnlineHistory>,
     private readonly fcmService: FcmService,
   ) {}
 
@@ -64,6 +67,79 @@ export class HeartbeatService implements OnModuleInit, OnModuleDestroy {
   private _currentMonth(): string {
     const n = new Date();
     return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}`;
+  }
+
+  /**
+   * Accumulate a validated session delta into driver_online_history for the given month.
+   * Uses an atomic UPDATE with a SQL-side cap check so concurrent calls cannot
+   * inflate the total beyond MAX_MONTHLY_MS (~31 days). Falls back to insert if
+   * no row exists for the (driverId, month) pair.
+   */
+  private async _accumulateSessionTimeTx(
+    repo: Repository<DriverOnlineHistory>,
+    userId: string,
+    month: string,
+    deltaMs: number,
+  ): Promise<void> {
+    const MAX_MONTHLY_MS = 31 * 24 * 60 * 60 * 1000;
+
+    const updateResult = await repo
+      .createQueryBuilder()
+      .update(DriverOnlineHistory)
+      .set({
+        onlineTimeMs: () => `"onlineTimeMs" + ${deltaMs}`,
+        updatedAt: new Date(),
+      })
+      .where(
+        '"driverId" = :driverId AND month = :month AND ("onlineTimeMs" + :deltaMs) <= :max',
+        { driverId: userId, month, deltaMs, max: MAX_MONTHLY_MS },
+      )
+      .execute();
+
+    if (updateResult.affected && updateResult.affected > 0) {
+      return;
+    }
+
+    const existing = await repo.findOne({
+      where: { driverId: userId, month },
+    });
+
+    if (existing) {
+      this.logger.error(
+        `[Heartbeat sweep] Driver ${userId} accumulated time would exceed monthly max ${MAX_MONTHLY_MS}ms ` +
+          `(current=${existing.onlineTimeMs}ms, delta=${deltaMs}ms) — skipping accumulation.`,
+      );
+      return;
+    }
+
+    if (deltaMs > MAX_MONTHLY_MS) {
+      this.logger.error(
+        `[Heartbeat sweep] Driver ${userId} initial deltaMs ${deltaMs}ms exceeds monthly max — skipping insert.`,
+      );
+      return;
+    }
+    try {
+      await repo.save({
+        driverId: userId,
+        month,
+        onlineTimeMs: deltaMs,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+    } catch (err) {
+      await repo
+        .createQueryBuilder()
+        .update(DriverOnlineHistory)
+        .set({
+          onlineTimeMs: () => `"onlineTimeMs" + ${deltaMs}`,
+          updatedAt: new Date(),
+        })
+        .where(
+          '"driverId" = :driverId AND month = :month AND ("onlineTimeMs" + :deltaMs) <= :max',
+          { driverId: userId, month, deltaMs, max: MAX_MONTHLY_MS },
+        )
+        .execute();
+    }
   }
 
   /**
@@ -117,29 +193,53 @@ export class HeartbeatService implements OnModuleInit, OnModuleDestroy {
         .where('id = :id', { id: loc.id })
         .execute();
 
-      // Load driver to accumulate session time before marking offline
-      const driver = await this.driverRepo.findOne({
-        where: { userId: loc.driverId },
-      });
-      if (driver) {
-        const update: Partial<Driver> = {
-          availabilityStatus: DriverAvailabilityStatus.OFFLINE,
-        };
-        if (driver.onlineSince) {
-          // Note: Monthly online time tracking moved to driver_online_history table
-          // Session time accumulation is handled by DriverAvailabilityService
-          update.onlineSince = null;
+      // Use transaction with row-level lock to atomically read onlineSince,
+      // clear it, and accumulate session delta. Concurrent goOffline callers
+      // block on the lock; by the time they read, onlineSince is already null.
+      await this.driverRepo.manager.transaction(async (tx) => {
+        const locked = await tx
+          .createQueryBuilder(Driver, 'd')
+          .setLock('pessimistic_write')
+          .where('d.user_id = :userId', { userId: loc.driverId })
+          .getOne();
+
+        if (!locked) return;
+
+        if (!locked.onlineSince) {
+          await tx.update(
+            Driver,
+            { userId: loc.driverId },
+            { availabilityStatus: DriverAvailabilityStatus.OFFLINE },
+          );
+          return;
         }
-        await this.driverRepo.update({ userId: loc.driverId }, update);
-      } else {
-        // Fallback: just flip the status
-        await this.driverRepo
-          .createQueryBuilder()
-          .update()
-          .set({ availabilityStatus: DriverAvailabilityStatus.OFFLINE })
-          .where('user_id = :userId', { userId: loc.driverId })
-          .execute();
-      }
+
+        const prevOnlineSince = locked.onlineSince;
+
+        await tx.update(
+          Driver,
+          { userId: loc.driverId },
+          {
+            availabilityStatus: DriverAvailabilityStatus.OFFLINE,
+            onlineSince: null,
+          },
+        );
+
+        const deltaMs = Date.now() - new Date(prevOnlineSince).getTime();
+        if (deltaMs < 0 || deltaMs > 24 * 60 * 60 * 1000) {
+          this.logger.warn(
+            `[Heartbeat sweep] Suspicious deltaMs for driver ${loc.driverId}: ${deltaMs}ms. Skipping accumulation.`,
+          );
+          return;
+        }
+
+        await this._accumulateSessionTimeTx(
+          tx.getRepository(DriverOnlineHistory),
+          loc.driverId,
+          this._currentMonth(),
+          deltaMs,
+        );
+      });
 
       // Send FCM push notification to the driver (once — sweep won't find them again
       // because isOnline is now false)
