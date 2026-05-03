@@ -28,6 +28,7 @@ import { EarningsModule } from './earnings/earnings.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { ChatModule } from './chat/chat.module';
 import { PlacesModule } from './places/places.module';
+import { MembershipLevelsModule } from './membership-levels/membership-levels.module';
 
 @Module({
   imports: [
@@ -59,6 +60,7 @@ import { PlacesModule } from './places/places.module';
     NotificationsModule,
     ChatModule,
     PlacesModule,
+    MembershipLevelsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

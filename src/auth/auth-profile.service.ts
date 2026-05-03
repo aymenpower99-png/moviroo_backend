@@ -16,14 +16,17 @@ export class AuthProfileService {
     const user = await this.userRepo.findOne({ where: { id: userId } });
     if (!user) throw new NotFoundException('User not found');
 
+    // Normalise phone: strip any leading country code so only local digits are stored
+    const phone = dto.phone ? this.normalisePhone(dto.phone) : undefined;
+
     // Email change requested
     if (dto.email && dto.email !== user.email) {
       // Also update name/phone if provided in same request
-      if (dto.firstName || dto.lastName || dto.phone) {
+      if (dto.firstName || dto.lastName || phone) {
         await this.userRepo.update(userId, {
           ...(dto.firstName && { firstName: dto.firstName }),
           ...(dto.lastName  && { lastName:  dto.lastName  }),
-          ...(dto.phone     && { phone:     dto.phone     }),
+          ...(phone         && { phone }),
         });
       }
       return this.emailChangeService.requestEmailChange(user, dto.email);
@@ -33,11 +36,18 @@ export class AuthProfileService {
     await this.userRepo.update(userId, {
       ...(dto.firstName && { firstName: dto.firstName }),
       ...(dto.lastName  && { lastName:  dto.lastName  }),
-      ...(dto.phone     && { phone:     dto.phone     }),
+      ...(phone         && { phone }),
     });
 
     const updated = await this.userRepo.findOneOrFail({ where: { id: userId } });
     const { password, refreshToken, otpCode, totpSecret, inviteToken, emailChangeToken, ...safe } = updated;
     return { ...safe, emailChangePending: !!safe.pendingEmail };
+  }
+
+  /** Strip any leading international prefix (+216, +33, etc.) and keep local digits only. */
+  private normalisePhone(raw: string): string {
+    const trimmed = raw.trim();
+    // Remove a leading +NNN (1–4 digit country code)
+    return trimmed.replace(/^\+\d{1,4}/, '');
   }
 }

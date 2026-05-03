@@ -25,6 +25,7 @@ import {
 } from '../passenger/entities/passengers.entity';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto, AppType } from './dto/login.dto';
+import { AdminLoginDto } from './dto/admin-login.dto';
 import { GoogleSignInDto } from './dto/google-signin.dto';
 import { AppleSignInDto } from './dto/apple-signin.dto';
 import { OtpService } from '../otp/otp.service';
@@ -333,6 +334,28 @@ export class AuthService {
         preAuthToken,
       };
     }
+
+    await this.userRepo.update(user.id, { lastLoginAt: new Date() });
+    const tokens = await this.generateTokens(user);
+    await this.saveRefreshToken(user.id, tokens.refreshToken);
+    return { ...tokens, user: this.safeUser(user) };
+  }
+
+  async adminLogin(dto: AdminLoginDto) {
+    const user = await this.userRepo.findOne({ where: { email: dto.email } });
+    if (!user || !user.password)
+      throw new UnauthorizedException('Invalid credentials');
+
+    const valid = await bcrypt.compare(dto.password, user.password);
+    if (!valid) throw new UnauthorizedException('Invalid credentials');
+
+    if (user.role !== UserRole.SUPER_ADMIN)
+      throw new ForbiddenException('Access denied. Admin accounts only.');
+
+    if (user.status === UserStatus.BLOCKED)
+      throw new ForbiddenException(
+        'Your account has been blocked. Please contact support.',
+      );
 
     await this.userRepo.update(user.id, { lastLoginAt: new Date() });
     const tokens = await this.generateTokens(user);
