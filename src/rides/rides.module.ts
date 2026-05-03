@@ -85,6 +85,7 @@ import { ClassesModule } from '../classes/classes.module';
     CancelRideUseCase,
     RoutingService,
     RouteHistoryRepository,
+    RouteSnappingService,
   ],
 })
 export class RidesModule {}
