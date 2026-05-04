@@ -61,6 +61,9 @@ export class PassengerEntity {
   @Column({ name: 'membership_points', type: 'int', default: 0 })
   membershipPoints: number;
 
+  @Column({ name: 'remaining_points', type: 'int', default: 0 })
+  remainingPoints: number;
+
   @Column({
     name: 'membership_level',
     type: 'enum',

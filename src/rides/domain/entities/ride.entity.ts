@@ -163,6 +163,20 @@ export class Ride {
   @Column({ name: 'loyalty_points_earned', type: 'int', default: 0 })
   loyaltyPointsEarned: number;
 
+  @Column({ name: 'coupon_code', type: 'varchar', length: 50, nullable: true, default: null })
+  couponCode: string | null;
+
+  @Column({
+    name: 'discount_percent',
+    type: 'decimal',
+    precision: 5,
+    scale: 2,
+    nullable: true,
+    default: null,
+    transformer: numericTransformer,
+  })
+  discountPercent: number | null;
+
   @Column({
     name: 'payment_method',
     type: 'varchar',

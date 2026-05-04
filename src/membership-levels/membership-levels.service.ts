@@ -30,10 +30,10 @@ export class MembershipLevelsService {
     return this.repo.save(level);
   }
 
-  // ── Find All (ordered by `order` ASC) ───────────────────────────────────────
+  // ── Find All (ordered by `level` ASC) ───────────────────────────────────────
 
   async findAll(): Promise<MembershipLevelEntity[]> {
-    return this.repo.find({ order: { order: 'ASC', createdAt: 'ASC' } });
+    return this.repo.find({ order: { level: 'ASC', createdAt: 'ASC' } });
   }
 
   // ── Find All Active (used by eligibility engine) ────────────────────────────
@@ -41,7 +41,7 @@ export class MembershipLevelsService {
   async findAllActive(): Promise<MembershipLevelEntity[]> {
     return this.repo.find({
       where: { isActive: true },
-      order: { order: 'ASC' },
+      order: { level: 'ASC' },
     });
   }
 
@@ -98,7 +98,7 @@ export class MembershipLevelsService {
     points: number,
   ): Promise<MembershipLevelEntity | null> {
     const activeLevels = await this.findAllActive();
-    // Levels are sorted ASC by order — pick the highest tier the user qualifies for
+    // Levels are sorted ASC by level — pick the highest tier the user qualifies for
     const eligible = activeLevels.filter((l) => points >= l.requiredPoints);
     return eligible.length > 0 ? eligible[eligible.length - 1] : null;
   }

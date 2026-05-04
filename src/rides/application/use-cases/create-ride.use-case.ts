@@ -172,6 +172,13 @@ export class CreateRideUseCase {
     /* 8 ── Persist ride ─────────────────────── */
     const isAdminCreated = currentUser.role === UserRole.SUPER_ADMIN;
 
+    // Apply coupon discount to final price if provided
+    const discountPercent = dto.discount_percent ?? 0;
+    const rawFinalPrice   = pricingResult.finalPrice;
+    const discountedPrice = discountPercent > 0
+      ? parseFloat((rawFinalPrice * (1 - discountPercent / 100)).toFixed(2))
+      : rawFinalPrice;
+
     const ride = this.rideRepo.create({
       passengerId,
       classId: dto.class_id,
@@ -185,12 +192,14 @@ export class CreateRideUseCase {
       distanceKm: pricingResult.distanceKm,
       durationMin: pricingResult.durationMin,
       priceEstimate: pricingResult.exactPrice,
-      priceFinal: pricingResult.finalPrice,
+      priceFinal: discountedPrice,
       surgeMultiplier: pricingResult.surgeMultiplier,
       loyaltyPointsEarned: pricingResult.loyaltyPoints,
       pricingSnapshot: pricingResult.fullResponse,
       scheduledAt: new Date(dto.scheduled_at),
       paymentMethod: isAdminCreated ? 'CASH' : null,
+      couponCode:    dto.coupon_code ?? null,
+      discountPercent: discountPercent > 0 ? discountPercent : null,
     });
 
     const saved = await this.rideRepo.save(ride);

@@ -26,8 +26,9 @@ export class CreateMembershipLevelDto {
   discountPercentage: number;
 
   @IsInt()
-  @Min(0)
-  order: number;
+  @Min(1)
+  @Max(10)
+  level: number;
 
   @IsOptional()
   @IsBoolean()

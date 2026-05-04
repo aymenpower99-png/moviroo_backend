@@ -58,4 +58,16 @@ export class CreateRideDto {
   @IsDateString()
   @IsNotEmpty()
   scheduled_at: string;
+
+  /** Optional coupon code to apply a membership discount */
+  @IsOptional()
+  @IsString()
+  coupon_code?: string;
+
+  /** Discount percentage from coupon (0–100) */
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  discount_percent?: number;
 }

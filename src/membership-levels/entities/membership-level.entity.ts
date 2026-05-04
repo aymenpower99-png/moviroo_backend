@@ -30,9 +30,9 @@ export class MembershipLevelEntity {
   })
   discountPercentage: number;
 
-  /** Controls display order and progression hierarchy — lower = first tier */
-  @Column({ name: 'order', type: 'int', default: 0 })
-  order: number;
+  /** Level number (1–10) — controls display order and progression hierarchy */
+  @Column({ name: 'level', type: 'int', default: 1 })
+  level: number;
 
   @Column({ name: 'is_active', type: 'boolean', default: true })
   isActive: boolean;
