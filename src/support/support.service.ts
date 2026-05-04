@@ -115,7 +115,11 @@ export class SupportService {
     const ticket = await this.ticketRepo.findOne({ where: { id: ticketId } });
     if (!ticket) throw new NotFoundException('Ticket not found');
     if (ticket.authorId !== userId) throw new ForbiddenException();
-    return this.enrichTicketWithAuthorAndMessages(ticket);
+    const enriched = await this.enrichTicketWithAuthorAndMessages(ticket);
+    console.log(
+      `[SupportService] getMyTicket - ticketId: ${ticketId}, messages count: ${enriched.messages?.length || 0}`,
+    );
+    return enriched;
   }
 
   // ── User: add a reply to own ticket ────────────────────────────────────────

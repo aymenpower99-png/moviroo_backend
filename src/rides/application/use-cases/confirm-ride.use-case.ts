@@ -12,7 +12,7 @@ import { Ride } from '../../domain/entities/ride.entity';
 import { RideStatus } from '../../domain/enums/ride-status.enum';
 import { User, UserRole } from '../../../users/entites/user.entity';
 import { FallbackDispatchService } from '../../../dispatch/application/services/fallback-dispatch.service';
-import { TripPayment } from '../../../billing/entities/trip-payment.entity';
+import { TripPayment, PaymentStatus } from '../../../billing/entities/trip-payment.entity';
 
 /** Rides within this window (ms) are considered "immediate" and dispatched right away */
 const IMMEDIATE_THRESHOLD_MS = 60 * 60_000; // 60 minutes
@@ -102,10 +102,18 @@ export class ConfirmRideUseCase {
       try {
         const existing = await this.paymentRepo.findOne({ where: { rideId } });
         if (existing) {
-          existing.paymentMethod = paymentMethod.toUpperCase() as any;
+          const method = paymentMethod.toUpperCase();
+          existing.paymentMethod = method as any;
+
+          /* Card: payment was already charged → mark PAID immediately */
+          if (method === 'CARD') {
+            existing.paymentStatus = PaymentStatus.PAID;
+            existing.paidAt = new Date();
+          }
+
           await this.paymentRepo.save(existing);
           this.logger.log(
-            `[BILLING] Updated TripPayment paymentMethod=${paymentMethod.toUpperCase()} for ride ${rideId}`,
+            `[BILLING] Updated TripPayment paymentMethod=${method} for ride ${rideId}`,
           );
         }
       } catch (err) {

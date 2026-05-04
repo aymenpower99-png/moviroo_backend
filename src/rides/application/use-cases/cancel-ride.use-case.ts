@@ -17,6 +17,7 @@ import {
   Driver,
   DriverAvailabilityStatus,
 } from '../../../driver/entities/driver.entity';
+import { TripPayment, PaymentStatus } from '../../../billing/entities/trip-payment.entity';
 
 @Injectable()
 export class CancelRideUseCase {
@@ -29,6 +30,8 @@ export class CancelRideUseCase {
     private readonly locRepo: Repository<DriverLocation>,
     @InjectRepository(Driver)
     private readonly driverRepo: Repository<Driver>,
+    @InjectRepository(TripPayment)
+    private readonly paymentRepo: Repository<TripPayment>,
   ) {}
 
   async execute(
@@ -68,8 +71,18 @@ export class CancelRideUseCase {
 
     await this.rideRepo.save(ride);
 
+    /* Remove PENDING billing record — cancelled rides should not appear in billing */
+    try {
+      const payment = await this.paymentRepo.findOne({ where: { rideId } });
+      if (payment && payment.paymentStatus === PaymentStatus.PENDING) {
+        await this.paymentRepo.remove(payment);
+        this.logger.log(`[BILLING] Removed PENDING TripPayment for cancelled ride ${rideId}`);
+      }
+    } catch (err) {
+      this.logger.error(`[BILLING] Failed to remove TripPayment for cancelled ride ${rideId}: ${err}`);
+    }
+
     // If a driver was assigned, free them so they can receive the next dispatch.
-    // Without this, driver would be marked as busy by ride.status=ASSIGNED.
     if (ride.driverId) {
       await this.locRepo.update(
         { driverId: ride.driverId },

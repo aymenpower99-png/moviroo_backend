@@ -129,22 +129,22 @@ export class CreateRideUseCase {
       );
     }
 
-    /* 6 ── Get price estimate (use locked price from client if provided) ── */
+    /* 6 ── Get price (use ML result locked at vehicle selection, or call ML now as fallback) ── */
     let pricingResult;
-    if (dto.price_override != null && dto.price_override > 0) {
-      // Client locked the price at vehicle-selection time — use it directly.
-      // This guarantees the price shown in the app matches what is charged.
+    if (dto.locked_price != null && dto.locked_price > 0) {
+      // ML result was locked at vehicle-selection time — reuse it directly.
+      // No second ML call is made; price is guaranteed consistent across all pages.
       this.logger.log(
-        `[BOOKING] Using client-locked price: ${dto.price_override} TND`,
+        `[BOOKING] Using ML-locked price from vehicle selection: ${dto.locked_price} TND`,
       );
       pricingResult = {
-        finalPrice:      dto.price_override,
-        exactPrice:      dto.price_override,
-        loyaltyPoints:   dto.loyalty_points_override   ?? 0,
-        surgeMultiplier: dto.surge_override             ?? 1.0,
-        distanceKm:      dto.distance_km_override       ?? 0,
-        durationMin:     dto.duration_min_override      ?? 0,
-        fullResponse:    { source: 'client_locked', price: dto.price_override },
+        finalPrice:      dto.locked_price,
+        exactPrice:      dto.locked_price,
+        loyaltyPoints:   dto.locked_loyalty_points   ?? 0,
+        surgeMultiplier: dto.locked_surge             ?? 1.0,
+        distanceKm:      dto.locked_distance_km       ?? 0,
+        durationMin:     dto.locked_duration_min      ?? 0,
+        fullResponse:    { source: 'ml_vehicle_selection', price: dto.locked_price },
       };
     } else if (vehicleClass) {
       const pricingStart = Date.now();

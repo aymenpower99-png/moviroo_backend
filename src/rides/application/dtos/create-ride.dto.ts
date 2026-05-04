@@ -72,36 +72,37 @@ export class CreateRideDto {
   discount_percent?: number;
 
   /**
-   * Locked price from vehicle selection screen (exactPrice).
-   * When provided, the backend skips the ML pricing API and uses this value
-   * directly, ensuring price consistency between vehicle selection and payment.
+   * ML price locked at vehicle selection.
+   * The backend uses this directly and skips a second ML call,
+   * ensuring price consistency across the entire ride flow.
+   * Only absent for admin-created rides (which fall back to a live ML call).
    */
   @IsOptional()
   @IsNumber()
   @Min(0)
-  price_override?: number;
+  locked_price?: number;
 
-  /** Loyalty points from vehicle selection (used when price_override is set) */
+  /** ML loyalty points locked at vehicle selection. */
   @IsOptional()
   @IsNumber()
   @Min(0)
-  loyalty_points_override?: number;
+  locked_loyalty_points?: number;
 
-  /** Distance in km from vehicle selection (used when price_override is set) */
+  /** ML distance (km) locked at vehicle selection. */
   @IsOptional()
   @IsNumber()
   @Min(0)
-  distance_km_override?: number;
+  locked_distance_km?: number;
 
-  /** Duration in minutes from vehicle selection (used when price_override is set) */
+  /** ML duration (min) locked at vehicle selection. */
   @IsOptional()
   @IsNumber()
   @Min(0)
-  duration_min_override?: number;
+  locked_duration_min?: number;
 
-  /** Surge multiplier from vehicle selection (used when price_override is set) */
+  /** ML surge multiplier locked at vehicle selection. */
   @IsOptional()
   @IsNumber()
   @Min(0)
-  surge_override?: number;
+  locked_surge?: number;
 }
