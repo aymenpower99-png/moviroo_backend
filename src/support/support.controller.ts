@@ -1,6 +1,16 @@
 import {
-  Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe,
-  Patch, Post, Query, Req, UseGuards,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
+  Req,
+  UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import type { Request } from 'express';
@@ -42,7 +52,12 @@ export class SupportUserController {
 
   @Get(':id')
   getOne(@Param('id', ParseUUIDPipe) id: string, @Req() req: Request) {
-    return this.svc.getMyTicket(id, userId(req));
+    console.log(
+      `[SupportController] getOne - ticketId: ${id}, userId: ${userId(req)}`,
+    );
+    const result = this.svc.getMyTicket(id, userId(req));
+    console.log(`[SupportController] getOne - result:`, result);
+    return result;
   }
 
   @Post(':id/reply')
