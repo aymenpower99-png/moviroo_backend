@@ -1,4 +1,4 @@
-import { Injectable, Logger, ConflictException } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
@@ -21,8 +21,16 @@ export class BillingService {
   async createTripPayment(ride: Ride): Promise<TripPayment> {
     const existing = await this.paymentRepo.findOne({ where: { rideId: ride.id } });
     if (existing) {
-      this.logger.warn(`TripPayment already exists for ride ${ride.id}`);
-      return existing;
+      // Update with final driver and payment info (cash = mark paid)
+      const isCash = ride.paymentMethod?.toUpperCase() === 'CASH';
+      existing.driverId = ride.driverId ?? existing.driverId;
+      existing.amount = ride.priceFinal ?? ride.priceEstimate ?? existing.amount;
+      if (isCash && existing.paymentStatus !== PaymentStatus.PAID) {
+        existing.paymentMethod = PaymentMethod.CASH;
+        existing.paymentStatus = PaymentStatus.PAID;
+        existing.paidAt = new Date();
+      }
+      return this.paymentRepo.save(existing);
     }
 
     const amount = ride.priceFinal ?? ride.priceEstimate ?? 0;

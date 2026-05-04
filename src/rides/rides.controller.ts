@@ -130,8 +130,12 @@ export class RidesController {
   @Patch(':id/confirm')
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(UserRole.PASSENGER, UserRole.SUPER_ADMIN)
-  confirm(@CurrentUser() user: User, @Param('id', ParseUUIDPipe) id: string) {
-    return this.confirmRideUC.execute(user, id);
+  confirm(
+    @CurrentUser() user: User,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: { paymentMethod?: string },
+  ) {
+    return this.confirmRideUC.execute(user, id, body?.paymentMethod);
   }
 
   /* ─── Cancel a ride ───────────────────────── */

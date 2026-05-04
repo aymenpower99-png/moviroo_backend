@@ -19,6 +19,7 @@ import {
 } from '../../infrastructure/services/pricing/pricing.service';
 import { RoutingService } from '../../infrastructure/services/routing/routing.service';
 import { CreateRideDto } from '../dtos/create-ride.dto';
+import { TripPayment, PaymentStatus } from '../../../billing/entities/trip-payment.entity';
 
 @Injectable()
 export class CreateRideUseCase {
@@ -31,6 +32,8 @@ export class CreateRideUseCase {
     private readonly passengerRepo: Repository<PassengerEntity>,
     @InjectRepository(VehicleClass)
     private readonly classRepo: Repository<VehicleClass>,
+    @InjectRepository(TripPayment)
+    private readonly paymentRepo: Repository<TripPayment>,
     private readonly geocoding: GeocodingService,
     private readonly pricing: PricingService,
     private readonly routing: RoutingService,
@@ -126,9 +129,24 @@ export class CreateRideUseCase {
       );
     }
 
-    /* 6 ── Get price estimate from ML API (if class provided) ──── */
+    /* 6 ── Get price estimate (use locked price from client if provided) ── */
     let pricingResult;
-    if (vehicleClass) {
+    if (dto.price_override != null && dto.price_override > 0) {
+      // Client locked the price at vehicle-selection time — use it directly.
+      // This guarantees the price shown in the app matches what is charged.
+      this.logger.log(
+        `[BOOKING] Using client-locked price: ${dto.price_override} TND`,
+      );
+      pricingResult = {
+        finalPrice:      dto.price_override,
+        exactPrice:      dto.price_override,
+        loyaltyPoints:   dto.loyalty_points_override   ?? 0,
+        surgeMultiplier: dto.surge_override             ?? 1.0,
+        distanceKm:      dto.distance_km_override       ?? 0,
+        durationMin:     dto.duration_min_override      ?? 0,
+        fullResponse:    { source: 'client_locked', price: dto.price_override },
+      };
+    } else if (vehicleClass) {
       const pricingStart = Date.now();
       this.logger.log(
         `[BOOKING] Fetching price estimate for ${vehicleClass.name}`,
@@ -208,6 +226,23 @@ export class CreateRideUseCase {
     this.logger.log(
       `[BOOKING] Ride ${saved.id} created successfully - passenger=${passengerId} class=${vehicleClass?.name ?? 'pending'} price=${pricingResult.finalPrice} TND surge=${pricingResult.surgeMultiplier} loyalty=${pricingResult.loyaltyPoints} - ${totalDuration}ms total`,
     );
+
+    /* 9 ── Create PENDING billing record so ride appears in admin billing immediately ── */
+    try {
+      await this.paymentRepo.save(
+        this.paymentRepo.create({
+          rideId: saved.id,
+          passengerId: saved.passengerId,
+          driverId: null,
+          amount: saved.priceFinal ?? saved.priceEstimate ?? 0,
+          paymentMethod: null,
+          paymentStatus: PaymentStatus.PENDING,
+          paidAt: null,
+        }),
+      );
+    } catch (err) {
+      this.logger.error(`[BOOKING] Failed to create billing record for ride ${saved.id}: ${err}`);
+    }
 
     /* 9 ── Calculate and store Mapbox route in RouteHistory ───────────────────── */
     try {

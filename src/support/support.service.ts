@@ -1,5 +1,7 @@
 import {
-  ForbiddenException, Injectable, NotFoundException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -9,6 +11,7 @@ import { CreateTicketDto } from './dto/create-ticket.dto';
 import { ReplyTicketDto } from './dto/reply-ticket.dto';
 import { UpdateTicketStatusDto } from './dto/update-ticket-status.dto';
 import { User } from '../users/entites/user.entity';
+import { SupportGateway } from './support.gateway';
 
 @Injectable()
 export class SupportService {
@@ -19,6 +22,7 @@ export class SupportService {
     private messageRepo: Repository<TicketMessage>,
     @InjectRepository(User)
     private userRepo: Repository<User>,
+    private gateway: SupportGateway,
   ) {}
 
   // ── helpers ────────────────────────────────────────────────────────────────
@@ -32,42 +36,49 @@ export class SupportService {
     // collect all unique user IDs (author + senders)
     const userIds = [
       ticket.authorId,
-      ...messages.map(m => m.senderId),
+      ...messages.map((m) => m.senderId),
     ].filter((v, i, a) => v && a.indexOf(v) === i);
 
     const users = userIds.length
       ? await this.userRepo
           .createQueryBuilder('u')
-          .select(['u.id', 'u.firstName', 'u.lastName', 'u.email', 'u.role', 'u.phone'])
+          .select([
+            'u.id',
+            'u.firstName',
+            'u.lastName',
+            'u.email',
+            'u.role',
+            'u.phone',
+          ])
           .where('u.id IN (:...ids)', { ids: userIds })
           .getMany()
       : [];
 
-    const userById = new Map(users.map(u => [u.id, u]));
-    const author   = userById.get(ticket.authorId) ?? null;
+    const userById = new Map(users.map((u) => [u.id, u]));
+    const author = userById.get(ticket.authorId) ?? null;
 
     return {
       ...ticket,
       author: author
         ? {
-            id:        author.id,
+            id: author.id,
             firstName: (author as any).firstName ?? '',
-            lastName:  (author as any).lastName  ?? '',
-            email:     (author as any).email     ?? '',
-            phone:     (author as any).phone     ?? '',
-            role:      (author as any).role      ?? '',
+            lastName: (author as any).lastName ?? '',
+            email: (author as any).email ?? '',
+            phone: (author as any).phone ?? '',
+            role: (author as any).role ?? '',
           }
         : null,
-      messages: messages.map(m => {
+      messages: messages.map((m) => {
         const sender = userById.get(m.senderId) ?? null;
         return {
           ...m,
           sender: sender
             ? {
-                id:        sender.id,
+                id: sender.id,
                 firstName: (sender as any).firstName ?? '',
-                lastName:  (sender as any).lastName  ?? '',
-                email:     (sender as any).email     ?? '',
+                lastName: (sender as any).lastName ?? '',
+                email: (sender as any).email ?? '',
               }
             : null,
         };
@@ -76,8 +87,15 @@ export class SupportService {
   }
 
   // ── User: create a ticket ──────────────────────────────────────────────────
-  async createTicket(dto: CreateTicketDto, authorId: string): Promise<SupportTicket> {
-    const ticket = this.ticketRepo.create({ ...dto, authorId, status: TicketStatus.OPEN });
+  async createTicket(
+    dto: CreateTicketDto,
+    authorId: string,
+  ): Promise<SupportTicket> {
+    const ticket = this.ticketRepo.create({
+      ...dto,
+      authorId,
+      status: TicketStatus.OPEN,
+    });
     return this.ticketRepo.save(ticket);
   }
 
@@ -101,18 +119,37 @@ export class SupportService {
   }
 
   // ── User: add a reply to own ticket ────────────────────────────────────────
-  async replyToTicket(ticketId: string, dto: ReplyTicketDto, senderId: string): Promise<TicketMessage> {
+  async replyToTicket(
+    ticketId: string,
+    dto: ReplyTicketDto,
+    senderId: string,
+  ): Promise<TicketMessage> {
     const ticket = await this.ticketRepo.findOne({ where: { id: ticketId } });
     if (!ticket) throw new NotFoundException('Ticket not found');
     if (ticket.authorId !== senderId) throw new ForbiddenException();
-    if (ticket.status === TicketStatus.RESOLVED) throw new ForbiddenException('Ticket is resolved');
+    if (ticket.status === TicketStatus.RESOLVED)
+      throw new ForbiddenException('Ticket is resolved');
 
-    const message = this.messageRepo.create({ body: dto.body, senderId, ticketId });
-    const saved   = await this.messageRepo.save(message);
+    const message = this.messageRepo.create({
+      body: dto.body,
+      senderId,
+      ticketId,
+    });
+    const saved = await this.messageRepo.save(message);
 
     if (ticket.status === TicketStatus.WAITING_FOR_USER) {
-      await this.ticketRepo.update(ticketId, { status: TicketStatus.IN_PROGRESS });
+      await this.ticketRepo.update(ticketId, {
+        status: TicketStatus.IN_PROGRESS,
+      });
     }
+
+    // Emit to admins that user replied
+    this.gateway.emitToAdmins('support:ticket:reply', {
+      ticketId,
+      message: saved,
+      senderId,
+    });
+
     return saved;
   }
 
@@ -129,28 +166,37 @@ export class SupportService {
     });
 
     // enrich with author info (no messages for the list view — faster)
-    const authorIds = [...new Set(tickets.map(t => t.authorId).filter(Boolean))];
+    const authorIds = [
+      ...new Set(tickets.map((t) => t.authorId).filter(Boolean)),
+    ];
     const authors = authorIds.length
       ? await this.userRepo
           .createQueryBuilder('u')
-          .select(['u.id', 'u.firstName', 'u.lastName', 'u.email', 'u.role', 'u.phone'])
+          .select([
+            'u.id',
+            'u.firstName',
+            'u.lastName',
+            'u.email',
+            'u.role',
+            'u.phone',
+          ])
           .where('u.id IN (:...ids)', { ids: authorIds })
           .getMany()
       : [];
-    const authorById = new Map(authors.map(u => [u.id, u]));
+    const authorById = new Map(authors.map((u) => [u.id, u]));
 
-    const data = tickets.map(t => {
+    const data = tickets.map((t) => {
       const author = authorById.get(t.authorId) ?? null;
       return {
         ...t,
         author: author
           ? {
-              id:        author.id,
+              id: author.id,
               firstName: (author as any).firstName ?? '',
-              lastName:  (author as any).lastName  ?? '',
-              email:     (author as any).email     ?? '',
-              phone:     (author as any).phone     ?? '',
-              role:      (author as any).role      ?? '',
+              lastName: (author as any).lastName ?? '',
+              email: (author as any).email ?? '',
+              phone: (author as any).phone ?? '',
+              role: (author as any).role ?? '',
             }
           : null,
       };
@@ -167,29 +213,56 @@ export class SupportService {
   }
 
   // ── Admin: reply to a ticket ──────────────────────────────────────────────
-  async adminReply(ticketId: string, dto: ReplyTicketDto, adminId: string): Promise<TicketMessage> {
+  async adminReply(
+    ticketId: string,
+    dto: ReplyTicketDto,
+    adminId: string,
+  ): Promise<TicketMessage> {
     const ticket = await this.ticketRepo.findOne({ where: { id: ticketId } });
     if (!ticket) throw new NotFoundException('Ticket not found');
-    if (ticket.status === TicketStatus.RESOLVED) throw new ForbiddenException('Ticket is already resolved');
+    if (ticket.status === TicketStatus.RESOLVED)
+      throw new ForbiddenException('Ticket is already resolved');
 
-    const message = this.messageRepo.create({ body: dto.body, senderId: adminId, ticketId });
-    const saved   = await this.messageRepo.save(message);
+    const message = this.messageRepo.create({
+      body: dto.body,
+      senderId: adminId,
+      ticketId,
+    });
+    const saved = await this.messageRepo.save(message);
 
     const newStatus =
-      ticket.status === TicketStatus.OPEN ? TicketStatus.IN_PROGRESS : TicketStatus.WAITING_FOR_USER;
+      ticket.status === TicketStatus.OPEN
+        ? TicketStatus.IN_PROGRESS
+        : TicketStatus.WAITING_FOR_USER;
     await this.ticketRepo.update(ticketId, {
       status: newStatus,
       assignedAdminId: adminId,
     });
+
+    // Emit to user that admin replied
+    this.gateway.emitToUser(ticket.authorId, 'support:ticket:reply', {
+      ticketId,
+      message: saved,
+      senderId: adminId,
+      status: newStatus,
+    });
+
     return saved;
   }
 
   // ── Admin: update status manually ─────────────────────────────────────────
-  async adminUpdateStatus(ticketId: string, dto: UpdateTicketStatusDto, adminId: string) {
+  async adminUpdateStatus(
+    ticketId: string,
+    dto: UpdateTicketStatusDto,
+    adminId: string,
+  ) {
     const ticket = await this.ticketRepo.findOne({ where: { id: ticketId } });
     if (!ticket) throw new NotFoundException('Ticket not found');
 
-    const updates: Partial<SupportTicket> = { status: dto.status, assignedAdminId: adminId };
+    const updates: Partial<SupportTicket> = {
+      status: dto.status,
+      assignedAdminId: adminId,
+    };
     if (dto.status === TicketStatus.RESOLVED) updates.resolvedAt = new Date();
 
     await this.ticketRepo.update(ticketId, updates);
