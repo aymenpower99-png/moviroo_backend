@@ -8,24 +8,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import {
   PassengerEntity,
-  MembershipLevel,
   PaymentAddress,
 } from './entities/passengers.entity';
 import { UpdatePassengerDto, PaymentAddressDto, UpdateNotificationsDto } from './dto/passenger.dto';
-
-const MEMBERSHIP_THRESHOLDS: Record<MembershipLevel, number> = {
-  [MembershipLevel.GO]:    500,
-  [MembershipLevel.MAX]:   2000,
-  [MembershipLevel.ELITE]: 3000,
-  [MembershipLevel.VIP]:   5000,
-};
-
-const MEMBERSHIP_ORDER: MembershipLevel[] = [
-  MembershipLevel.GO,
-  MembershipLevel.MAX,
-  MembershipLevel.ELITE,
-  MembershipLevel.VIP,
-];
+import { MembershipLevelsService } from '../membership-levels/membership-levels.service';
 
 const MAX_SAVED_ADDRESSES = 5;
 
@@ -34,25 +20,14 @@ export class PassengersService {
   constructor(
     @InjectRepository(PassengerEntity)
     private readonly passengerRepo: Repository<PassengerEntity>,
+    private readonly membershipLevelsService: MembershipLevelsService,
   ) {}
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
 
-  private resolveLevel(points: number): MembershipLevel {
-    if (points >= MEMBERSHIP_THRESHOLDS[MembershipLevel.VIP])   return MembershipLevel.VIP;
-    if (points >= MEMBERSHIP_THRESHOLDS[MembershipLevel.ELITE]) return MembershipLevel.ELITE;
-    if (points >= MEMBERSHIP_THRESHOLDS[MembershipLevel.MAX])   return MembershipLevel.MAX;
-    return MembershipLevel.GO;
-  }
-
-  private getLevelNumber(level: MembershipLevel): number {
-    return MEMBERSHIP_ORDER.indexOf(level) + 1;  // 1, 2, 3, 4
-  }
-
   async findByUserId(userId: string): Promise<PassengerEntity> {
     const passenger = await this.passengerRepo.findOne({
       where: { userId },
-      relations: ['user'],
     });
     if (!passenger) throw new NotFoundException('Passenger profile not found');
     return passenger;
@@ -141,29 +116,49 @@ export class PassengersService {
   // ─── Membership ───────────────────────────────────────────────────────────
 
   async getMembershipInfo(userId: string) {
-    const passenger    = await this.findByUserId(userId);
-    const currentIdx   = MEMBERSHIP_ORDER.indexOf(passenger.membershipLevel);
-    const nextLevel    = MEMBERSHIP_ORDER[currentIdx + 1] ?? null;
+    const passenger = await this.findByUserId(userId);
+    const userPoints = passenger.membershipPoints;
+
+    // Fetch all active levels sorted by order ASC
+    const levels = await this.membershipLevelsService.findAllActive();
+
+    // Current level = highest level where user has enough points (null = starter)
+    const eligibleLevels = levels.filter((l) => userPoints >= l.requiredPoints);
+    const currentLevel   = eligibleLevels.length > 0
+      ? eligibleLevels[eligibleLevels.length - 1]
+      : null;
+
+    // Next level = the first level the user hasn't reached yet
+    const currentOrder = currentLevel?.order ?? 0;
+    const nextLevel    = levels.find((l) => l.order > currentOrder) ?? null;
+
+    // Progress toward next level
+    const basePoints    = currentLevel?.requiredPoints ?? 0;
+    const targetPoints  = nextLevel?.requiredPoints ?? basePoints;
+    const progressPercent = nextLevel
+      ? ((userPoints - basePoints) / (targetPoints - basePoints))
+      : (currentLevel ? 1.0 : 0.0);
+
     const pointsToNext = nextLevel
-      ? MEMBERSHIP_THRESHOLDS[nextLevel] - passenger.membershipPoints
+      ? Math.max(0, nextLevel.requiredPoints - userPoints)
       : null;
 
     return {
-      levelNumber:     this.getLevelNumber(passenger.membershipLevel),
-      membershipLevel: passenger.membershipLevel,
-      membershipPoints:   passenger.membershipPoints,
-      nextLevel,
+      userPoints,
+      currentLevelName: currentLevel?.name ?? 'Moviroo Starter',
+      currentLevel:     currentLevel ?? null,
+      nextLevel:        nextLevel ?? null,
       pointsToNext,
-      thresholds:      MEMBERSHIP_THRESHOLDS,
+      progressPercent:  parseFloat(progressPercent.toFixed(4)),
+      levels,
     };
   }
 
   // ─── Internal (called by bookings / ratings modules) ─────────────────────
 
   async addPoints(userId: string, points: number): Promise<void> {
-    const passenger        = await this.findByUserId(userId);
-    passenger.membershipPoints   += points;
-    passenger.membershipLevel  = this.resolveLevel(passenger.membershipPoints);
+    const passenger = await this.findByUserId(userId);
+    passenger.membershipPoints += points;
     await this.passengerRepo.save(passenger);
   }
 

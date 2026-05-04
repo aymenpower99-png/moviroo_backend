@@ -23,6 +23,10 @@ export class MembershipLevelEntity {
     precision: 5,
     scale: 2,
     default: 0,
+    transformer: {
+      to: (v: number) => v,
+      from: (v: string | number) => parseFloat(v as string),
+    },
   })
   discountPercentage: number;
 

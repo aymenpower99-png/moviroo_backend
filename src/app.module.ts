@@ -29,6 +29,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { ChatModule } from './chat/chat.module';
 import { PlacesModule } from './places/places.module';
 import { MembershipLevelsModule } from './membership-levels/membership-levels.module';
+import { PassengersModule } from './passenger/passengers.module';
 
 @Module({
   imports: [
@@ -61,6 +62,7 @@ import { MembershipLevelsModule } from './membership-levels/membership-levels.mo
     ChatModule,
     PlacesModule,
     MembershipLevelsModule,
+    PassengersModule,
   ],
   controllers: [AppController],
   providers: [AppService],
