@@ -693,7 +693,8 @@ export class AuthService {
     await this.userRepo.update(user.id, { lastLoginAt: new Date() });
     const tokens = await this.generateTokens(user);
     await this.saveRefreshToken(user.id, tokens.refreshToken);
-    return { ...tokens, user: this.safeUser(user) };
+    const isProfileComplete = !!user.phone;
+    return { ...tokens, user: this.safeUser(user), isProfileComplete };
   }
 
   // ─── OAuth: Apple Sign-In ─────────────────────────────────────────────────────

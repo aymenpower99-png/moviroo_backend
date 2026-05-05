@@ -45,8 +45,8 @@ export class AdminInviteService {
   ) {}
 
   async inviteUser(dto: InviteUserDto) {
-    // Store only local digits — strip any leading country prefix (+216, etc.)
-    const phone = this.normalisePhone(dto.phone);
+    // Store phone in full E.164 format (+21620123456) — never strip the country code
+    const phone = dto.phone.trim();
 
     const exists = await this.userRepo.findOne({
       where: { email: dto.email },
@@ -204,11 +204,6 @@ export class AdminInviteService {
     await this.userRepo.update(user.id, { inviteToken: hashed });
     await this.invitationMail.sendInvitation(user.email, user.firstName, link);
     return { message: `Invitation resent to ${user.email}.` };
-  }
-
-  /** Strip any leading international prefix (+216, +33, etc.) — store local digits only. */
-  private normalisePhone(raw: string): string {
-    return raw.trim().replace(/^\+\d{1,4}/, '');
   }
 
   private async ensureDriverPending(userId: string): Promise<void> {
