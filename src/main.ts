@@ -9,7 +9,8 @@ import { existsSync, mkdirSync } from 'fs';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
-    rawBody: true, // ← required for Stripe webhook signature verification
+    rawBody: true,    // enables req.rawBody for Stripe webhook
+    bodyParser: false, // disable NestJS's default parser — we register our own below
   });
 
   // ─── Ensure upload folders exist ─────────────────────────────
@@ -19,13 +20,18 @@ async function bootstrap() {
   }
 
   // ─── Serve uploaded files as static assets ────────────────────
-  // Accessible at: /uploads/classes/filename.jpg
   app.useStaticAssets(join(process.cwd(), 'uploads'), { prefix: '/uploads' });
 
-  // ─── Increase JSON body size limit ───────────────────────────
-  // NOTE: do NOT add a second bodyParser here — rawBody:true already registers one.
-  // We override the limit via the NestJS body-parser options instead.
-  app.use(bodyParser.json({ limit: '10mb' }));
+  // ─── Body parsers — capture rawBody for Stripe webhook ────────
+  // verify() runs before JSON.parse and saves the raw Buffer to req.rawBody
+  app.use(
+    bodyParser.json({
+      limit: '10mb',
+      verify: (req: any, _res, buf) => {
+        req.rawBody = buf;
+      },
+    }),
+  );
   app.use(bodyParser.urlencoded({ extended: true, limit: '10mb' }));
 
   app.enableCors({
