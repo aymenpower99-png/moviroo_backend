@@ -111,6 +111,15 @@ export class TripPayment {
   })
   stripeClientSecret: string | null;
 
+  @Column({
+    name: 'stripe_refund_id',
+    type: 'varchar',
+    length: 255,
+    nullable: true,
+    default: null,
+  })
+  stripeRefundId: string | null;
+
   /* ── Timestamps ── */
   @Column({
     name: 'paid_at',

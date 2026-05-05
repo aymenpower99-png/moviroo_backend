@@ -56,6 +56,7 @@ export class CancelRideUseCase {
     /* Can only cancel before driver picks up */
     const cancellable: RideStatus[] = [
       RideStatus.PENDING,
+      RideStatus.SCHEDULED,
       RideStatus.SEARCHING_DRIVER,
       RideStatus.ASSIGNED,
     ];

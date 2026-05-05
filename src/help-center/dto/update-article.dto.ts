@@ -1,5 +1,7 @@
-import { IsOptional, IsObject, IsString, IsNumber, IsEnum, IsBoolean } from 'class-validator';
+import { IsOptional, IsObject, IsString, IsNumber, IsEnum, IsBoolean, IsArray, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
 import { ArticleStatus } from '../entities/help-article.entity';
+import { StepInput } from './create-article.dto';
 
 export class UpdateArticleDto {
   @IsOptional()
@@ -29,4 +31,10 @@ export class UpdateArticleDto {
   @IsOptional()
   @IsNumber()
   sortOrder?: number;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => StepInput)
+  steps?: StepInput[];
 }

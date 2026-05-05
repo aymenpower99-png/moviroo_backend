@@ -6,6 +6,13 @@ export enum ArticleStatus {
   DISABLED = 'disabled',
 }
 
+/** One step in the article answer, stored as multilingual JSONB. */
+export interface ArticleStep {
+  order: number;
+  title: Record<string, string>;       // { en, fr, ar }
+  description: Record<string, string>; // { en, fr, ar }
+}
+
 @Entity('help_articles')
 export class HelpArticle {
   @PrimaryGeneratedColumn('uuid')
@@ -36,6 +43,10 @@ export class HelpArticle {
 
   @Column({ name: 'sort_order', default: 0 })
   sortOrder: number;
+
+  /** Ordered answer steps. Added via migration — nullable for backward compat. */
+  @Column({ type: 'jsonb', nullable: true, default: () => "'[]'" })
+  steps: ArticleStep[];
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

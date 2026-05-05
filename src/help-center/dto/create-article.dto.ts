@@ -1,4 +1,17 @@
-import { IsString, IsOptional, IsNumber } from 'class-validator';
+import { IsString, IsOptional, IsNumber, IsArray, ValidateNested, IsEnum } from 'class-validator';
+import { Type } from 'class-transformer';
+import { ArticleStatus } from '../entities/help-article.entity';
+
+export class StepInput {
+  @IsNumber()
+  order: number;
+
+  @IsString()
+  title: string; // English only — backend auto-translates to fr/ar
+
+  @IsString()
+  description: string; // English only
+}
 
 export class CreateArticleDto {
   @IsString()
@@ -15,6 +28,16 @@ export class CreateArticleDto {
   categoryLabel?: string;  // English label like "Account"
 
   @IsOptional()
+  @IsEnum(ArticleStatus)
+  status?: ArticleStatus;
+
+  @IsOptional()
   @IsNumber()
   sortOrder?: number;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => StepInput)
+  steps?: StepInput[];
 }

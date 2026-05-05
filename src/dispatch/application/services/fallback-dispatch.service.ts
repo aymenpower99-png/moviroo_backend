@@ -1,9 +1,10 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Ride } from '../../../rides/domain/entities/ride.entity';
 import { RideStatus } from '../../../rides/domain/enums/ride-status.enum';
 import { DispatchRideUseCase } from '../use-cases/dispatch-ride.use-case';
+import { PaymentService } from '../../../billing/services/payment.service';
 
 const DEFAULT_RADIUS_KM = 10;
 
@@ -17,6 +18,8 @@ export class FallbackDispatchService {
   constructor(
     @InjectRepository(Ride) private readonly rideRepo: Repository<Ride>,
     private readonly dispatchUC: DispatchRideUseCase,
+    @Inject(forwardRef(() => PaymentService))
+    private readonly paymentService: PaymentService,
   ) {}
 
   /** Returns true if dispatch is already running for this ride */
@@ -113,5 +116,8 @@ export class FallbackDispatchService {
       cancellationReason: 'No drivers available after 3 dispatch attempts',
       dispatchSnapshot: failSnap as any,
     });
+
+    // Issue refund if the passenger paid by card
+    await this.paymentService.issueRefundByRideId(ride.id);
   }
 }

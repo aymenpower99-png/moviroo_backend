@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { TripPayment } from './entities/trip-payment.entity';
@@ -12,6 +12,7 @@ import { BillingService } from './services/billing.service';
 import { PaymentService } from './services/payment.service';
 import { DriverEarningsService } from './services/driver-earnings.service';
 import { BillingController } from './billing.controller';
+import { DispatchModule } from '../dispatch/dispatch.module';
 
 @Module({
   imports: [
@@ -23,9 +24,10 @@ import { BillingController } from './billing.controller';
       Ride,
       PassengerEntity,
     ]),
+    forwardRef(() => DispatchModule),
   ],
   controllers: [BillingController],
   providers: [BillingService, PaymentService, DriverEarningsService],
-  exports: [BillingService, DriverEarningsService],
+  exports: [BillingService, DriverEarningsService, PaymentService],
 })
 export class BillingModule {}

@@ -12,7 +12,7 @@ import { Ride } from '../../domain/entities/ride.entity';
 import { RideStatus } from '../../domain/enums/ride-status.enum';
 import { User, UserRole } from '../../../users/entites/user.entity';
 import { FallbackDispatchService } from '../../../dispatch/application/services/fallback-dispatch.service';
-import { TripPayment, PaymentStatus } from '../../../billing/entities/trip-payment.entity';
+import { TripPayment } from '../../../billing/entities/trip-payment.entity';
 
 /** Rides within this window (ms) are considered "immediate" and dispatched right away */
 const IMMEDIATE_THRESHOLD_MS = 60 * 60_000; // 60 minutes
@@ -75,12 +75,23 @@ export class ConfirmRideUseCase {
       : now;
     const isImmediate = rideTime - now <= IMMEDIATE_THRESHOLD_MS;
 
-    if (isImmediate) {
+    const isCard = paymentMethod?.toUpperCase() === 'CARD';
+
+    if (isCard) {
+      // Card rides: keep status = PENDING until Stripe webhook confirms payment.
+      // The webhook (payment_intent.succeeded) will transition the ride to
+      // SCHEDULED (future) or SEARCHING_DRIVER (immediate) once payment is captured.
+      await this.rideRepo.save(ride);
+      this.logger.log(
+        `💳 Ride ${ride.id} confirmed with CARD — awaiting Stripe payment, status stays PENDING`,
+      );
+    } else if (isImmediate) {
+      // Cash immediate: dispatch right away
       ride.status = RideStatus.SEARCHING_DRIVER;
       await this.rideRepo.save(ride);
 
       this.logger.log(
-        `⚡ Ride ${ride.id} is immediate (within ${IMMEDIATE_THRESHOLD_MS / 60_000}min) — dispatching now`,
+        `⚡ Ride ${ride.id} is immediate CASH (within ${IMMEDIATE_THRESHOLD_MS / 60_000}min) — dispatching now`,
       );
       this.fallbackService.runFullDispatch(ride).catch((err) => {
         this.logger.error(
@@ -89,31 +100,27 @@ export class ConfirmRideUseCase {
         );
       });
     } else {
+      // Cash future: scheduler will dispatch 30 min before ride time
       ride.status = RideStatus.SCHEDULED;
       await this.rideRepo.save(ride);
 
       this.logger.log(
-        `🕐 Ride ${ride.id} scheduled for ${ride.scheduledAt?.toISOString()} — status=SCHEDULED, scheduler will dispatch 30min before`,
+        `🕐 Ride ${ride.id} scheduled for ${ride.scheduledAt?.toISOString()} — CASH SCHEDULED, scheduler dispatches 30min before`,
       );
     }
 
-    /* Update TripPayment with paymentMethod so it shows in billing */
+    /* Update TripPayment with paymentMethod so billing shows the correct method */
     if (paymentMethod) {
       try {
         const existing = await this.paymentRepo.findOne({ where: { rideId } });
         if (existing) {
-          const method = paymentMethod.toUpperCase();
-          existing.paymentMethod = method as any;
-
-          /* Card: payment was already charged → mark PAID immediately */
-          if (method === 'CARD') {
-            existing.paymentStatus = PaymentStatus.PAID;
-            existing.paidAt = new Date();
-          }
-
+          existing.paymentMethod = paymentMethod.toUpperCase() as any;
+          // NOTE: do NOT mark PAID here for card payments.
+          // Card payments are confirmed only after Stripe webhook (payment_intent.succeeded).
+          // Cash payments stay PENDING until the driver marks the trip delivered.
           await this.paymentRepo.save(existing);
           this.logger.log(
-            `[BILLING] Updated TripPayment paymentMethod=${method} for ride ${rideId}`,
+            `[BILLING] Updated TripPayment paymentMethod=${paymentMethod.toUpperCase()} for ride ${rideId}`,
           );
         }
       } catch (err) {

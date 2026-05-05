@@ -3,7 +3,8 @@ import {
   Logger,
   NotFoundException,
   ConflictException,
-  BadRequestException,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -11,6 +12,12 @@ import Stripe from 'stripe';
 
 import { TripPayment, PaymentStatus, PaymentMethod } from '../entities/trip-payment.entity';
 import { PassengerEntity } from '../../passenger/entities/passengers.entity';
+import { Ride } from '../../rides/domain/entities/ride.entity';
+import { RideStatus } from '../../rides/domain/enums/ride-status.enum';
+import { FallbackDispatchService } from '../../dispatch/application/services/fallback-dispatch.service';
+
+/** Rides within this window (ms) are dispatched immediately after payment */
+const IMMEDIATE_THRESHOLD_MS = 60 * 60_000; // 60 minutes
 
 @Injectable()
 export class PaymentService {
@@ -22,6 +29,10 @@ export class PaymentService {
     private readonly paymentRepo: Repository<TripPayment>,
     @InjectRepository(PassengerEntity)
     private readonly passengerRepo: Repository<PassengerEntity>,
+    @InjectRepository(Ride)
+    private readonly rideRepo: Repository<Ride>,
+    @Inject(forwardRef(() => FallbackDispatchService))
+    private readonly fallbackService: FallbackDispatchService,
   ) {
     this.stripe = new Stripe(process.env.STRIPE_SECRET_KEY ?? 'sk_test_placeholder', {
       apiVersion: '2025-03-31.basil' as any,
@@ -94,7 +105,7 @@ export class PaymentService {
   }
 
   /* ══════════════════════════════════════════════════
-     Stripe Webhook — confirm payment
+     Stripe Webhook — confirm payment + schedule/dispatch ride
   ══════════════════════════════════════════════════ */
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -105,7 +116,55 @@ export class PaymentService {
       const tripPaymentId = intent.metadata.tripPaymentId;
       if (!tripPaymentId) return;
 
-      await this.markAsPaid(tripPaymentId, PaymentMethod.CARD, intent.id);
+      const payment = await this.markAsPaid(tripPaymentId, PaymentMethod.CARD);
+      await this._transitionRideAfterPayment(payment.rideId);
+    }
+  }
+
+  /**
+   * After Stripe confirms payment, transition the ride from PENDING to either:
+   * - SEARCHING_DRIVER  → ride time is within 60 min (dispatch immediately)
+   * - SCHEDULED         → ride is in the future (scheduler dispatches 30 min before)
+   */
+  private async _transitionRideAfterPayment(rideId: string): Promise<void> {
+    const ride = await this.rideRepo.findOne({
+      where: { id: rideId },
+      relations: ['vehicleClass'],
+    });
+
+    if (!ride) {
+      this.logger.error(`[WEBHOOK] Ride ${rideId} not found after payment`);
+      return;
+    }
+
+    if (ride.status !== RideStatus.PENDING) {
+      this.logger.warn(
+        `[WEBHOOK] Ride ${rideId} status=${ride.status}, skipping transition (expected PENDING)`,
+      );
+      return;
+    }
+
+    const now = Date.now();
+    const rideTime = ride.scheduledAt ? new Date(ride.scheduledAt).getTime() : now;
+    const isImmediate = rideTime - now <= IMMEDIATE_THRESHOLD_MS;
+
+    if (isImmediate) {
+      await this.rideRepo.update(rideId, { status: RideStatus.SEARCHING_DRIVER });
+      ride.status = RideStatus.SEARCHING_DRIVER;
+
+      this.logger.log(
+        `⚡ [WEBHOOK] Ride ${rideId} paid → immediate, transitioning to SEARCHING_DRIVER + dispatching`,
+      );
+
+      this.fallbackService.runFullDispatch(ride).catch((err) =>
+        this.logger.error(`[WEBHOOK] Dispatch failed for ride ${rideId}`, err?.stack),
+      );
+    } else {
+      await this.rideRepo.update(rideId, { status: RideStatus.SCHEDULED });
+
+      this.logger.log(
+        `🕐 [WEBHOOK] Ride ${rideId} paid → SCHEDULED for ${ride.scheduledAt?.toISOString()}, scheduler will dispatch 30min before`,
+      );
     }
   }
 
@@ -118,13 +177,66 @@ export class PaymentService {
   }
 
   /* ══════════════════════════════════════════════════
+     Refund — issue Stripe refund for a card payment
+  ══════════════════════════════════════════════════ */
+
+  /**
+   * Issue a full Stripe refund for the TripPayment linked to the given rideId.
+   * Only runs if: paymentMethod = CARD, paymentStatus = PAID, stripePaymentIntentId set.
+   * Safe to call for cash rides (no-op).
+   */
+  async issueRefundByRideId(rideId: string): Promise<void> {
+    const payment = await this.paymentRepo.findOne({ where: { rideId } });
+    if (!payment) return;
+
+    if (payment.paymentMethod !== PaymentMethod.CARD) {
+      this.logger.log(`[REFUND] Ride ${rideId} is CASH — no refund needed`);
+      return;
+    }
+
+    if (payment.paymentStatus !== PaymentStatus.PAID) {
+      this.logger.log(
+        `[REFUND] TripPayment ${payment.id} status=${payment.paymentStatus} — nothing to refund`,
+      );
+      return;
+    }
+
+    if (!payment.stripePaymentIntentId) {
+      this.logger.error(
+        `[REFUND] TripPayment ${payment.id} has no stripePaymentIntentId — cannot refund`,
+      );
+      return;
+    }
+
+    if (payment.stripeRefundId) {
+      this.logger.warn(`[REFUND] TripPayment ${payment.id} already refunded (${payment.stripeRefundId})`);
+      return;
+    }
+
+    try {
+      const refund = await this.stripe.refunds.create({
+        payment_intent: payment.stripePaymentIntentId,
+      });
+
+      payment.paymentStatus = PaymentStatus.REFUNDED;
+      payment.stripeRefundId = refund.id;
+      await this.paymentRepo.save(payment);
+
+      this.logger.log(
+        `💸 [REFUND] Refund ${refund.id} issued for TripPayment ${payment.id} (ride ${rideId})`,
+      );
+    } catch (err) {
+      this.logger.error(`[REFUND] Stripe refund failed for ride ${rideId}: ${err}`);
+    }
+  }
+
+  /* ══════════════════════════════════════════════════
      Internal — mark payment as paid
   ══════════════════════════════════════════════════ */
 
   private async markAsPaid(
     tripPaymentId: string,
     method: PaymentMethod,
-    _stripeChargeId?: string,
   ): Promise<TripPayment> {
     const payment = await this.paymentRepo.findOne({ where: { id: tripPaymentId } });
     if (!payment) throw new NotFoundException('TripPayment not found');

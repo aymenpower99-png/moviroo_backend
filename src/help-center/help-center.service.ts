@@ -1,8 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { HelpArticle, ArticleStatus } from './entities/help-article.entity';
-import { CreateArticleDto } from './dto/create-article.dto';
+import { HelpArticle, ArticleStep, ArticleStatus } from './entities/help-article.entity';
+import { CreateArticleDto, StepInput } from './dto/create-article.dto';
 import { UpdateArticleDto } from './dto/update-article.dto';
 
 const AUTO_TRANSLATE_LANGS = ['fr', 'ar'];
@@ -28,6 +28,24 @@ export class HelpCenterService {
       }
     } catch { /* fall through to EN fallback */ }
     return text;
+  }
+
+  // ── Internal: build multilingual steps from English-only inputs ──
+  private async buildSteps(inputs: StepInput[]): Promise<ArticleStep[]> {
+    const steps: ArticleStep[] = [];
+    for (const s of inputs) {
+      const step: ArticleStep = {
+        order: s.order,
+        title: { en: s.title },
+        description: { en: s.description },
+      };
+      for (const lang of AUTO_TRANSLATE_LANGS) {
+        step.title[lang] = await this.translateText(s.title, lang);
+        step.description[lang] = await this.translateText(s.description, lang);
+      }
+      steps.push(step);
+    }
+    return steps;
   }
 
   // ── Internal: auto-translate missing languages in background ──
@@ -66,6 +84,11 @@ export class HelpCenterService {
       categoryKey: a.categoryKey,
       categoryLabel: a.categoryLabel[lang] || a.categoryLabel['en'] || a.categoryKey,
       status: a.status,
+      steps: (a.steps || []).map(s => ({
+        order: s.order,
+        title: s.title[lang] || s.title['en'] || '',
+        description: s.description[lang] || s.description['en'] || '',
+      })),
     }));
   }
 
@@ -83,16 +106,20 @@ export class HelpCenterService {
 
   // ── Admin: create article ──
   async createArticle(dto: CreateArticleDto) {
+    // Build steps with translations if provided
+    const steps = dto.steps ? await this.buildSteps(dto.steps) : [];
+
     const article = this.repo.create({
       title: { en: dto.title },
       description: { en: dto.description },
       categoryKey: dto.categoryKey,
       categoryLabel: { en: dto.categoryLabel || dto.categoryKey },
       sortOrder: dto.sortOrder ?? 0,
-      status: ArticleStatus.AUTO,
+      status: dto.status ?? ArticleStatus.AUTO,
+      steps,
     });
     const saved = await this.repo.save(article);
-    // Trigger auto-translation in background (non-blocking)
+    // Trigger auto-translation for title/description in background (non-blocking)
     this.autoTranslateArticle(saved).catch(() => {});
     return saved;
   }
@@ -107,8 +134,14 @@ export class HelpCenterService {
     if (dto.status) article.status = dto.status;
     if (dto.isActive !== undefined) article.isActive = dto.isActive;
     if (dto.sortOrder !== undefined) article.sortOrder = dto.sortOrder;
+
+    // Replace steps entirely when provided (always English input → re-translate)
+    if (dto.steps !== undefined) {
+      article.steps = await this.buildSteps(dto.steps);
+    }
+
     const saved = await this.repo.save(article);
-    // Re-translate if EN content changed
+    // Re-translate title/description if EN content changed
     if (dto.title?.en || dto.description?.en) {
       this.autoTranslateArticle(saved).catch(() => {});
     }
@@ -129,16 +162,22 @@ export class HelpCenterService {
     });
     
     const seen = new Set<string>();
-    const categories: { key: string; label: string }[] = [];
+    const categories: { key: string; label: string; articleCount: number }[] = [];
+    const counts: Record<string, number> = {};
+
     for (const a of articles) {
+      counts[a.categoryKey] = (counts[a.categoryKey] || 0) + 1;
       if (!seen.has(a.categoryKey)) {
         seen.add(a.categoryKey);
         categories.push({
           key: a.categoryKey,
           label: a.categoryLabel[lang] || a.categoryLabel['en'] || a.categoryKey,
+          articleCount: 0,
         });
       }
     }
-    return categories;
+    // Attach counts
+    return categories.map(c => ({ ...c, articleCount: counts[c.key] || 0 }));
   }
 }
+

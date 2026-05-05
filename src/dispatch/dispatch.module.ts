@@ -22,6 +22,7 @@ import { ScheduledDispatchService } from './application/services/scheduled-dispa
 import { NotificationsModule } from '../notifications/notifications.module';
 import { DriversModule } from '../driver/drivers.module';
 import { RidesModule } from '../rides/rides.module';
+import { BillingModule } from '../billing/billing.module';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { RidesModule } from '../rides/rides.module';
     NotificationsModule,
     forwardRef(() => DriversModule),
     forwardRef(() => RidesModule),
+    forwardRef(() => BillingModule),
   ],
   controllers: [DispatchController],
   providers: [

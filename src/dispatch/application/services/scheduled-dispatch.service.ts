@@ -1,6 +1,6 @@
 import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, LessThanOrEqual, Not, Repository } from 'typeorm';
+import { LessThanOrEqual, Repository } from 'typeorm';
 import { Ride } from '../../../rides/domain/entities/ride.entity';
 import { RideStatus } from '../../../rides/domain/enums/ride-status.enum';
 import { FallbackDispatchService } from './fallback-dispatch.service';
@@ -43,18 +43,20 @@ export class ScheduledDispatchService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Find all PENDING confirmed rides whose scheduledAt is within the
-   * dispatch-ahead window (now + 30 min). Transition them to SEARCHING_DRIVER
-   * and trigger dispatch for each one.
+   * Find all SCHEDULED rides whose scheduledAt is within the dispatch-ahead
+   * window (now + 30 min). Transition them to SEARCHING_DRIVER and trigger
+   * dispatch for each one.
+   *
+   * SCHEDULED = ride is confirmed AND paid (card webhook fired, or cash confirmed).
+   * The scheduler must NOT look at PENDING rides — those are still awaiting payment.
    */
   async scanAndDispatch(): Promise<void> {
     const cutoff = new Date(Date.now() + DISPATCH_AHEAD_MS);
 
-    // Confirmed future rides: PENDING + confirmedAt set + scheduledAt within window
+    // Confirmed + paid future rides approaching their scheduled time
     const rides = await this.rideRepo.find({
       where: {
-        status: RideStatus.PENDING,
-        confirmedAt: Not(IsNull()),
+        status: RideStatus.SCHEDULED,
         scheduledAt: LessThanOrEqual(cutoff),
       },
       relations: ['vehicleClass'],
