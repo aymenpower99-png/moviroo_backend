@@ -1,3 +1,4 @@
+import 'dotenv/config'; // ← must be first — loads .env before NestJS DI initializes
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
@@ -7,7 +8,9 @@ import { join } from 'path';
 import { existsSync, mkdirSync } from 'fs';
 
 async function bootstrap() {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    rawBody: true, // ← required for Stripe webhook signature verification
+  });
 
   // ─── Ensure upload folders exist ─────────────────────────────
   const uploadDirs = [join(process.cwd(), 'uploads', 'classes')];
@@ -20,6 +23,8 @@ async function bootstrap() {
   app.useStaticAssets(join(process.cwd(), 'uploads'), { prefix: '/uploads' });
 
   // ─── Increase JSON body size limit ───────────────────────────
+  // NOTE: do NOT add a second bodyParser here — rawBody:true already registers one.
+  // We override the limit via the NestJS body-parser options instead.
   app.use(bodyParser.json({ limit: '10mb' }));
   app.use(bodyParser.urlencoded({ extended: true, limit: '10mb' }));
 

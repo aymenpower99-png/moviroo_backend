@@ -3,6 +3,7 @@ import {
   Logger,
   NotFoundException,
   ConflictException,
+  ForbiddenException,
   Inject,
   forwardRef,
 } from '@nestjs/common';
@@ -79,11 +80,14 @@ export class PaymentService {
       );
     }
 
-    /* Create PaymentIntent — amount in millimes (TND minor unit = millimes, 1 TND = 1000 millimes) */
-    const amountInMillimes = Math.round(payment.amount * 1000);
+    /* Create PaymentIntent in EUR (Stripe does not support TND).
+       Convert: TND ÷ 3.3 ≈ EUR, then × 100 for cents.
+       The app always displays TND; EUR is Stripe-internal only. */
+    const TND_TO_EUR_RATE = 3.3;
+    const amountInCents = Math.round((payment.amount / TND_TO_EUR_RATE) * 100);
     const intent = await this.stripe.paymentIntents.create({
-      amount: amountInMillimes,
-      currency: 'tnd',
+      amount: amountInCents,
+      currency: 'eur',
       customer: stripeCustomerId,
       metadata: {
         tripPaymentId: payment.id,
@@ -102,6 +106,24 @@ export class PaymentService {
       clientSecret: intent.client_secret!,
       paymentIntentId: intent.id,
     };
+  }
+
+  /**
+   * Passenger-facing shortcut: create a Stripe PaymentIntent by rideId.
+   * Verifies the requesting user owns this TripPayment.
+   */
+  async createStripePaymentIntentForRide(
+    rideId: string,
+    passengerId: string,
+  ): Promise<{ clientSecret: string; paymentIntentId: string }> {
+    const payment = await this.paymentRepo.findOne({ where: { rideId } });
+    if (!payment) {
+      throw new NotFoundException('TripPayment not found for this ride');
+    }
+    if (payment.passengerId !== passengerId) {
+      throw new ForbiddenException('Not authorized to pay for this ride');
+    }
+    return this.createStripePaymentIntent(payment.id);
   }
 
   /* ══════════════════════════════════════════════════

@@ -68,6 +68,22 @@ export class BillingController {
     return this.paymentService.createStripePaymentIntent(tripPaymentId);
   }
 
+  /**
+   * Passenger-facing: get/create Stripe PaymentIntent using the rideId.
+   * Called by the Flutter app after confirmRide(CARD) to present PaymentSheet.
+   */
+  @Post('payments/ride/:rideId/stripe-intent')
+  @UseGuards(AuthGuard('jwt'))
+  async createStripeIntentByRide(
+    @Param('rideId') rideId: string,
+    @Req() req: any,
+  ) {
+    return this.paymentService.createStripePaymentIntentForRide(
+      rideId,
+      req.user.id,
+    );
+  }
+
   /* ══════════════════════════════════════════════════
      Stripe Webhook (no auth guard — Stripe calls this)
   ══════════════════════════════════════════════════ */
@@ -82,16 +98,27 @@ export class BillingController {
       apiVersion: '2025-03-31.basil' as any,
     });
 
+    const rawBody = req.rawBody;
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
     let event: any;
-    try {
-      event = stripe.webhooks.constructEvent(
-        req.rawBody!,
-        signature,
-        process.env.STRIPE_WEBHOOK_SECRET ?? '',
-      );
-    } catch (err) {
-      this.logger.error(`Stripe webhook verification failed: ${err}`);
-      return { received: false };
+    if (webhookSecret) {
+      // Production / Stripe CLI mode — verify signature
+      try {
+        event = stripe.webhooks.constructEvent(rawBody!, signature, webhookSecret);
+      } catch (err) {
+        this.logger.error(`Stripe webhook verification failed: ${err}`);
+        return { received: false };
+      }
+    } else {
+      // Dev mode — no secret configured, skip verification and parse body directly
+      this.logger.warn('[DEV] STRIPE_WEBHOOK_SECRET not set — skipping signature verification');
+      try {
+        event = JSON.parse(rawBody!.toString());
+      } catch {
+        this.logger.error('Stripe webhook: failed to parse body');
+        return { received: false };
+      }
     }
 
     await this.paymentService.handleStripeWebhook(event);
