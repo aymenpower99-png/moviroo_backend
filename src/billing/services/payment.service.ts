@@ -7,6 +7,7 @@ import {
   Inject,
   forwardRef,
 } from '@nestjs/common';
+import { SavedCardsService } from './saved-cards.service';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import Stripe from 'stripe';
@@ -34,6 +35,7 @@ export class PaymentService {
     private readonly rideRepo: Repository<Ride>,
     @Inject(forwardRef(() => FallbackDispatchService))
     private readonly fallbackService: FallbackDispatchService,
+    private readonly savedCardsService: SavedCardsService,
   ) {
     this.stripe = new Stripe(process.env.STRIPE_SECRET_KEY ?? 'sk_test_placeholder', {
       apiVersion: '2025-03-31.basil' as any,
@@ -110,20 +112,32 @@ export class PaymentService {
 
   /**
    * Passenger-facing shortcut: create a Stripe PaymentIntent by rideId.
-   * Verifies the requesting user owns this TripPayment.
+   * Also returns the Stripe customerId + a fresh ephemeral key so the
+   * Flutter PaymentSheet can list / save cards for this customer.
    */
   async createStripePaymentIntentForRide(
     rideId: string,
     passengerId: string,
-  ): Promise<{ clientSecret: string; paymentIntentId: string }> {
+  ): Promise<{
+    clientSecret: string;
+    paymentIntentId: string;
+    customerId: string;
+    ephemeralKey: string;
+  }> {
     const payment = await this.paymentRepo.findOne({ where: { rideId } });
-    if (!payment) {
-      throw new NotFoundException('TripPayment not found for this ride');
+    if (!payment) throw new NotFoundException('TripPayment not found for this ride');
+    if (payment.passengerId !== passengerId) throw new ForbiddenException('Not authorized to pay for this ride');
+
+    const intentData = await this.createStripePaymentIntent(payment.id);
+
+    const passenger = await this.passengerRepo.findOne({ where: { userId: passengerId } });
+    const stripeCustomerId = passenger?.stripeCustomerId;
+    if (!stripeCustomerId) {
+      return { ...intentData, customerId: '', ephemeralKey: '' };
     }
-    if (payment.passengerId !== passengerId) {
-      throw new ForbiddenException('Not authorized to pay for this ride');
-    }
-    return this.createStripePaymentIntent(payment.id);
+
+    const ephemeralKey = await this.savedCardsService.createEphemeralKey(stripeCustomerId);
+    return { ...intentData, customerId: stripeCustomerId, ephemeralKey };
   }
 
   /* ══════════════════════════════════════════════════

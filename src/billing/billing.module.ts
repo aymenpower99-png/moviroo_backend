@@ -10,6 +10,7 @@ import { PassengerEntity } from '../passenger/entities/passengers.entity';
 
 import { BillingService } from './services/billing.service';
 import { PaymentService } from './services/payment.service';
+import { SavedCardsService } from './services/saved-cards.service';
 import { DriverEarningsService } from './services/driver-earnings.service';
 import { BillingController } from './billing.controller';
 import { DispatchModule } from '../dispatch/dispatch.module';
@@ -27,7 +28,7 @@ import { DispatchModule } from '../dispatch/dispatch.module';
     forwardRef(() => DispatchModule),
   ],
   controllers: [BillingController],
-  providers: [BillingService, PaymentService, DriverEarningsService],
-  exports: [BillingService, DriverEarningsService, PaymentService],
+  providers: [BillingService, PaymentService, SavedCardsService, DriverEarningsService],
+  exports: [BillingService, DriverEarningsService, PaymentService, SavedCardsService],
 })
 export class BillingModule {}

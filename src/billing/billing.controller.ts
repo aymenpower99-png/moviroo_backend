@@ -24,6 +24,7 @@ import { UserRole } from '../users/entites/user.entity';
 
 import { BillingService } from './services/billing.service';
 import { PaymentService } from './services/payment.service';
+import { SavedCardsService } from './services/saved-cards.service';
 import { DriverEarningsService } from './services/driver-earnings.service';
 import {
   PaymentFilterDto,
@@ -37,6 +38,7 @@ export class BillingController {
   constructor(
     private readonly billingService: BillingService,
     private readonly paymentService: PaymentService,
+    private readonly savedCardsService: SavedCardsService,
     private readonly driverEarningsService: DriverEarningsService,
   ) {}
 
@@ -71,6 +73,7 @@ export class BillingController {
   /**
    * Passenger-facing: get/create Stripe PaymentIntent using the rideId.
    * Called by the Flutter app after confirmRide(CARD) to present PaymentSheet.
+   * Returns clientSecret + customerId + ephemeralKey for saved-card support.
    */
   @Post('payments/ride/:rideId/stripe-intent')
   @UseGuards(AuthGuard('jwt'))
@@ -82,6 +85,38 @@ export class BillingController {
       rideId,
       req.user.id,
     );
+  }
+
+  /* ══════════════════════════════════════════════════
+     Saved Cards — SetupIntent + management
+  ══════════════════════════════════════════════════ */
+
+  /** Create a SetupIntent so the passenger can add a card without charging. */
+  @Post('setup-intent')
+  @UseGuards(AuthGuard('jwt'))
+  async createSetupIntent(@Req() req: any) {
+    return this.savedCardsService.createSetupIntent(req.user.id);
+  }
+
+  /** List all saved cards for the authenticated passenger. */
+  @Get('saved-cards')
+  @UseGuards(AuthGuard('jwt'))
+  async getSavedCards(@Req() req: any) {
+    return this.savedCardsService.getSavedCards(req.user.id);
+  }
+
+  /** Remove a saved card from the passenger's Stripe account. */
+  @Delete('saved-cards/:pmId')
+  @UseGuards(AuthGuard('jwt'))
+  async deleteSavedCard(@Param('pmId') pmId: string, @Req() req: any) {
+    return this.savedCardsService.deleteSavedCard(req.user.id, pmId);
+  }
+
+  /** Set a card as the passenger's default payment method. */
+  @Patch('saved-cards/:pmId/default')
+  @UseGuards(AuthGuard('jwt'))
+  async setDefaultCard(@Param('pmId') pmId: string, @Req() req: any) {
+    return this.savedCardsService.setDefaultCard(req.user.id, pmId);
   }
 
   /* ══════════════════════════════════════════════════
