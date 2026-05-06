@@ -85,7 +85,7 @@ export class FcmService implements OnModuleInit {
     this.logger.log(`FCM token registered for user ${userId.slice(0, 8)}`);
   }
 
-  /** Send push notification to a specific user (respects driver push toggle) */
+  /** Send push notification to a specific user (respects push toggle for both driver and passenger) */
   async sendToUser(
     userId: string,
     title: string,
@@ -97,7 +97,20 @@ export class FcmService implements OnModuleInit {
       return false;
     }
 
-    // Respect driver push-enabled toggle (no-op for passengers)
+    const user = await this.userRepo.findOne({
+      where: { id: userId },
+      select: ['id', 'fcmToken', 'pushNotificationsEnabled', 'role'],
+    });
+
+    // Respect push-enabled toggle for both driver and passenger
+    if (user?.pushNotificationsEnabled === false) {
+      this.logger.log(
+        `Push skipped (disabled by user) for ${user.role} ${userId.slice(0, 8)}`,
+      );
+      return false;
+    }
+
+    // Respect driver-specific push toggle
     const driver = await this.driverRepo.findOne({
       where: { userId },
       select: ['notifPushEnabled'],
@@ -108,11 +121,6 @@ export class FcmService implements OnModuleInit {
       );
       return false;
     }
-
-    const user = await this.userRepo.findOne({
-      where: { id: userId },
-      select: ['id', 'fcmToken'],
-    });
 
     if (!user?.fcmToken) {
       this.logger.warn(`No FCM token for user ${userId.slice(0, 8)}`);
@@ -130,7 +138,6 @@ export class FcmService implements OnModuleInit {
           notification: {
             channelId,
             priority: 'max',
-            sound: 'default',
           },
         },
       });
