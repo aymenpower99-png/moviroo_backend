@@ -31,7 +31,6 @@ import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { UpdatePasswordDto } from './dto/update-password.dto';
 import { GoogleSignInDto } from './dto/google-signin.dto';
-import { AppleSignInDto } from './dto/apple-signin.dto';
 import {
   SwitchPrimary2faDto,
   DeleteAccountDto,
@@ -117,18 +116,12 @@ export class AuthController {
     return this.authService.resendVerification(body.email);
   }
 
-  // ─── OAuth: Google / Apple ─────────────────────────────────────────────────
+  // ─── OAuth: Google ────────────────────────────────────────────────────────
 
   @Post('google')
   @HttpCode(200)
   googleSignIn(@Body() dto: GoogleSignInDto) {
     return this.authService.googleSignIn(dto);
-  }
-
-  @Post('apple')
-  @HttpCode(200)
-  appleSignIn(@Body() dto: AppleSignInDto) {
-    return this.authService.appleSignIn(dto);
   }
 
   // ─── Forgot / Reset / Update Password ────────────────────────────────────

@@ -23,8 +23,6 @@ export enum UserStatus {
 export enum UserProvider {
   MANUAL = 'manual',
   GOOGLE = 'google',
-  APPLE = 'apple',
-  FACEBOOK = 'facebook',
 }
 
 export enum TwoFactorMethod {
@@ -219,6 +217,20 @@ export class User {
     default: null,
   })
   fcmToken: string | null;
+
+  @Column({
+    name: 'push_notifications_enabled',
+    type: 'boolean',
+    default: true,
+  })
+  pushNotificationsEnabled: boolean;
+
+  @Column({
+    name: 'email_notifications_enabled',
+    type: 'boolean',
+    default: true,
+  })
+  emailNotificationsEnabled: boolean;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

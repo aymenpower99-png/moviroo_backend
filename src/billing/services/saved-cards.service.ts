@@ -54,7 +54,7 @@ export class SavedCardsService {
   async createEphemeralKey(customerId: string): Promise<string> {
     const ek = await this.stripe.ephemeralKeys.create(
       { customer: customerId },
-      { apiVersion: '2025-03-31' } as any,
+      { apiVersion: '2026-04-22.dahlia' } as any,
     );
     return ek.secret!;
   }

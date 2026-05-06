@@ -6,15 +6,17 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { PassengerEntity } from './entities/passengers.entity';
 import {
-  PassengerEntity,
-  PaymentAddress,
-} from './entities/passengers.entity';
-import { UpdatePassengerDto, PaymentAddressDto, UpdateNotificationsDto } from './dto/passenger.dto';
+  UpdatePassengerDto,
+  UpdateNotificationsDto,
+} from './dto/passenger.dto';
 import { MembershipLevelsService } from '../membership-levels/membership-levels.service';
-import { MembershipCouponEntity, CouponStatus } from './entities/membership-coupon.entity';
-
-const MAX_SAVED_ADDRESSES = 5;
+import {
+  MembershipCouponEntity,
+  CouponStatus,
+} from './entities/membership-coupon.entity';
+import { User } from '../users/entites/user.entity';
 
 @Injectable()
 export class PassengersService {
@@ -23,6 +25,8 @@ export class PassengersService {
     private readonly passengerRepo: Repository<PassengerEntity>,
     @InjectRepository(MembershipCouponEntity)
     private readonly couponRepo: Repository<MembershipCouponEntity>,
+    @InjectRepository(User)
+    private readonly userRepo: Repository<User>,
     private readonly membershipLevelsService: MembershipLevelsService,
   ) {}
 
@@ -42,65 +46,52 @@ export class PassengersService {
     return this.findByUserId(userId);
   }
 
-  async updateProfile(userId: string, dto: UpdatePassengerDto): Promise<PassengerEntity> {
+  async updateProfile(
+    userId: string,
+    dto: UpdatePassengerDto,
+  ): Promise<PassengerEntity> {
     const passenger = await this.findByUserId(userId);
     Object.assign(passenger, dto);
     return this.passengerRepo.save(passenger);
   }
 
-  async updateNotificationPreferences(
-    userId: string,
-    dto: UpdateNotificationsDto,
-  ): Promise<{ pushNotificationsEnabled: boolean; emailNotificationsEnabled: boolean }> {
-    const passenger = await this.findByUserId(userId);
-    if (dto.pushEnabled !== undefined) passenger.pushNotificationsEnabled = dto.pushEnabled;
-    if (dto.emailEnabled !== undefined) passenger.emailNotificationsEnabled = dto.emailEnabled;
-    await this.passengerRepo.save(passenger);
+  async getNotificationPreferences(userId: string): Promise<{
+    pushNotificationsEnabled: boolean;
+    emailNotificationsEnabled: boolean;
+  }> {
+    const user = await this.userRepo.findOne({
+      where: { id: userId },
+    });
+    if (!user) throw new NotFoundException('User not found');
+
     return {
-      pushNotificationsEnabled: passenger.pushNotificationsEnabled,
-      emailNotificationsEnabled: passenger.emailNotificationsEnabled,
+      pushNotificationsEnabled: user.pushNotificationsEnabled,
+      emailNotificationsEnabled: user.emailNotificationsEnabled,
     };
   }
 
-  // ─── Payment Addresses ────────────────────────────────────────────────────
+  async updateNotificationPreferences(
+    userId: string,
+    dto: UpdateNotificationsDto,
+  ): Promise<{
+    pushNotificationsEnabled: boolean;
+    emailNotificationsEnabled: boolean;
+  }> {
+    const user = await this.userRepo.findOne({
+      where: { id: userId },
+    });
+    if (!user) throw new NotFoundException('User not found');
 
-  async getPaymentAddresses(userId: string): Promise<PaymentAddress[]> {
-    const passenger = await this.findByUserId(userId);
-    return passenger.paymentAddresses ?? [];
-  }
+    if (dto.pushEnabled !== undefined)
+      user.pushNotificationsEnabled = dto.pushEnabled;
+    if (dto.emailEnabled !== undefined)
+      user.emailNotificationsEnabled = dto.emailEnabled;
+    await this.userRepo.save(user);
 
-  async addPaymentAddress(userId: string, dto: PaymentAddressDto): Promise<PassengerEntity> {
-    const passenger = await this.findByUserId(userId);
-    const addresses  = passenger.paymentAddresses ?? [];
-
-    if (addresses.length >= MAX_SAVED_ADDRESSES) {
-      throw new BadRequestException(`Maximum of ${MAX_SAVED_ADDRESSES} addresses reached`);
-    }
-
-    if (dto.label) {
-      const exists = addresses.some(
-        (a) => a.label?.toLowerCase() === dto.label!.toLowerCase(),
-      );
-      if (exists) throw new ConflictException(`Address with label "${dto.label}" already exists`);
-    }
-
-    passenger.paymentAddresses = [...addresses, dto];
-    return this.passengerRepo.save(passenger);
-  }
-
-  async removePaymentAddress(userId: string, label: string): Promise<PassengerEntity> {
-    const passenger = await this.findByUserId(userId);
-    const before     = (passenger.paymentAddresses ?? []).length;
-
-    passenger.paymentAddresses = (passenger.paymentAddresses ?? []).filter(
-      (a) => a.label?.toLowerCase() !== label.toLowerCase(),
-    );
-
-    if (passenger.paymentAddresses.length === before) {
-      throw new NotFoundException(`No address with label "${label}"`);
-    }
-
-    return this.passengerRepo.save(passenger);
+    return {
+      pushNotificationsEnabled: user.pushNotificationsEnabled,
+      emailNotificationsEnabled: user.emailNotificationsEnabled,
+    };
   }
 
   // ─── Referral ─────────────────────────────────────────────────────────────
@@ -139,23 +130,32 @@ export class PassengersService {
       levels.find((l) => l.level === highestClaimedLevelNum) ?? null;
 
     // Level IDs that still have an ACTIVE coupon (not yet used)
-    const activeCoupons = claimedCoupons.filter((c) => c.status === CouponStatus.ACTIVE);
+    const activeCoupons = claimedCoupons.filter(
+      (c) => c.status === CouponStatus.ACTIVE,
+    );
     const claimedLevelIds = activeCoupons.map((c) => c.levelId);
 
     // Map of levelId → coupon code for active coupons (so Flutter can restore codes after page refresh)
     const activeCouponCodes: Record<string, string> = {};
-    activeCoupons.forEach((c) => { activeCouponCodes[c.levelId] = c.code; });
+    activeCoupons.forEach((c) => {
+      activeCouponCodes[c.levelId] = c.code;
+    });
 
     // Next level = the first level above the current claimed level
     const currentLevelNum = currentLevel?.level ?? 0;
     const nextLevel = levels.find((l) => l.level > currentLevelNum) ?? null;
 
     // Progress toward next level (based on remaining/spendable points)
-    const basePoints   = currentLevel?.requiredPoints ?? 0;
+    const basePoints = currentLevel?.requiredPoints ?? 0;
     const targetPoints = nextLevel?.requiredPoints ?? basePoints;
     const progressPercent = nextLevel
-      ? Math.max(0, Math.min(1, (userPoints - basePoints) / (targetPoints - basePoints)))
-      : currentLevel ? 1.0 : 0.0;
+      ? Math.max(
+          0,
+          Math.min(1, (userPoints - basePoints) / (targetPoints - basePoints)),
+        )
+      : currentLevel
+        ? 1.0
+        : 0.0;
 
     const pointsToNext = nextLevel
       ? Math.max(0, nextLevel.requiredPoints - userPoints)
@@ -164,12 +164,12 @@ export class PassengersService {
     return {
       userPoints,
       remainingPoints: passenger.membershipPoints,
-      totalPoints:     passenger.membershipPoints,
+      totalPoints: passenger.membershipPoints,
       currentLevelName: currentLevel?.name ?? 'Moviroo Starter',
-      currentLevel:     currentLevel ?? null,
-      nextLevel:        nextLevel ?? null,
+      currentLevel: currentLevel ?? null,
+      nextLevel: nextLevel ?? null,
       pointsToNext,
-      progressPercent:  parseFloat(progressPercent.toFixed(4)),
+      progressPercent: parseFloat(progressPercent.toFixed(4)),
       levels,
       claimedLevelIds,
       activeCouponCodes,
@@ -180,8 +180,8 @@ export class PassengersService {
 
   async addPoints(userId: string, points: number): Promise<void> {
     const passenger = await this.findByUserId(userId);
-    passenger.membershipPoints  += points;
-    passenger.remainingPoints   += points;
+    passenger.membershipPoints += points;
+    passenger.remainingPoints += points;
     await this.passengerRepo.save(passenger);
   }
 
@@ -191,8 +191,8 @@ export class PassengersService {
 
   async updateRating(userId: string, newScore: number): Promise<void> {
     const passenger = await this.findByUserId(userId);
-    const total     = passenger.totalRatings;
-    const prev      = Number(passenger.ratingAverage);
+    const total = passenger.totalRatings;
+    const prev = Number(passenger.ratingAverage);
     passenger.ratingAverage = parseFloat(
       ((prev * total + newScore) / (total + 1)).toFixed(2),
     );
@@ -207,11 +207,14 @@ export class PassengersService {
     levelId: string,
   ): Promise<MembershipCouponEntity> {
     const passenger = await this.findByUserId(userId);
-    const level     = await this.membershipLevelsService.claimLevel(levelId, passenger.membershipPoints);
+    const level = await this.membershipLevelsService.claimLevel(
+      levelId,
+      passenger.membershipPoints,
+    );
 
     // Deduct required points from membership balance
     passenger.membershipPoints -= level.requiredPoints;
-    passenger.remainingPoints  -= level.requiredPoints;
+    passenger.remainingPoints -= level.requiredPoints;
     await this.passengerRepo.save(passenger);
 
     // Generate a unique coupon code
@@ -221,7 +224,7 @@ export class PassengersService {
       .map((w) => w[0].toUpperCase())
       .join('');
     const suffix = Math.floor(1000 + Math.random() * 9000);
-    const code   = `MOV-${prefix}-${suffix}`;
+    const code = `MOV-${prefix}-${suffix}`;
 
     const coupon = this.couponRepo.create({
       userId: passenger.userId,
@@ -248,9 +251,9 @@ export class PassengersService {
     }
 
     return {
-      code:               coupon.code,
+      code: coupon.code,
       discountPercentage: coupon.discountPercentage,
-      level:              coupon.level,
+      level: coupon.level,
     };
   }
 

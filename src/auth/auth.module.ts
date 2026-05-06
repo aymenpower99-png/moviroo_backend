@@ -12,6 +12,12 @@ import { AuthPasswordService } from './auth-password.service';
 import { AuthPasskeyService } from './auth-passkey.service';
 import { AuthAccountService } from './auth-account.service';
 
+import { AuthTokenService } from './services/auth-token.service';
+import { AuthRegisterService } from './services/auth-register.service';
+import { AuthLoginService } from './services/auth-login.service';
+import { Auth2faService } from './services/auth-2fa.service';
+import { AuthOAuthService } from './services/auth-oauth.service';
+
 import { User } from '../users/entites/user.entity';
 import { PassengerEntity } from '../passenger/entities/passengers.entity';
 import { Driver } from '../driver/entities/driver.entity';
@@ -34,7 +40,15 @@ import { UnverifiedCleanupTask } from './tasks/unverified-cleanup.task';
   ],
   controllers: [AuthController],
   providers: [
+    // Core facade
     AuthService,
+    // New sub-services
+    AuthTokenService,
+    AuthRegisterService,
+    AuthLoginService,
+    Auth2faService,
+    AuthOAuthService,
+    // Existing sub-services
     AuthPasswordService,
     AuthProfileService,
     AuthEmailChangeService,
@@ -50,3 +64,4 @@ import { UnverifiedCleanupTask } from './tasks/unverified-cleanup.task';
   exports: [AuthService, AuthPasswordService, AuthPasskeyService],
 })
 export class AuthModule {}
+
