@@ -18,6 +18,7 @@ import {
 import { GoogleSignInDto } from '../dto/google-signin.dto';
 import { WelcomeMailService } from '../../mail/services/welcome-mail.service';
 import { AuthTokenService } from './auth-token.service';
+import { AuthSessionService } from './auth-session.service';
 
 @Injectable()
 export class AuthOAuthService {
@@ -27,9 +28,14 @@ export class AuthOAuthService {
     private readonly passengerRepo: Repository<PassengerEntity>,
     private readonly welcomeMail: WelcomeMailService,
     private readonly tokenService: AuthTokenService,
+    private readonly sessionService: AuthSessionService,
   ) {}
 
-  async googleSignIn(dto: GoogleSignInDto) {
+  async googleSignIn(
+    dto: GoogleSignInDto,
+    deviceLabel?: string,
+    ipAddress?: string,
+  ) {
     const payload = this.tokenService.parseJwt(dto.idToken);
     const email = payload.email as string;
     const firstName = (payload.given_name as string) || '';
@@ -80,6 +86,9 @@ export class AuthOAuthService {
     await this.userRepo.update(user.id, { lastLoginAt: new Date() });
     const tokens = await this.tokenService.generateTokens(user);
     await this.tokenService.saveRefreshToken(user.id, tokens.refreshToken);
+    this.sessionService
+      .createSession(user.id, deviceLabel ?? 'Unknown', ipAddress )
+      .catch(() => {});
     const isProfileComplete = !!user.phone;
     return { ...tokens, user: this.tokenService.safeUser(user), isProfileComplete };
   }

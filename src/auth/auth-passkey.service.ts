@@ -26,6 +26,8 @@ export interface PasskeyActionPayload {
   sub: string;
   kind: 'passkey-action';
   method: 'face' | 'fingerprint' | 'pin';
+  /** Purpose this token was issued for — prevents cross-action reuse. */
+  purpose: string;
 }
 
 const ACTION_TOKEN_TTL_SECONDS = 5 * 60; // 5 minutes
@@ -55,10 +57,14 @@ export class AuthPasskeyService {
    * Called by the client after a SUCCESSFUL local biometric prompt.
    * Returns a short-lived action token that proves a fresh challenge happened.
    * Sensitive endpoints can require this token as proof of re-auth.
+   *
+   * @param purpose  Scopes the token to a specific operation (e.g. 'disable-totp').
+   *                 Prevents reuse across different sensitive actions.
    */
   async verifyPasskey(
     userId: string,
     method: 'face' | 'fingerprint' | 'pin',
+    purpose = 'general',
   ) {
     const user = await this.userRepo.findOneOrFail({ where: { id: userId } });
     if (!user.passkeyEnabled) {
@@ -73,6 +79,7 @@ export class AuthPasskeyService {
         sub: userId,
         kind: 'passkey-action',
         method,
+        purpose,
       } satisfies PasskeyActionPayload,
       {
         secret: this.config.get<string>('jwt.accessSecret')!,
@@ -89,8 +96,15 @@ export class AuthPasskeyService {
   /**
    * Validates a passkey action token. Used by sensitive endpoints (delete,
    * disable 2FA, etc.) when the caller chooses passkey instead of password.
+   *
+   * @param expectedPurpose  When provided, rejects tokens issued for a
+   *                         different purpose (prevents cross-action reuse).
    */
-  async validateActionToken(userId: string, token: string): Promise<void> {
+  async validateActionToken(
+    userId: string,
+    token: string,
+    expectedPurpose?: string,
+  ): Promise<void> {
     let payload: PasskeyActionPayload;
     try {
       payload = await this.jwtService.verifyAsync<PasskeyActionPayload>(token, {
@@ -102,6 +116,12 @@ export class AuthPasskeyService {
 
     if (payload.kind !== 'passkey-action' || payload.sub !== userId) {
       throw new UnauthorizedException('Invalid passkey token');
+    }
+
+    if (expectedPurpose && payload.purpose !== expectedPurpose) {
+      throw new UnauthorizedException(
+        'Action token was not issued for this operation',
+      );
     }
 
     const user = await this.userRepo.findOneOrFail({ where: { id: userId } });

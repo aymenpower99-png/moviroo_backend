@@ -4,14 +4,17 @@ import {
   Delete,
   Get,
   HttpCode,
+  Param,
   Patch,
   Post,
   Query,
+  Req,
   Res,
   UseGuards,
 } from '@nestjs/common';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import { AuthGuard } from '@nestjs/passport';
+import { Throttle } from '@nestjs/throttler';
 
 import { AuthService } from './auth.service';
 import { AuthProfileService } from './auth-profile.service';
@@ -19,6 +22,7 @@ import { AuthEmailChangeService } from './auth-email-change.service';
 import { AuthPasswordService } from './auth-password.service';
 import { AuthPasskeyService } from './auth-passkey.service';
 import { AuthAccountService } from './auth-account.service';
+import { AuthSessionService } from './services/auth-session.service';
 
 import { HtmlService } from '../common/services/html.service';
 import { RegisterDto } from './dto/register.dto';
@@ -40,6 +44,8 @@ import {
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { User } from '../users/entites/user.entity';
 import { PassengerGuard } from '../common/guards/passenger.guard';
+import { SensitiveActionGuard } from './guards/sensitive-action.guard';
+import { ActionPurpose } from './decorators/action-purpose.decorator';
 
 @Controller('auth')
 export class AuthController {
@@ -50,12 +56,14 @@ export class AuthController {
     private passwordService: AuthPasswordService,
     private passkeyService: AuthPasskeyService,
     private accountService: AuthAccountService,
+    private sessionService: AuthSessionService,
     private htmlService: HtmlService,
   ) {}
 
   // ─── Register / Verify / Login ────────────────────────────────────────────
 
   @Post('register')
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   register(@Body() dto: RegisterDto) {
     return this.authService.register(dto);
   }
@@ -85,8 +93,12 @@ export class AuthController {
 
   @Post('login')
   @HttpCode(200)
-  login(@Body() dto: LoginDto) {
-    return this.authService.login(dto);
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  login(@Body() dto: LoginDto, @Req() req: Request) {
+    const deviceLabel =
+      (req.headers['x-device-name'] as string) ?? 'Unknown';
+    const ipAddress = req.ip ?? undefined;
+    return this.authService.login(dto, deviceLabel, ipAddress);
   }
 
   @Post('admin/login')
@@ -97,12 +109,25 @@ export class AuthController {
 
   @Post('login/verify-otp')
   @HttpCode(200)
-  verifyLoginOtp(@Body() body: { preAuthToken: string; code: string }) {
-    return this.authService.verifyLoginOtp(body.preAuthToken, body.code);
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  verifyLoginOtp(
+    @Body() body: { preAuthToken: string; code: string },
+    @Req() req: Request,
+  ) {
+    const deviceLabel =
+      (req.headers['x-device-name'] as string) ?? 'Unknown';
+    const ipAddress = req.ip ?? undefined;
+    return this.authService.verifyLoginOtp(
+      body.preAuthToken,
+      body.code,
+      deviceLabel,
+      ipAddress,
+    );
   }
 
   @Post('resend-otp')
   @HttpCode(200)
+  @Throttle({ default: { limit: 3, ttl: 60000 } })
   resendOtp(
     @Body() dto: ResendOtpDto,
     @Query('purpose') purpose: 'verify-email' | 'login' = 'verify-email',
@@ -120,8 +145,11 @@ export class AuthController {
 
   @Post('google')
   @HttpCode(200)
-  googleSignIn(@Body() dto: GoogleSignInDto) {
-    return this.authService.googleSignIn(dto);
+  googleSignIn(@Body() dto: GoogleSignInDto, @Req() req: Request) {
+    const deviceLabel =
+      (req.headers['x-device-name'] as string) ?? 'Unknown';
+    const ipAddress = req.ip ?? undefined;
+    return this.authService.googleSignIn(dto, deviceLabel, ipAddress);
   }
 
   // ─── Forgot / Reset / Update Password ────────────────────────────────────
@@ -170,6 +198,7 @@ export class AuthController {
   @Patch('me/password')
   @UseGuards(AuthGuard('jwt'))
   @HttpCode(200)
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   updatePassword(@CurrentUser() user: User, @Body() dto: UpdatePasswordDto) {
     return this.passwordService.updatePassword(
       user.id,
@@ -228,10 +257,14 @@ export class AuthController {
   }
 
   @Delete('2fa/totp')
-  @UseGuards(AuthGuard('jwt'), PassengerGuard)
+  @UseGuards(AuthGuard('jwt'), PassengerGuard, SensitiveActionGuard)
+  @ActionPurpose('disable-totp')
   @HttpCode(200)
-  disableTotp(@CurrentUser() user: User) {
-    return this.authService.disableTotp(user.id);
+  disableTotp(
+    @CurrentUser() user: User,
+    @Body() body: { code: string },
+  ) {
+    return this.authService.disableTotp(user.id, body.code);
   }
 
   // ─── Email 2FA ─────────────────────────────────────────────────────────────
@@ -300,7 +333,11 @@ export class AuthController {
   @UseGuards(AuthGuard('jwt'))
   @HttpCode(200)
   verifyPasskey(@CurrentUser() user: User, @Body() dto: PasskeyVerifyDto) {
-    return this.passkeyService.verifyPasskey(user.id, dto.method);
+    return this.passkeyService.verifyPasskey(
+      user.id,
+      dto.method,
+      dto.purpose ?? 'general',
+    );
   }
 
   // ─── Delete account ─────────────────────────────────────────────────────────
@@ -314,9 +351,46 @@ export class AuthController {
 
   @Delete('me')
   @UseGuards(AuthGuard('jwt'))
+  @ActionPurpose('delete-account')
   @HttpCode(200)
   deleteAccount(@CurrentUser() user: User, @Body() dto: DeleteAccountDto) {
     return this.accountService.deleteAccount(user.id, dto);
+  }
+
+  // ─── Active Sessions ───────────────────────────────────────────────────────
+
+  /** Lists the user's recent login sessions (last 10). */
+  @Get('sessions')
+  @UseGuards(AuthGuard('jwt'))
+  getSessions(@CurrentUser() user: User) {
+    return this.sessionService.getSessions(user.id);
+  }
+
+  /**
+   * Signs out ALL devices by clearing the refresh token and deleting all
+   * session records. The user must log in again on every device.
+   */
+  @Delete('sessions')
+  @UseGuards(AuthGuard('jwt'))
+  @HttpCode(200)
+  revokeAllSessions(@CurrentUser() user: User) {
+    return this.sessionService.revokeAllSessions(user.id);
+  }
+
+  /**
+   * Removes a single session record (audit cleanup).
+   * Note: does NOT invalidate the refresh token for that device —
+   * use DELETE /auth/sessions to fully sign out all devices.
+   */
+  @Delete('sessions/:id')
+  @UseGuards(AuthGuard('jwt'))
+  @HttpCode(200)
+  async deleteSession(
+    @CurrentUser() user: User,
+    @Param('id') sessionId: string,
+  ) {
+    await this.sessionService.deleteSession(user.id, sessionId);
+    return { message: 'Session removed.' };
   }
 
   // ─── Refresh / Logout ─────────────────────────────────────────────────────

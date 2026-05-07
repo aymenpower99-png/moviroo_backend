@@ -122,4 +122,46 @@ export class AuthMailService extends BaseMailService {
     await this.send(to, 'Moviroo – Your email is being changed', html);
     this.logger.log(`Email-change alert sent to ${to}`);
   }
+
+  /**
+   * Security alert email sent after a sensitive account change:
+   *   - password_changed: user changed their login password
+   *   - 2fa_disabled:     two-step verification was turned off
+   *   - totp_removed:     authenticator app was unlinked
+   */
+  async sendSecurityAlert(
+    to: string,
+    firstName: string,
+    event: 'password_changed' | '2fa_disabled' | 'totp_removed',
+  ): Promise<void> {
+    const events: Record<
+      'password_changed' | '2fa_disabled' | 'totp_removed',
+      { title: string; desc: string }
+    > = {
+      password_changed: {
+        title: 'Password changed',
+        desc: 'Your Moviroo account password was successfully changed.',
+      },
+      '2fa_disabled': {
+        title: '2-step verification disabled',
+        desc: 'Two-step verification has been turned off on your account.',
+      },
+      totp_removed: {
+        title: 'Authenticator app removed',
+        desc: 'Your authenticator app has been unlinked from your account.',
+      },
+    };
+
+    const { title, desc } = events[event];
+
+    const html = this.loadTemplate('security-alert.html', {
+      FIRST_NAME: firstName,
+      EVENT_TITLE: title,
+      EVENT_DESC: desc,
+      YEAR: new Date().getFullYear().toString(),
+    });
+
+    await this.send(to, `Moviroo – Security alert: ${title}`, html);
+    this.logger.log(`Security alert [${event}] sent to ${to}`);
+  }
 }

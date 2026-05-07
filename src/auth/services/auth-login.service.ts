@@ -18,6 +18,7 @@ import { AdminLoginDto } from '../dto/admin-login.dto';
 import { OtpService } from '../../otp/otp.service';
 import { AuthMailService } from '../../mail/services/auth-mail.service';
 import { AuthTokenService, PreAuthPayload } from './auth-token.service';
+import { AuthSessionService } from './auth-session.service';
 
 @Injectable()
 export class AuthLoginService {
@@ -27,9 +28,14 @@ export class AuthLoginService {
     private readonly otpService: OtpService,
     private readonly authMail: AuthMailService,
     private readonly tokenService: AuthTokenService,
+    private readonly sessionService: AuthSessionService,
   ) {}
 
-  async login(dto: LoginDto) {
+  async login(
+    dto: LoginDto,
+    deviceLabel?: string,
+    ipAddress?: string,
+  ) {
     const user = await this.userRepo.findOne({ where: { email: dto.email } });
     if (!user || !user.password)
       throw new UnauthorizedException('Invalid credentials');
@@ -125,6 +131,9 @@ export class AuthLoginService {
     await this.userRepo.update(user.id, { lastLoginAt: new Date() });
     const tokens = await this.tokenService.generateTokens(user);
     await this.tokenService.saveRefreshToken(user.id, tokens.refreshToken);
+    this.sessionService
+      .createSession(user.id, deviceLabel ?? 'Unknown', ipAddress)
+      .catch(() => {});
     return { ...tokens, user: this.tokenService.safeUser(user) };
   }
 
@@ -150,7 +159,12 @@ export class AuthLoginService {
     return { ...tokens, user: this.tokenService.safeUser(user) };
   }
 
-  async verifyLoginOtp(preAuthToken: string, code: string) {
+  async verifyLoginOtp(
+    preAuthToken: string,
+    code: string,
+    deviceLabel?: string,
+    ipAddress?: string,
+  ) {
     const payload = await this.tokenService.verifyPreAuthToken(preAuthToken);
 
     if (!payload.preAuth) throw new UnauthorizedException('Invalid token type');
@@ -166,6 +180,9 @@ export class AuthLoginService {
 
     const tokens = await this.tokenService.generateTokens(user);
     await this.tokenService.saveRefreshToken(user.id, tokens.refreshToken);
+    this.sessionService
+      .createSession(user.id, deviceLabel ?? 'Unknown', ipAddress)
+      .catch(() => {});
     return { ...tokens, user: this.tokenService.safeUser(user) };
   }
 
@@ -185,6 +202,7 @@ export class AuthLoginService {
 
   async logout(userId: string) {
     await this.userRepo.update(userId, { refreshToken: null });
+    this.sessionService.clearSessions(userId).catch(() => {});
     return { message: 'Logged out successfully' };
   }
 }

@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -7,7 +8,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
-import { User } from '../users/entites/user.entity';
+import { User, UserProvider } from '../users/entites/user.entity';
 import { AuthMailService } from '../mail/services/auth-mail.service';
 
 @Injectable()
@@ -91,15 +92,25 @@ export class AuthPasswordService {
     newPassword: string,
   ) {
     const user = await this.userRepo.findOne({ where: { id: userId } });
-    if (!user || !user.password)
-      throw new UnauthorizedException('Invalid credentials');
+    if (!user) throw new UnauthorizedException('Invalid credentials');
+
+    // Google users have no password — block this endpoint for them
+    if (user.provider === UserProvider.GOOGLE || !user.password) {
+      throw new ForbiddenException(
+        'Password change is not available for accounts linked via Google.',
+      );
+    }
 
     const ok = await bcrypt.compare(currentPassword, user.password);
-    if (!ok) throw new UnauthorizedException('Invalid credentials');
+    if (!ok) throw new UnauthorizedException('Current password is incorrect');
 
     const passwordHash = await bcrypt.hash(newPassword, 12);
-
     await this.userRepo.update(userId, { password: passwordHash });
+
+    // Fire-and-forget security alert — don't block the response
+    this.mailService
+      .sendSecurityAlert(user.email, user.firstName, 'password_changed')
+      .catch(() => {});
 
     return { message: 'Password updated successfully' };
   }

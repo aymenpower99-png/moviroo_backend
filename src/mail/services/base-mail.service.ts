@@ -41,11 +41,7 @@ export class BaseMailService {
     return html;
   }
 
-  protected async send(
-    to: string,
-    subject: string,
-    html: string,
-  ): Promise<void> {
+  public async send(to: string, subject: string, html: string): Promise<void> {
     await this.transporter.sendMail({
       from: this.fromAddress,
       to,

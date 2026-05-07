@@ -53,7 +53,11 @@ export class AuthAccountService {
     } else if (dto.otp) {
       await this.otpService.verifyOtp(userId, dto.otp);
     } else if (dto.passkeyToken) {
-      await this.passkeyService.validateActionToken(userId, dto.passkeyToken);
+      await this.passkeyService.validateActionToken(
+        userId,
+        dto.passkeyToken,
+        'delete-account',
+      );
     }
 
     // ── Hard delete ───────────────────────────────────────────────────────

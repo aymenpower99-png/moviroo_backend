@@ -17,22 +17,25 @@ import { AuthRegisterService } from './services/auth-register.service';
 import { AuthLoginService } from './services/auth-login.service';
 import { Auth2faService } from './services/auth-2fa.service';
 import { AuthOAuthService } from './services/auth-oauth.service';
+import { AuthSessionService } from './services/auth-session.service';
 
 import { User } from '../users/entites/user.entity';
 import { PassengerEntity } from '../passenger/entities/passengers.entity';
 import { Driver } from '../driver/entities/driver.entity';
+import { UserSession } from './entities/user-session.entity';
 
 import { OtpService } from '../otp/otp.service';
 import { MailModule } from '../mail/mail.module';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { JwtRefreshStrategy } from './strategies/jwt-refresh.strategy';
 import { PassengerGuard } from '../common/guards/passenger.guard';
+import { SensitiveActionGuard } from './guards/sensitive-action.guard';
 import { HtmlService } from '../common/services/html.service';
 import { UnverifiedCleanupTask } from './tasks/unverified-cleanup.task';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, PassengerEntity, Driver]),
+    TypeOrmModule.forFeature([User, PassengerEntity, Driver, UserSession]),
     PassportModule,
     JwtModule.register({}),
     ScheduleModule.forRoot(),
@@ -48,6 +51,7 @@ import { UnverifiedCleanupTask } from './tasks/unverified-cleanup.task';
     AuthLoginService,
     Auth2faService,
     AuthOAuthService,
+    AuthSessionService,
     // Existing sub-services
     AuthPasswordService,
     AuthProfileService,
@@ -56,12 +60,13 @@ import { UnverifiedCleanupTask } from './tasks/unverified-cleanup.task';
     AuthAccountService,
     OtpService,
     PassengerGuard,
+    SensitiveActionGuard,
     JwtStrategy,
     JwtRefreshStrategy,
     HtmlService,
     UnverifiedCleanupTask,
   ],
-  exports: [AuthService, AuthPasswordService, AuthPasskeyService],
+  exports: [AuthService, AuthPasswordService, AuthPasskeyService, AuthSessionService],
 })
 export class AuthModule {}
 

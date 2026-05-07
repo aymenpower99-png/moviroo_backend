@@ -36,7 +36,9 @@ export class Auth2faService {
     };
   }
 
-  async disableTotp(userId: string) {
+  async disableTotp(userId: string, totpCode: string) {
+    // Require a valid TOTP code to confirm the user still has the authenticator app
+    await this.otpService.verifyTotpCode(userId, totpCode);
     await this.otpService.disableTotp(userId);
 
     const user = await this.userRepo.findOneOrFail({ where: { id: userId } });
@@ -45,6 +47,11 @@ export class Auth2faService {
       newPrimary = user.is2faEnabled ? TwoFactorMethod.EMAIL : null;
       await this.userRepo.update(userId, { primary2faMethod: newPrimary });
     }
+
+    // Fire-and-forget security alert
+    this.authMail
+      .sendSecurityAlert(user.email, user.firstName, 'totp_removed')
+      .catch(() => {});
 
     return {
       message: 'Authenticator app unlinked.',
@@ -75,6 +82,13 @@ export class Auth2faService {
     }
 
     await this.userRepo.update(userId, patch);
+
+    // Send security alert when 2FA is disabled
+    if (!enable) {
+      this.authMail
+        .sendSecurityAlert(user.email, user.firstName, '2fa_disabled')
+        .catch(() => {});
+    }
 
     return {
       message: enable

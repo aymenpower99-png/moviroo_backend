@@ -45,4 +45,10 @@ export class PasskeyVerifyDto {
   // Frontend just declares what method succeeded locally; backend trusts JWT.
   @IsEnum(['face', 'fingerprint', 'pin'])
   method: 'face' | 'fingerprint' | 'pin';
+
+  // The intended operation (e.g. 'disable-totp', 'delete-account').
+  // Scopes the token so it cannot be reused for a different action.
+  @IsOptional()
+  @IsString()
+  purpose?: string;
 }

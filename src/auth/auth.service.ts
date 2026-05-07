@@ -37,16 +37,21 @@ export class AuthService {
 
   // ─── Login ────────────────────────────────────────────────────────────────
 
-  login(dto: LoginDto) {
-    return this.loginService.login(dto);
+  login(dto: LoginDto, deviceLabel?: string, ipAddress?: string) {
+    return this.loginService.login(dto, deviceLabel, ipAddress);
   }
 
   adminLogin(dto: AdminLoginDto) {
     return this.loginService.adminLogin(dto);
   }
 
-  verifyLoginOtp(preAuthToken: string, code: string) {
-    return this.loginService.verifyLoginOtp(preAuthToken, code);
+  verifyLoginOtp(
+    preAuthToken: string,
+    code: string,
+    deviceLabel?: string,
+    ipAddress?: string,
+  ) {
+    return this.loginService.verifyLoginOtp(preAuthToken, code, deviceLabel, ipAddress);
   }
 
   resendOtp(userId: string, purpose: 'verify-email' | 'login') {
@@ -71,8 +76,8 @@ export class AuthService {
     return this.twoFaService.confirmTotpSetup(userId, code);
   }
 
-  disableTotp(userId: string) {
-    return this.twoFaService.disableTotp(userId);
+  disableTotp(userId: string, totpCode: string) {
+    return this.twoFaService.disableTotp(userId, totpCode);
   }
 
   toggle2fa(userId: string, enable: boolean, otp?: string) {
@@ -101,8 +106,8 @@ export class AuthService {
 
   // ─── OAuth ────────────────────────────────────────────────────────────────
 
-  googleSignIn(dto: GoogleSignInDto) {
-    return this.oauthService.googleSignIn(dto);
+  googleSignIn(dto: GoogleSignInDto, deviceLabel?: string, ipAddress?: string) {
+    return this.oauthService.googleSignIn(dto, deviceLabel, ipAddress);
   }
 
   // ─── Shared ───────────────────────────────────────────────────────────────

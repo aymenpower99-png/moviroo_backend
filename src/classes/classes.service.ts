@@ -213,6 +213,36 @@ export class ClassesService {
     };
   }
 
+  // ── Find One Public (for frontend vehicle selection) ─────────────────────────
+
+  async findOnePublic(id: string) {
+    const vehicleClass = await this.classRepo.findOne({
+      where: { id, isActive: true, deletedAt: IsNull() },
+    });
+    if (!vehicleClass) {
+      throw new NotFoundException(`Class with id "${id}" not found.`);
+    }
+
+    return {
+      id: vehicleClass.id,
+      name: vehicleClass.name,
+      imageUrl: vehicleClass.imageUrl,
+      multiplier: parseFloat(vehicleClass.multiplier.toString()),
+      features: {
+        seats: vehicleClass.seats,
+        bags: vehicleClass.bags,
+        wifi: vehicleClass.wifi,
+        ac: vehicleClass.ac,
+        water: vehicleClass.water,
+        freeWaitingTime: vehicleClass.freeWaitingTime,
+        doorToDoor: vehicleClass.doorToDoor,
+        meetAndGreet: vehicleClass.meetAndGreet,
+        extraFeatures: vehicleClass.extraFeatures || [],
+        extraServices: vehicleClass.extraServices || [],
+      },
+    };
+  }
+
   // ── Get Active Classes with Multipliers (for ML pricing) ─────────────────────
 
   async getActiveClassesWithMultipliers(): Promise<
