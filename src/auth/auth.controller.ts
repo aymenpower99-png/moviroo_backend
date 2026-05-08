@@ -23,6 +23,7 @@ import { AuthPasswordService } from './auth-password.service';
 import { AuthBiometricService } from './auth-passkey.service';
 import { AuthAccountService } from './auth-account.service';
 import { AuthSessionService } from './services/auth-session.service';
+import { AuthWebAuthnService } from './services/auth-webauthn.service';
 
 import { HtmlService } from '../common/services/html.service';
 import { RegisterDto } from './dto/register.dto';
@@ -40,6 +41,11 @@ import {
   DeleteAccountDto,
   PasskeyVerifyDto,
 } from './dto/security.dto';
+import { WebAuthnRegisterStartDto } from './dto/webauthn-register-start.dto';
+import { WebAuthnRegisterFinishDto } from './dto/webauthn-register-finish.dto';
+import { WebAuthnAuthenticateStartDto } from './dto/webauthn-authenticate-start.dto';
+import { WebAuthnAuthenticateFinishDto } from './dto/webauthn-authenticate-finish.dto';
+import { RenamePasskeyDto } from './dto/rename-passkey.dto';
 
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { User } from '../users/entites/user.entity';
@@ -78,6 +84,7 @@ export class AuthController {
     private accountService: AuthAccountService,
     private sessionService: AuthSessionService,
     private htmlService: HtmlService,
+    private webauthnService: AuthWebAuthnService,
   ) {}
 
   // ─── Register / Verify / Login ────────────────────────────────────────────
@@ -405,6 +412,81 @@ export class AuthController {
   ) {
     await this.sessionService.deleteSession(user.id, sessionId);
     return { message: 'Session removed.' };
+  }
+
+  // ─── WebAuthn Passkeys (FIDO2) ────────────────────────────────────────────
+
+  @Post('passkeys/register/start')
+  @UseGuards(AuthGuard('jwt'))
+  @HttpCode(200)
+  startPasskeyRegistration(
+    @CurrentUser() user: User,
+    @Body() dto: WebAuthnRegisterStartDto,
+  ) {
+    return this.webauthnService.startRegistration(user, dto.deviceName);
+  }
+
+  @Post('passkeys/register/finish')
+  @UseGuards(AuthGuard('jwt'))
+  @HttpCode(200)
+  finishPasskeyRegistration(
+    @CurrentUser() user: User,
+    @Body() dto: WebAuthnRegisterFinishDto,
+  ) {
+    return this.webauthnService.finishRegistration(user, dto);
+  }
+
+  @Post('passkeys/authenticate/start')
+  @HttpCode(200)
+  startPasskeyAuthentication(@Body() dto: WebAuthnAuthenticateStartDto) {
+    return this.webauthnService.startAuthentication(dto);
+  }
+
+  @Post('passkeys/authenticate/finish')
+  @HttpCode(200)
+  finishPasskeyAuthentication(
+    @Body() dto: WebAuthnAuthenticateFinishDto,
+    @Req() req: Request,
+  ) {
+    const deviceLabel = (req.headers['x-device-name'] as string) ?? 'Unknown';
+    const ipAddress = this.getRealIp(req);
+    return this.webauthnService.finishAuthentication(
+      dto,
+      deviceLabel,
+      ipAddress,
+    );
+  }
+
+  @Get('passkeys')
+  @UseGuards(AuthGuard('jwt'))
+  @HttpCode(200)
+  listPasskeys(@CurrentUser() user: User) {
+    return this.webauthnService.listPasskeys(user.id);
+  }
+
+  @Delete('passkeys/:id')
+  @UseGuards(AuthGuard('jwt'))
+  @HttpCode(200)
+  async deletePasskey(
+    @CurrentUser() user: User,
+    @Param('id') passkeyId: string,
+  ) {
+    return this.webauthnService.deletePasskey(user.id, passkeyId);
+  }
+
+  @Patch('passkeys/:id')
+  @UseGuards(AuthGuard('jwt'))
+  @HttpCode(200)
+  renamePasskey(
+    @CurrentUser() user: User,
+    @Param('id') passkeyId: string,
+    @Body() dto: RenamePasskeyDto,
+  ) {
+    return this.webauthnService.renamePasskey(
+      user.id,
+      passkeyId,
+      dto.deviceName,
+    );
   }
 
   // ─── Refresh / Logout ─────────────────────────────────────────────────────

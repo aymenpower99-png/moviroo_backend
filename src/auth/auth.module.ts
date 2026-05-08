@@ -18,11 +18,13 @@ import { AuthLoginService } from './services/auth-login.service';
 import { Auth2faService } from './services/auth-2fa.service';
 import { AuthOAuthService } from './services/auth-oauth.service';
 import { AuthSessionService } from './services/auth-session.service';
+import { AuthWebAuthnService } from './services/auth-webauthn.service';
 
 import { User } from '../users/entites/user.entity';
 import { PassengerEntity } from '../passenger/entities/passengers.entity';
 import { Driver } from '../driver/entities/driver.entity';
 import { UserSession } from './entities/user-session.entity';
+import { PasskeyCredential } from './entities/passkey-credential.entity';
 
 import { OtpService } from '../otp/otp.service';
 import { MailModule } from '../mail/mail.module';
@@ -35,7 +37,7 @@ import { UnverifiedCleanupTask } from './tasks/unverified-cleanup.task';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, PassengerEntity, Driver, UserSession]),
+    TypeOrmModule.forFeature([User, PassengerEntity, Driver, UserSession, PasskeyCredential]),
     PassportModule,
     JwtModule.register({}),
     ScheduleModule.forRoot(),
@@ -52,6 +54,7 @@ import { UnverifiedCleanupTask } from './tasks/unverified-cleanup.task';
     Auth2faService,
     AuthOAuthService,
     AuthSessionService,
+    AuthWebAuthnService,
     // Existing sub-services
     AuthPasswordService,
     AuthProfileService,
