@@ -31,6 +31,7 @@ import { ChatModule } from './chat/chat.module';
 import { PlacesModule } from './places/places.module';
 import { MembershipLevelsModule } from './membership-levels/membership-levels.module';
 import { PassengersModule } from './passenger/passengers.module';
+import { VoiceModule } from './voice/voice.module';
 
 @Module({
   imports: [
@@ -64,6 +65,7 @@ import { PassengersModule } from './passenger/passengers.module';
     PlacesModule,
     MembershipLevelsModule,
     PassengersModule,
+    VoiceModule,
   ],
   controllers: [AppController],
   providers: [
