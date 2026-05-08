@@ -9,7 +9,7 @@ import { existsSync, mkdirSync } from 'fs';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
-    rawBody: true,    // enables req.rawBody for Stripe webhook
+    rawBody: true, // enables req.rawBody for Stripe webhook
     bodyParser: false, // disable NestJS's default parser — we register our own below
   });
 
@@ -44,6 +44,9 @@ async function bootstrap() {
     ],
     credentials: true,
   });
+
+  // Trust proxy headers to capture real client IP addresses
+  app.set('trust proxy', true);
 
   app.setGlobalPrefix('api');
 

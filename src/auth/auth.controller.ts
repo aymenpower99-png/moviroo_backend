@@ -20,7 +20,7 @@ import { AuthService } from './auth.service';
 import { AuthProfileService } from './auth-profile.service';
 import { AuthEmailChangeService } from './auth-email-change.service';
 import { AuthPasswordService } from './auth-password.service';
-import { AuthPasskeyService } from './auth-passkey.service';
+import { AuthBiometricService } from './auth-passkey.service';
 import { AuthAccountService } from './auth-account.service';
 import { AuthSessionService } from './services/auth-session.service';
 
@@ -49,12 +49,32 @@ import { ActionPurpose } from './decorators/action-purpose.decorator';
 
 @Controller('auth')
 export class AuthController {
+  /**
+   * Captures the real client IP address by checking multiple headers.
+   * This handles scenarios where the app is behind a proxy (ngrok, nginx, load balancer).
+   */
+  private getRealIp(req: Request): string | undefined {
+    // Check X-Forwarded-For header (can contain multiple IPs: "client, proxy1, proxy2")
+    const forwarded = req.headers['x-forwarded-for'] as string;
+    if (forwarded) {
+      return forwarded.split(',')[0].trim();
+    }
+
+    // Check X-Real-IP header (common with nginx)
+    const realIp = req.headers['x-real-ip'] as string;
+    if (realIp) {
+      return realIp;
+    }
+
+    // Fall back to req.ip
+    return req.ip ?? undefined;
+  }
   constructor(
     private authService: AuthService,
     private profileService: AuthProfileService,
     private emailChangeService: AuthEmailChangeService,
     private passwordService: AuthPasswordService,
-    private passkeyService: AuthPasskeyService,
+    private biometricService: AuthBiometricService,
     private accountService: AuthAccountService,
     private sessionService: AuthSessionService,
     private htmlService: HtmlService,
@@ -95,9 +115,8 @@ export class AuthController {
   @HttpCode(200)
   @Throttle({ default: { limit: 5, ttl: 60000 } })
   login(@Body() dto: LoginDto, @Req() req: Request) {
-    const deviceLabel =
-      (req.headers['x-device-name'] as string) ?? 'Unknown';
-    const ipAddress = req.ip ?? undefined;
+    const deviceLabel = (req.headers['x-device-name'] as string) ?? 'Unknown';
+    const ipAddress = this.getRealIp(req);
     return this.authService.login(dto, deviceLabel, ipAddress);
   }
 
@@ -114,9 +133,8 @@ export class AuthController {
     @Body() body: { preAuthToken: string; code: string },
     @Req() req: Request,
   ) {
-    const deviceLabel =
-      (req.headers['x-device-name'] as string) ?? 'Unknown';
-    const ipAddress = req.ip ?? undefined;
+    const deviceLabel = (req.headers['x-device-name'] as string) ?? 'Unknown';
+    const ipAddress = this.getRealIp(req);
     return this.authService.verifyLoginOtp(
       body.preAuthToken,
       body.code,
@@ -146,9 +164,8 @@ export class AuthController {
   @Post('google')
   @HttpCode(200)
   googleSignIn(@Body() dto: GoogleSignInDto, @Req() req: Request) {
-    const deviceLabel =
-      (req.headers['x-device-name'] as string) ?? 'Unknown';
-    const ipAddress = req.ip ?? undefined;
+    const deviceLabel = (req.headers['x-device-name'] as string) ?? 'Unknown';
+    const ipAddress = this.getRealIp(req);
     return this.authService.googleSignIn(dto, deviceLabel, ipAddress);
   }
 
@@ -260,10 +277,7 @@ export class AuthController {
   @UseGuards(AuthGuard('jwt'), PassengerGuard, SensitiveActionGuard)
   @ActionPurpose('disable-totp')
   @HttpCode(200)
-  disableTotp(
-    @CurrentUser() user: User,
-    @Body() body: { code: string },
-  ) {
+  disableTotp(@CurrentUser() user: User, @Body() body: { code: string }) {
     return this.authService.disableTotp(user.id, body.code);
   }
 
@@ -314,14 +328,14 @@ export class AuthController {
   @UseGuards(AuthGuard('jwt'))
   @HttpCode(200)
   enablePasskey(@CurrentUser() user: User) {
-    return this.passkeyService.enablePasskey(user.id);
+    return this.biometricService.enablePasskey(user.id);
   }
 
   @Delete('passkey')
   @UseGuards(AuthGuard('jwt'))
   @HttpCode(200)
   disablePasskey(@CurrentUser() user: User) {
-    return this.passkeyService.disablePasskey(user.id);
+    return this.biometricService.disablePasskey(user.id);
   }
 
   /**
@@ -333,7 +347,7 @@ export class AuthController {
   @UseGuards(AuthGuard('jwt'))
   @HttpCode(200)
   verifyPasskey(@CurrentUser() user: User, @Body() dto: PasskeyVerifyDto) {
-    return this.passkeyService.verifyPasskey(
+    return this.biometricService.verifyPasskey(
       user.id,
       dto.method,
       dto.purpose ?? 'general',

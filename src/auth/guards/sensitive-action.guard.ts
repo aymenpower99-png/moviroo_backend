@@ -6,10 +6,8 @@ import {
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { Reflector } from '@nestjs/core';
-import { AuthPasskeyService } from '../auth-passkey.service';
-import {
-  ACTION_PURPOSE_KEY,
-} from '../decorators/action-purpose.decorator';
+import { AuthBiometricService } from '../auth-passkey.service';
+import { ACTION_PURPOSE_KEY } from '../decorators/action-purpose.decorator';
 
 /**
  * Optional re-auth guard for sensitive endpoints.
@@ -30,7 +28,7 @@ import {
 @Injectable()
 export class SensitiveActionGuard implements CanActivate {
   constructor(
-    private readonly passkeyService: AuthPasskeyService,
+    private readonly biometricService: AuthBiometricService,
     private readonly reflector: Reflector,
   ) {}
 
@@ -48,7 +46,7 @@ export class SensitiveActionGuard implements CanActivate {
         ACTION_PURPOSE_KEY,
         context.getHandler(),
       );
-      await this.passkeyService.validateActionToken(
+      await this.biometricService.validateActionToken(
         userId,
         actionToken,
         expectedPurpose,

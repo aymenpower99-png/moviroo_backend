@@ -9,7 +9,7 @@ import * as bcrypt from 'bcrypt';
 import { User } from '../users/entites/user.entity';
 import { OtpService } from '../otp/otp.service';
 import { AuthMailService } from '../mail/services/auth-mail.service';
-import { AuthPasskeyService } from './auth-passkey.service';
+import { AuthBiometricService } from './auth-passkey.service';
 import { DeleteAccountDto } from './dto/security.dto';
 
 /**
@@ -18,15 +18,15 @@ import { DeleteAccountDto } from './dto/security.dto';
  * Re-auth supports exactly ONE of:
  *   - password: current account password
  *   - otp:      email OTP (sent via requestDeleteOtp)
- *   - passkeyToken: action token from AuthPasskeyService.verifyPasskey
+ *   - passkeyToken: action token from AuthBiometricService.verifyPasskey
  */
 @Injectable()
 export class AuthAccountService {
   constructor(
     @InjectRepository(User) private userRepo: Repository<User>,
     private otpService: OtpService,
-    private authMail: AuthMailService,
-    private passkeyService: AuthPasskeyService,
+    private authMailService: AuthMailService,
+    private biometricService: AuthBiometricService,
   ) {}
 
   async deleteAccount(userId: string, dto: DeleteAccountDto) {
@@ -53,7 +53,7 @@ export class AuthAccountService {
     } else if (dto.otp) {
       await this.otpService.verifyOtp(userId, dto.otp);
     } else if (dto.passkeyToken) {
-      await this.passkeyService.validateActionToken(
+      await this.biometricService.validateActionToken(
         userId,
         dto.passkeyToken,
         'delete-account',
@@ -73,7 +73,12 @@ export class AuthAccountService {
   async requestDeleteOtp(userId: string) {
     const user = await this.userRepo.findOneOrFail({ where: { id: userId } });
     const code = await this.otpService.generateOtp(userId);
-    await this.authMail.sendOtp(user.email, user.firstName, code, 'login');
+    await this.authMailService.sendOtp(
+      user.email,
+      user.firstName,
+      code,
+      'login',
+    );
     return { message: 'Verification code sent to your email.' };
   }
 }

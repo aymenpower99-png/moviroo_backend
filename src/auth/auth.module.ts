@@ -9,7 +9,7 @@ import { AuthService } from './auth.service';
 import { AuthProfileService } from './auth-profile.service';
 import { AuthEmailChangeService } from './auth-email-change.service';
 import { AuthPasswordService } from './auth-password.service';
-import { AuthPasskeyService } from './auth-passkey.service';
+import { AuthBiometricService } from './auth-passkey.service';
 import { AuthAccountService } from './auth-account.service';
 
 import { AuthTokenService } from './services/auth-token.service';
@@ -56,7 +56,7 @@ import { UnverifiedCleanupTask } from './tasks/unverified-cleanup.task';
     AuthPasswordService,
     AuthProfileService,
     AuthEmailChangeService,
-    AuthPasskeyService,
+    AuthBiometricService,
     AuthAccountService,
     OtpService,
     PassengerGuard,
@@ -66,7 +66,11 @@ import { UnverifiedCleanupTask } from './tasks/unverified-cleanup.task';
     HtmlService,
     UnverifiedCleanupTask,
   ],
-  exports: [AuthService, AuthPasswordService, AuthPasskeyService, AuthSessionService],
+  exports: [
+    AuthPasswordService,
+    AuthBiometricService,
+    AuthAccountService,
+    AuthSessionService,
+  ],
 })
 export class AuthModule {}
-

@@ -10,7 +10,7 @@ import { ConfigService } from '@nestjs/config';
 import { User } from '../users/entites/user.entity';
 
 /**
- * Passkey (device-level biometric) flow.
+ * Biometric Authentication (device-level biometric) flow.
  *
  * The BACKEND never stores biometric data. It only tracks:
  *   - passkeyEnabled: whether user opted-in on a trusted device
@@ -20,11 +20,11 @@ import { User } from '../users/entites/user.entity';
  * client; sensitive endpoints (disable 2FA, change security, delete account)
  * require either:
  *   - a fresh password / OTP re-auth, OR
- *   - a fresh passkey action token
+ *   - a fresh biometric action token
  */
-export interface PasskeyActionPayload {
+export interface BiometricActionPayload {
   sub: string;
-  kind: 'passkey-action';
+  kind: 'biometric-action';
   method: 'face' | 'fingerprint' | 'pin';
   /** Purpose this token was issued for — prevents cross-action reuse. */
   purpose: string;
@@ -33,7 +33,7 @@ export interface PasskeyActionPayload {
 const ACTION_TOKEN_TTL_SECONDS = 5 * 60; // 5 minutes
 
 @Injectable()
-export class AuthPasskeyService {
+export class AuthBiometricService {
   constructor(
     @InjectRepository(User) private userRepo: Repository<User>,
     private jwtService: JwtService,
@@ -42,7 +42,10 @@ export class AuthPasskeyService {
 
   async enablePasskey(userId: string) {
     await this.userRepo.update(userId, { passkeyEnabled: true });
-    return { message: 'Passkey enabled for this device.', passkeyEnabled: true };
+    return {
+      message: 'Biometric Authentication enabled for this device.',
+      passkeyEnabled: true,
+    };
   }
 
   async disablePasskey(userId: string) {
@@ -50,7 +53,10 @@ export class AuthPasskeyService {
       passkeyEnabled: false,
       actionTokenExpiry: null,
     });
-    return { message: 'Passkey disabled.', passkeyEnabled: false };
+    return {
+      message: 'Biometric Authentication disabled.',
+      passkeyEnabled: false,
+    };
   }
 
   /**
@@ -68,7 +74,9 @@ export class AuthPasskeyService {
   ) {
     const user = await this.userRepo.findOneOrFail({ where: { id: userId } });
     if (!user.passkeyEnabled) {
-      throw new BadRequestException('Passkey is not enabled for this user.');
+      throw new BadRequestException(
+        'Biometric Authentication is not enabled for this user.',
+      );
     }
 
     const expiry = new Date(Date.now() + ACTION_TOKEN_TTL_SECONDS * 1000);
@@ -77,10 +85,10 @@ export class AuthPasskeyService {
     const actionToken = await this.jwtService.signAsync(
       {
         sub: userId,
-        kind: 'passkey-action',
+        kind: 'biometric-action',
         method,
         purpose,
-      } satisfies PasskeyActionPayload,
+      } satisfies BiometricActionPayload,
       {
         secret: this.config.get<string>('jwt.accessSecret')!,
         expiresIn: `${ACTION_TOKEN_TTL_SECONDS}s`,
@@ -94,8 +102,8 @@ export class AuthPasskeyService {
   }
 
   /**
-   * Validates a passkey action token. Used by sensitive endpoints (delete,
-   * disable 2FA, etc.) when the caller chooses passkey instead of password.
+   * Validates a biometric action token. Used by sensitive endpoints (delete,
+   * disable 2FA, etc.) when the caller chooses biometric instead of password.
    *
    * @param expectedPurpose  When provided, rejects tokens issued for a
    *                         different purpose (prevents cross-action reuse).
@@ -105,17 +113,20 @@ export class AuthPasskeyService {
     token: string,
     expectedPurpose?: string,
   ): Promise<void> {
-    let payload: PasskeyActionPayload;
+    let payload: BiometricActionPayload;
     try {
-      payload = await this.jwtService.verifyAsync<PasskeyActionPayload>(token, {
-        secret: this.config.get<string>('jwt.accessSecret')!,
-      });
+      payload = await this.jwtService.verifyAsync<BiometricActionPayload>(
+        token,
+        {
+          secret: this.config.get<string>('jwt.accessSecret')!,
+        },
+      );
     } catch {
-      throw new UnauthorizedException('Invalid or expired passkey token');
+      throw new UnauthorizedException('Invalid or expired biometric token');
     }
 
-    if (payload.kind !== 'passkey-action' || payload.sub !== userId) {
-      throw new UnauthorizedException('Invalid passkey token');
+    if (payload.kind !== 'biometric-action' || payload.sub !== userId) {
+      throw new UnauthorizedException('Invalid biometric token');
     }
 
     if (expectedPurpose && payload.purpose !== expectedPurpose) {
@@ -129,7 +140,7 @@ export class AuthPasskeyService {
       !user.actionTokenExpiry ||
       user.actionTokenExpiry.getTime() < Date.now()
     ) {
-      throw new UnauthorizedException('Passkey challenge has expired');
+      throw new UnauthorizedException('Biometric challenge has expired');
     }
   }
 }

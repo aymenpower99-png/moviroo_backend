@@ -31,11 +31,7 @@ export class AuthLoginService {
     private readonly sessionService: AuthSessionService,
   ) {}
 
-  async login(
-    dto: LoginDto,
-    deviceLabel?: string,
-    ipAddress?: string,
-  ) {
+  async login(dto: LoginDto, deviceLabel?: string, ipAddress?: string) {
     const user = await this.userRepo.findOne({ where: { email: dto.email } });
     if (!user || !user.password)
       throw new UnauthorizedException('Invalid credentials');
@@ -201,8 +197,6 @@ export class AuthLoginService {
   }
 
   async logout(userId: string) {
-    await this.userRepo.update(userId, { refreshToken: null });
-    this.sessionService.clearSessions(userId).catch(() => {});
-    return { message: 'Logged out successfully' };
+    return this.sessionService.revokeAllSessions(userId);
   }
 }
