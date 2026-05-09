@@ -3,6 +3,6 @@ import { registerAs } from '@nestjs/config';
 export default registerAs('app', () => ({
   frontendUrl: process.env.FRONTEND_URL ?? 'http://localhost:5173',
   backendUrl:  process.env.BACKEND_URL  ?? 'http://localhost:3000/api',
-  webauthnRpId: process.env.WEBAUTHN_RP_ID ?? 'com.example.moviroo',
-  webauthnOrigin: process.env.WEBAUTHN_ORIGIN ?? 'http://localhost:3000',
+  webauthnRpId: process.env.WEBAUTHN_RP_ID ?? 'moviroo.tn',
+  webauthnOrigin: process.env.WEBAUTHN_ORIGIN ?? 'https://moviroo.tn',
 }));

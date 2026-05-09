@@ -47,11 +47,11 @@ export class AuthWebAuthnService {
       rpID:
         this.config.get<string>('app.webauthnRpId') ??
         process.env.WEBAUTHN_RP_ID ??
-        'localhost',
+        'moviroo.tn',
       origin:
         this.config.get<string>('app.webauthnOrigin') ??
         process.env.WEBAUTHN_ORIGIN ??
-        'http://localhost:3000',
+        'https://moviroo.tn',
     };
   }
 
@@ -88,7 +88,7 @@ export class AuthWebAuthnService {
     const configuredOrigin =
       this.config.get<string>('app.webauthnOrigin') ??
       process.env.WEBAUTHN_ORIGIN ??
-      'http://localhost:3000';
+      'https://moviroo.tn';
 
     if (!response.clientDataJSON) {
       return configuredOrigin;
@@ -124,7 +124,6 @@ export class AuthWebAuthnService {
 
   async startRegistration(user: User, deviceName?: string) {
     const { rpName, rpID } = this.getRpConfig();
-    console.log('[WebAuthn] startRegistration — rpID:', rpID);
 
     const existing = await this.passkeyRepo.find({
       where: { userId: user.id },
