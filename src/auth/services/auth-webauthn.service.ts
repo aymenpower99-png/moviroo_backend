@@ -25,7 +25,15 @@ import { AuthSessionService } from './auth-session.service';
 
 @Injectable()
 export class AuthWebAuthnService {
-  /** In-memory challenge store with TTL. Key = optionsId or userId. */
+  /**
+   * In-memory challenge store with TTL. Key = optionsId or userId.
+   *
+   * ⚠️ Production note: This Map lives in a single process. If you run
+   * multiple backend instances (replicas) behind a load balancer, a user
+   * might hit a different instance on `finish` than on `start`, causing
+   * "challenge expired" errors. Replace this with Redis (or another
+   * shared store) when scaling beyond one instance.
+   */
   private challenges = new Map<
     string,
     { challenge: string; userId?: string; expiresAt: Date }

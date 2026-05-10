@@ -79,6 +79,7 @@ export class SupportService {
                 firstName: (sender as any).firstName ?? '',
                 lastName: (sender as any).lastName ?? '',
                 email: (sender as any).email ?? '',
+                role: (sender as any).role ?? '',
               }
             : null,
         };

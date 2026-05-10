@@ -438,12 +438,14 @@ export class AuthController {
 
   @Post('passkeys/authenticate/start')
   @HttpCode(200)
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   startPasskeyAuthentication(@Body() dto: WebAuthnAuthenticateStartDto) {
     return this.webauthnService.startAuthentication(dto);
   }
 
   @Post('passkeys/authenticate/finish')
   @HttpCode(200)
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   finishPasskeyAuthentication(
     @Body() dto: WebAuthnAuthenticateFinishDto,
     @Req() req: Request,
