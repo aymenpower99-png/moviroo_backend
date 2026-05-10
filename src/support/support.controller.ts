@@ -18,6 +18,7 @@ import { SupportService } from './support.service';
 import { CreateTicketDto } from './dto/create-ticket.dto';
 import { ReplyTicketDto } from './dto/reply-ticket.dto';
 import { UpdateTicketStatusDto } from './dto/update-ticket-status.dto';
+import { UpdateMessageDto } from './dto/update-message.dto';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { UserRole } from '../users/entites/user.entity';
@@ -67,6 +68,25 @@ export class SupportUserController {
     @Req() req: Request,
   ) {
     return this.svc.replyToTicket(id, dto, userId(req));
+  }
+
+  @Patch(':ticketId/messages/:messageId')
+  updateMessage(
+    @Param('ticketId', ParseUUIDPipe) ticketId: string,
+    @Param('messageId', ParseUUIDPipe) messageId: string,
+    @Body() dto: UpdateMessageDto,
+    @Req() req: Request,
+  ) {
+    return this.svc.updateMyMessage(ticketId, messageId, dto, userId(req));
+  }
+
+  @Delete(':ticketId/messages/:messageId')
+  deleteMessage(
+    @Param('ticketId', ParseUUIDPipe) ticketId: string,
+    @Param('messageId', ParseUUIDPipe) messageId: string,
+    @Req() req: Request,
+  ) {
+    return this.svc.deleteMyMessage(ticketId, messageId, userId(req));
   }
 }
 
@@ -120,5 +140,25 @@ export class SupportAdminController {
   @HttpCode(200)
   remove(@Param('id', ParseUUIDPipe) id: string) {
     return this.svc.adminDeleteTicket(id);
+  }
+
+  @Patch(':ticketId/messages/:messageId')
+  adminUpdateMessage(
+    @Param('ticketId', ParseUUIDPipe) ticketId: string,
+    @Param('messageId', ParseUUIDPipe) messageId: string,
+    @Body() dto: UpdateMessageDto,
+    @Req() req: Request,
+  ) {
+    return this.svc.adminUpdateMessage(ticketId, messageId, dto, userId(req));
+  }
+
+  @Delete(':ticketId/messages/:messageId')
+  @HttpCode(200)
+  adminDeleteMessage(
+    @Param('ticketId', ParseUUIDPipe) ticketId: string,
+    @Param('messageId', ParseUUIDPipe) messageId: string,
+    @Req() req: Request,
+  ) {
+    return this.svc.adminDeleteMessage(ticketId, messageId, userId(req));
   }
 }

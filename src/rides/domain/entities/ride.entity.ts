@@ -163,7 +163,13 @@ export class Ride {
   @Column({ name: 'loyalty_points_earned', type: 'int', default: 0 })
   loyaltyPointsEarned: number;
 
-  @Column({ name: 'coupon_code', type: 'varchar', length: 50, nullable: true, default: null })
+  @Column({
+    name: 'coupon_code',
+    type: 'varchar',
+    length: 50,
+    nullable: true,
+    default: null,
+  })
   couponCode: string | null;
 
   @Column({
@@ -260,6 +266,15 @@ export class Ride {
     default: null,
   })
   cancellationReason: string | null;
+
+  @Column({
+    name: 'cancelled_by',
+    type: 'enum',
+    enum: ['PASSENGER', 'DRIVER', 'ADMIN', 'SYSTEM'],
+    nullable: true,
+    default: null,
+  })
+  cancelledBy: 'PASSENGER' | 'DRIVER' | 'ADMIN' | 'SYSTEM' | null;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

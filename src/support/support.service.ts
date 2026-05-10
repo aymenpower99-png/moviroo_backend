@@ -10,6 +10,7 @@ import { TicketMessage } from './entities/ticket-message.entity';
 import { CreateTicketDto } from './dto/create-ticket.dto';
 import { ReplyTicketDto } from './dto/reply-ticket.dto';
 import { UpdateTicketStatusDto } from './dto/update-ticket-status.dto';
+import { UpdateMessageDto } from './dto/update-message.dto';
 import { User } from '../users/entites/user.entity';
 import { SupportGateway } from './support.gateway';
 
@@ -289,5 +290,121 @@ export class SupportService {
     await this.messageRepo.delete({ ticketId });
     await this.ticketRepo.delete(ticketId);
     return { message: `Ticket "${ticketId}" permanently deleted.` };
+  }
+
+  // ── User: edit own message ────────────────────────────────────────────────
+  async updateMyMessage(
+    ticketId: string,
+    messageId: string,
+    dto: UpdateMessageDto,
+    userId: string,
+  ) {
+    const ticket = await this.ticketRepo.findOne({ where: { id: ticketId } });
+    if (!ticket) throw new NotFoundException('Ticket not found');
+    if (ticket.status === TicketStatus.RESOLVED)
+      throw new ForbiddenException('Ticket is resolved');
+    if (ticket.authorId !== userId) throw new ForbiddenException();
+
+    const message = await this.messageRepo.findOne({ where: { id: messageId, ticketId } });
+    if (!message) throw new NotFoundException('Message not found');
+    if (message.senderId !== userId)
+      throw new ForbiddenException('You can only edit your own messages');
+
+    message.body = dto.body;
+    message.updatedAt = new Date();
+    const saved = await this.messageRepo.save(message);
+
+    this.gateway.emitToAdmins('support:message:updated', {
+      ticketId,
+      message: saved,
+      senderId: userId,
+    });
+
+    return saved;
+  }
+
+  // ── User: delete own message ──────────────────────────────────────────────
+  async deleteMyMessage(
+    ticketId: string,
+    messageId: string,
+    userId: string,
+  ) {
+    const ticket = await this.ticketRepo.findOne({ where: { id: ticketId } });
+    if (!ticket) throw new NotFoundException('Ticket not found');
+    if (ticket.status === TicketStatus.RESOLVED)
+      throw new ForbiddenException('Ticket is resolved');
+    if (ticket.authorId !== userId) throw new ForbiddenException();
+
+    const message = await this.messageRepo.findOne({ where: { id: messageId, ticketId } });
+    if (!message) throw new NotFoundException('Message not found');
+    if (message.senderId !== userId)
+      throw new ForbiddenException('You can only delete your own messages');
+
+    await this.messageRepo.delete(messageId);
+
+    this.gateway.emitToAdmins('support:message:deleted', {
+      ticketId,
+      messageId,
+      senderId: userId,
+    });
+
+    return { success: true, messageId };
+  }
+
+  // ── Admin: edit own message ───────────────────────────────────────────────
+  async adminUpdateMessage(
+    ticketId: string,
+    messageId: string,
+    dto: UpdateMessageDto,
+    adminId: string,
+  ) {
+    const ticket = await this.ticketRepo.findOne({ where: { id: ticketId } });
+    if (!ticket) throw new NotFoundException('Ticket not found');
+    if (ticket.status === TicketStatus.RESOLVED)
+      throw new ForbiddenException('Ticket is resolved');
+
+    const message = await this.messageRepo.findOne({ where: { id: messageId, ticketId } });
+    if (!message) throw new NotFoundException('Message not found');
+    if (message.senderId !== adminId)
+      throw new ForbiddenException('You can only edit your own messages');
+
+    message.body = dto.body;
+    message.updatedAt = new Date();
+    const saved = await this.messageRepo.save(message);
+
+    this.gateway.emitToUser(ticket.authorId, 'support:message:updated', {
+      ticketId,
+      message: saved,
+      senderId: adminId,
+    });
+
+    return saved;
+  }
+
+  // ── Admin: delete own message ─────────────────────────────────────────────
+  async adminDeleteMessage(
+    ticketId: string,
+    messageId: string,
+    adminId: string,
+  ) {
+    const ticket = await this.ticketRepo.findOne({ where: { id: ticketId } });
+    if (!ticket) throw new NotFoundException('Ticket not found');
+    if (ticket.status === TicketStatus.RESOLVED)
+      throw new ForbiddenException('Ticket is resolved');
+
+    const message = await this.messageRepo.findOne({ where: { id: messageId, ticketId } });
+    if (!message) throw new NotFoundException('Message not found');
+    if (message.senderId !== adminId)
+      throw new ForbiddenException('You can only delete your own messages');
+
+    await this.messageRepo.delete(messageId);
+
+    this.gateway.emitToUser(ticket.authorId, 'support:message:deleted', {
+      ticketId,
+      messageId,
+      senderId: adminId,
+    });
+
+    return { success: true, messageId };
   }
 }

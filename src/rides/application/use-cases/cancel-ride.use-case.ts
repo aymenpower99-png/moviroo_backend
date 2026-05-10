@@ -17,7 +17,10 @@ import {
   Driver,
   DriverAvailabilityStatus,
 } from '../../../driver/entities/driver.entity';
-import { TripPayment, PaymentStatus } from '../../../billing/entities/trip-payment.entity';
+import {
+  TripPayment,
+  PaymentStatus,
+} from '../../../billing/entities/trip-payment.entity';
 
 @Injectable()
 export class CancelRideUseCase {
@@ -70,6 +73,15 @@ export class CancelRideUseCase {
     ride.cancelledAt = new Date();
     ride.cancellationReason = dto?.cancellation_reason ?? null;
 
+    // Track who cancelled
+    if (currentUser.role === UserRole.SUPER_ADMIN) {
+      ride.cancelledBy = 'ADMIN';
+    } else if (ride.passengerId === currentUser.id) {
+      ride.cancelledBy = 'PASSENGER';
+    } else {
+      ride.cancelledBy = 'DRIVER';
+    }
+
     await this.rideRepo.save(ride);
 
     /* Remove PENDING billing record — cancelled rides should not appear in billing */
@@ -77,10 +89,14 @@ export class CancelRideUseCase {
       const payment = await this.paymentRepo.findOne({ where: { rideId } });
       if (payment && payment.paymentStatus === PaymentStatus.PENDING) {
         await this.paymentRepo.remove(payment);
-        this.logger.log(`[BILLING] Removed PENDING TripPayment for cancelled ride ${rideId}`);
+        this.logger.log(
+          `[BILLING] Removed PENDING TripPayment for cancelled ride ${rideId}`,
+        );
       }
     } catch (err) {
-      this.logger.error(`[BILLING] Failed to remove TripPayment for cancelled ride ${rideId}: ${err}`);
+      this.logger.error(
+        `[BILLING] Failed to remove TripPayment for cancelled ride ${rideId}: ${err}`,
+      );
     }
 
     // If a driver was assigned, free them so they can receive the next dispatch.

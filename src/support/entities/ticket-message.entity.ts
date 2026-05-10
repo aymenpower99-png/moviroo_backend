@@ -18,4 +18,7 @@ export class TicketMessage {
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
+
+  @Column({ name: 'updated_at', type: 'timestamptz', nullable: true })
+  updatedAt: Date | null;
 }

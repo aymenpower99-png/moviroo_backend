@@ -34,8 +34,11 @@ import { RouteSnappingService } from './infrastructure/services/route-snapping.s
 import { GpsSmoothingService } from './infrastructure/services/gps-smoothing.service';
 import { RouteHistoryRepository } from './infrastructure/repositories/route-history.repository';
 
+import { AutoCancelPendingRidesTask } from './tasks/auto-cancel-pending-rides.task';
+
 import { DispatchModule } from '../dispatch/dispatch.module';
 import { ClassesModule } from '../classes/classes.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
@@ -56,6 +59,7 @@ import { ClassesModule } from '../classes/classes.module';
     }),
     DispatchModule,
     ClassesModule,
+    NotificationsModule,
   ],
   controllers: [RidesController],
   providers: [
@@ -78,6 +82,7 @@ import { ClassesModule } from '../classes/classes.module';
     RouteSnappingService,
     GpsSmoothingService,
     RouteHistoryRepository,
+    AutoCancelPendingRidesTask,
   ],
   exports: [
     CreateRideUseCase,
