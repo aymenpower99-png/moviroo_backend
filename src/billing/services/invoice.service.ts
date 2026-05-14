@@ -153,7 +153,7 @@ export class InvoiceService {
     const PURPLE_BG = '#F0ECFD';
     const GREEN_BG  = '#E8F5E9';
     const GREEN_TXT = '#2E7D32';
-    const GRAY_BG   = '#F5F5F5';
+    const RED       = '#EB001B';
 
     const pDate = payment.paidAt
       ? new Date(payment.paidAt)
@@ -168,16 +168,23 @@ export class InvoiceService {
     const distance   = `${(ride.distanceKmReal ?? ride.distanceKm ?? 0).toFixed(2)} km`;
     const duration   = `${(ride.durationMinReal ?? ride.durationMin ?? 0)} min`;
     const amount     = payment.amount;
-    const amountWords = this._numberToWordsFrench(Math.floor(amount));
+    const discount   = ride.discountPercent ? (amount * ride.discountPercent / 100) : 0;
+    const total      = amount - discount;
+    const amountWords = this._numberToWordsFrench(Math.floor(total));
 
     /* ═══════════════════════════════════════════════════
        1. HEADER
     ═══════════════════════════════════════════════════ */
-    doc.fontSize(22).font('Helvetica-Bold').fillColor(PURPLE_Y)
-      .text('moviroo', M, y);
+    const logoBuffer = await this._downloadLogo();
+    if (logoBuffer) {
+      doc.image(logoBuffer, M, y, { width: 110 });
+    } else {
+      doc.fontSize(22).font('Helvetica-Bold').fillColor(PURPLE_Y)
+        .text('moviroo', M, y);
+    }
     doc.fontSize(9).font('Helvetica').fillColor(GRAY)
       .text(`le : ${dateStr}`, M + W - 120, y, { width: 120, align: 'right' });
-    y += 26;
+    y += 30;
 
     // Separator
     doc.moveTo(M, y).lineTo(M + W, y).strokeColor(GRAY_L).lineWidth(0.5).stroke();
@@ -287,26 +294,32 @@ export class InvoiceService {
     const valW   = tableW * 0.35;
     const rowH   = 20;
 
-    // Header
-    doc.rect(M, y, tableW, rowH).fill(GRAY_BG);
-    doc.fontSize(9).font('Helvetica-Bold').fillColor(GRAY_M)
-      .text('DESIGNATION', M + 8, y + 6);
-    doc.fontSize(9).font('Helvetica-Bold').fillColor(GRAY_M)
-      .text('TOTAL HT', M + labelW, y + 6, { width: valW - 8, align: 'right' });
-    y += rowH;
+    // Header — same style as Client block
+    doc.roundedRect(M, y - 2, tableW, rowH + 4, 2).fill(PURPLE_BG);
+    doc.fontSize(9).font('Helvetica-Bold').fillColor(PURPLE_Y)
+      .text('DESIGNATION', M + 8, y + 5);
+    doc.fontSize(9).font('Helvetica-Bold').fillColor(PURPLE_Y)
+      .text('TOTAL HT', M + labelW, y + 5, { width: valW - 8, align: 'right' });
+    y += rowH + 4;
 
     // Data rows
-    const rows = [
-      [`Course de transport - MOVIROO ${vehicle.toUpperCase()}`, amount.toFixed(2)],
-      ['TVA 0%', '-'],
-      ['Pourboire', '0.00'],
+    const rows: [string, string, boolean][] = [
+      [`Course de transport - MOVIROO ${vehicle.toUpperCase()}`, amount.toFixed(2), false],
+      ['TVA 0%', '-', false],
+      ['Remise (Discount)', discount > 0 ? `-${discount.toFixed(2)}` : '-', true],
+      ['Pourboire', '0.00', false],
     ];
-    for (const [lbl, val] of rows) {
+    for (const [lbl, val, isRed] of rows) {
       doc.moveTo(M, y).lineTo(M + tableW, y).strokeColor(GRAY_L).lineWidth(0.3).stroke();
       doc.fontSize(9).font('Helvetica').fillColor(BLACK)
         .text(lbl, M + 8, y + 6);
-      doc.fontSize(9).font('Helvetica').fillColor(BLACK)
-        .text(val, M + labelW, y + 6, { width: valW - 8, align: 'right' });
+      if (isRed && discount > 0) {
+        doc.fontSize(9).font('Helvetica-Bold').fillColor(RED)
+          .text(val, M + labelW, y + 6, { width: valW - 8, align: 'right' });
+      } else {
+        doc.fontSize(9).font('Helvetica').fillColor(BLACK)
+          .text(val, M + labelW, y + 6, { width: valW - 8, align: 'right' });
+      }
       y += rowH;
     }
     doc.moveTo(M, y).lineTo(M + tableW, y).strokeColor(GRAY_L).lineWidth(0.3).stroke();
@@ -316,7 +329,7 @@ export class InvoiceService {
     const sumX = M + 55 * 2.835;
     const sumW = W - (55 * 2.835);
     const sumRows = [
-      ['Montant HT Total', amount.toFixed(2)],
+      ['Montant HT Total', total.toFixed(2)],
       ['TVA 9% Exon\u00e9r\u00e9 LFC2021', ''],
       ['Droit de Timbre 1%', '0.00'],
       ['Pourboire', '0.00'],
@@ -331,13 +344,13 @@ export class InvoiceService {
       y += 16;
     }
 
-    // Total TTC highlight row
+    // Total TTC highlight row — same style as Client/Designation headers
     const ttcY = y;
-    doc.roundedRect(sumX, ttcY - 2, sumW, 20, 3).fill(PURPLE_BG);
-    doc.fontSize(10).font('Helvetica-Bold').fillColor(PURPLE_Y)
-      .text('Total TTC', sumX + 8, ttcY + 4, { width: sumW * 0.5 });
-    doc.fontSize(10).font('Helvetica-Bold').fillColor(PURPLE_Y)
-      .text(`${amount.toFixed(2)}`, sumX + sumW * 0.5, ttcY + 4, { width: sumW * 0.5 - 8, align: 'right' });
+    doc.roundedRect(sumX, ttcY - 2, sumW, 22, 3).fill(PURPLE_BG);
+    doc.fontSize(11).font('Helvetica-Bold').fillColor(PURPLE_Y)
+      .text('Total TTC', sumX + 8, ttcY + 5, { width: sumW * 0.5 });
+    doc.fontSize(11).font('Helvetica-Bold').fillColor(PURPLE_Y)
+      .text(`${total.toFixed(2)}`, sumX + sumW * 0.5, ttcY + 5, { width: sumW * 0.5 - 8, align: 'right' });
     y = ttcY + 28;
 
     // Separator
@@ -374,35 +387,7 @@ export class InvoiceService {
     doc.moveTo(M, y).lineTo(M + W, y).strokeColor(GRAY_L).lineWidth(0.5).stroke();
     y += 12;
 
-    /* ═══════════════════════════════════════════════════
-       9. FOOTER
-    ═══════════════════════════════════════════════════ */
-    const fH = 14;
-    const col1W = W / 3;
-
-    // Column 1
-    doc.fontSize(7).font('Helvetica').fillColor(GRAY)
-      .text('MOVIEROO SARL', M, y);
-    doc.fontSize(7).font('Helvetica').fillColor(GRAY)
-      .text('Immeuble Le ZENITH, Les Berges du Lac 2', M, y + fH);
-    doc.fontSize(7).font('Helvetica').fillColor(GRAY)
-      .text('Capital social : 50 000 TND', M, y + fH * 2);
-
-    // Column 2
-    doc.fontSize(7).font('Helvetica').fillColor(GRAY)
-      .text('RIB : 07 401 0014010003711 23', M + col1W, y);
-    doc.fontSize(7).font('Helvetica').fillColor(GRAY)
-      .text('AMEN BANK - Agence Les Berges du Lac', M + col1W, y + fH);
-
-    // Column 3
-    doc.fontSize(7).font('Helvetica').fillColor(GRAY)
-      .text('RC : B11222332022', M + col1W * 2, y);
-    doc.fontSize(7).font('Helvetica').fillColor(GRAY)
-      .text('NIF : 1836651D / NIS : 0001836651D000', M + col1W * 2, y + fH);
-
-    y += fH * 3 + 10;
-
-    // Bottom separator
+    // Bottom separator only (no company footer)
     doc.moveTo(M, y).lineTo(M + W, y).strokeColor(GRAY_L).lineWidth(0.5).stroke();
     y += 8;
 
