@@ -6,8 +6,10 @@ import {
   IsOptional,
   IsEnum,
   Matches,
+  IsBoolean,
 } from 'class-validator';
 import { UserRole } from '../../users/entites/user.entity';
+import { ConsentType } from '../entities/user-consent.entity';
 
 export class RegisterDto {
   @IsString()
@@ -35,4 +37,15 @@ export class RegisterDto {
   @IsOptional()
   @IsEnum(UserRole)
   role?: UserRole;
+
+  // GDPR Consent Fields
+  @IsBoolean()
+  termsOfServiceConsent: boolean;
+
+  @IsBoolean()
+  locationTrackingConsent: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  marketingConsent?: boolean;
 }

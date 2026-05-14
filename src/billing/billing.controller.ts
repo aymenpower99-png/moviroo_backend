@@ -9,9 +9,11 @@ import {
   Body,
   UseGuards,
   Req,
+  Res,
   Headers,
   HttpCode,
   Logger,
+  NotFoundException,
 } from '@nestjs/common';
 import type { RawBodyRequest } from '@nestjs/common';
 import { Request } from 'express';
@@ -24,6 +26,7 @@ import { UserRole } from '../users/entites/user.entity';
 
 import { BillingService } from './services/billing.service';
 import { PaymentService } from './services/payment.service';
+import { InvoiceService } from './services/invoice.service';
 import { SavedCardsService } from './services/saved-cards.service';
 import { DriverEarningsService } from './services/driver-earnings.service';
 import {
@@ -38,6 +41,7 @@ export class BillingController {
   constructor(
     private readonly billingService: BillingService,
     private readonly paymentService: PaymentService,
+    private readonly invoiceService: InvoiceService,
     private readonly savedCardsService: SavedCardsService,
     private readonly driverEarningsService: DriverEarningsService,
   ) {}
@@ -161,6 +165,19 @@ export class BillingController {
   }
 
   /* ══════════════════════════════════════════════════
+     Card — Confirm client-side Stripe PaymentSheet success
+  ══════════════════════════════════════════════════ */
+
+  @Post('payments/ride/:rideId/confirm-card-success')
+  @UseGuards(AuthGuard('jwt'))
+  async confirmCardSuccess(
+    @Param('rideId') rideId: string,
+    @Req() req: any,
+  ) {
+    return this.paymentService.confirmCardPaymentSuccess(rideId, req.user.id);
+  }
+
+  /* ══════════════════════════════════════════════════
      Cash payment confirmation
   ══════════════════════════════════════════════════ */
 
@@ -169,6 +186,42 @@ export class BillingController {
   @Roles(UserRole.SUPER_ADMIN)
   async confirmCash(@Param('id') tripPaymentId: string) {
     return this.paymentService.confirmCashPayment(tripPaymentId);
+  }
+
+  /* ══════════════════════════════════════════════════
+     Invoice / Receipt — download PDF
+  ══════════════════════════════════════════════════ */
+
+  @Get('invoices/:rideId')
+  @UseGuards(AuthGuard('jwt'))
+  async downloadInvoice(
+    @Param('rideId') rideId: string,
+    @Req() req: any,
+    @Res() res: any,
+  ) {
+    const payment = await this.billingService.findByRideId(rideId);
+    if (!payment || !payment.receiptUrl) {
+      throw new NotFoundException('Invoice not found for this ride');
+    }
+
+    // Authorize: passenger must own the ride
+    if (payment.passengerId !== req.user.id && req.user.role !== UserRole.SUPER_ADMIN) {
+      throw new NotFoundException('Invoice not found');
+    }
+
+    const filePath = payment.receiptUrl.startsWith('/')
+      ? payment.receiptUrl.slice(1)
+      : payment.receiptUrl;
+    const absolutePath = `${process.cwd()}/${filePath}`;
+
+    if (!require('fs').existsSync(absolutePath)) {
+      throw new NotFoundException('Invoice file missing');
+    }
+
+    const ref = `TR-${rideId.substring(0, 8).toUpperCase()}`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="moviroo-receipt-${ref}.pdf"`);
+    require('fs').createReadStream(absolutePath).pipe(res);
   }
 
   /* ══════════════════════════════════════════════════

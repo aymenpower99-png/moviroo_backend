@@ -39,6 +39,7 @@ import { AutoCancelPendingRidesTask } from './tasks/auto-cancel-pending-rides.ta
 import { DispatchModule } from '../dispatch/dispatch.module';
 import { ClassesModule } from '../classes/classes.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { BillingModule } from '../billing/billing.module';
 
 @Module({
   imports: [
@@ -60,6 +61,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     DispatchModule,
     ClassesModule,
     NotificationsModule,
+    BillingModule,
   ],
   controllers: [RidesController],
   providers: [

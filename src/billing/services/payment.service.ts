@@ -13,6 +13,7 @@ import { Repository } from 'typeorm';
 import Stripe from 'stripe';
 
 import { TripPayment, PaymentStatus, PaymentMethod } from '../entities/trip-payment.entity';
+import { InvoiceService } from './invoice.service';
 import { PassengerEntity } from '../../passenger/entities/passengers.entity';
 import { Ride } from '../../rides/domain/entities/ride.entity';
 import { RideStatus } from '../../rides/domain/enums/ride-status.enum';
@@ -36,6 +37,7 @@ export class PaymentService {
     @Inject(forwardRef(() => FallbackDispatchService))
     private readonly fallbackService: FallbackDispatchService,
     private readonly savedCardsService: SavedCardsService,
+    private readonly invoiceService: InvoiceService,
   ) {
     this.stripe = new Stripe(process.env.STRIPE_SECRET_KEY ?? 'sk_test_placeholder', {
       apiVersion: '2025-03-31.basil' as any,
@@ -267,6 +269,70 @@ export class PaymentService {
   }
 
   /* ══════════════════════════════════════════════════
+     Card — Confirm client-side Stripe PaymentSheet success
+  ══════════════════════════════════════════════════ */
+
+  /**
+   * Called by the Flutter app after Stripe PaymentSheet succeeds.
+   * Idempotent — safe to call multiple times.
+   * Marks payment PAID, transitions ride status, and starts dispatch if immediate.
+   */
+  async confirmCardPaymentSuccess(
+    rideId: string,
+    passengerId: string,
+  ): Promise<TripPayment> {
+    const payment = await this.paymentRepo.findOne({
+      where: { rideId },
+      relations: ['ride'],
+    });
+
+    if (!payment) {
+      throw new NotFoundException('TripPayment not found for this ride');
+    }
+
+    if (payment.passengerId !== passengerId) {
+      throw new ForbiddenException('Not authorized to confirm this payment');
+    }
+
+    // Idempotent: already paid → return immediately
+    if (payment.paymentStatus === PaymentStatus.PAID) {
+      this.logger.log(`TripPayment ${payment.id} already PAID — returning`);
+      return payment;
+    }
+
+    // Mark as paid
+    const updated = await this.markAsPaid(payment.id, PaymentMethod.CARD);
+
+    // Transition ride status based on booking time
+    const ride = payment.ride;
+    if (ride && ride.status === RideStatus.PENDING) {
+      const now = Date.now();
+      const rideTime = ride.scheduledAt
+        ? new Date(ride.scheduledAt).getTime()
+        : now;
+      const isImmediate = rideTime - now <= IMMEDIATE_THRESHOLD_MS;
+
+      if (isImmediate) {
+        await this.rideRepo.update(rideId, { status: RideStatus.SEARCHING_DRIVER });
+        ride.status = RideStatus.SEARCHING_DRIVER;
+        this.logger.log(
+          `⚡ [CONFIRM] Ride ${rideId} paid → immediate, transitioning to SEARCHING_DRIVER + dispatching`,
+        );
+        this.fallbackService.runFullDispatch(ride).catch((err) =>
+          this.logger.error(`[CONFIRM] Dispatch failed for ride ${rideId}`, err?.stack),
+        );
+      } else {
+        await this.rideRepo.update(rideId, { status: RideStatus.SCHEDULED });
+        this.logger.log(
+          `🕐 [CONFIRM] Ride ${rideId} paid → SCHEDULED for ${ride.scheduledAt?.toISOString()}, scheduler will dispatch 30min before`,
+        );
+      }
+    }
+
+    return updated;
+  }
+
+  /* ══════════════════════════════════════════════════
      Internal — mark payment as paid
   ══════════════════════════════════════════════════ */
 
@@ -288,6 +354,10 @@ export class PaymentService {
     await this.paymentRepo.save(payment);
 
     this.logger.log(`TripPayment ${payment.id} → PAID (${method})`);
+
+    // Generate invoice + email in background (never block payment flow)
+    this.invoiceService.generateInvoiceIfNeeded(payment.id).catch(() => {});
+
     return payment;
   }
 }

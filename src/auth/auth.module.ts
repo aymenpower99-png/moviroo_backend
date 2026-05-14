@@ -25,6 +25,10 @@ import { PassengerEntity } from '../passenger/entities/passengers.entity';
 import { Driver } from '../driver/entities/driver.entity';
 import { UserSession } from './entities/user-session.entity';
 import { PasskeyCredential } from './entities/passkey-credential.entity';
+import { UserConsent } from './entities/user-consent.entity';
+import { Ride } from '../rides/domain/entities/ride.entity';
+import { TripPayment } from '../billing/entities/trip-payment.entity';
+import { SupportTicket } from '../support/entities/support-ticket.entity';
 
 import { OtpService } from '../otp/otp.service';
 import { MailModule } from '../mail/mail.module';
@@ -34,10 +38,22 @@ import { PassengerGuard } from '../common/guards/passenger.guard';
 import { SensitiveActionGuard } from './guards/sensitive-action.guard';
 import { HtmlService } from '../common/services/html.service';
 import { UnverifiedCleanupTask } from './tasks/unverified-cleanup.task';
+import { AnonymizationService } from '../common/services/anonymization.service';
+import { ConsentService } from './services/consent.service';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, PassengerEntity, Driver, UserSession, PasskeyCredential]),
+    TypeOrmModule.forFeature([
+      User,
+      PassengerEntity,
+      Driver,
+      UserSession,
+      PasskeyCredential,
+      UserConsent,
+      Ride,
+      TripPayment,
+      SupportTicket,
+    ]),
     PassportModule,
     JwtModule.register({}),
     ScheduleModule.forRoot(),
@@ -68,6 +84,8 @@ import { UnverifiedCleanupTask } from './tasks/unverified-cleanup.task';
     JwtRefreshStrategy,
     HtmlService,
     UnverifiedCleanupTask,
+    AnonymizationService,
+    ConsentService,
   ],
   exports: [
     AuthPasswordService,

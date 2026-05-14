@@ -7,7 +7,7 @@ export interface SnappingResult {
   snappedLon: number;
   distanceFromRoute: number; // Distance in meters from GPS to snapped point
   distanceAlongRoute: number; // Distance in meters from route start to snapped point
-  isOffRoute: boolean; // True if distance > 100m
+  isOffRoute: boolean; // True if distance > 70m
 }
 
 @Injectable()
@@ -15,7 +15,7 @@ export class RouteSnappingService {
   private readonly logger = new Logger(RouteSnappingService.name);
 
   private readonly SNAP_THRESHOLD = 50; // meters - normal snapping range
-  private readonly OFF_ROUTE_THRESHOLD = 100; // meters - off-route detection
+  private readonly OFF_ROUTE_THRESHOLD = 70; // meters - off-route detection
 
   /**
    * Snap GPS point to route polyline

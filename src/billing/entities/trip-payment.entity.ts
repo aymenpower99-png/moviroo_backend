@@ -120,6 +120,17 @@ export class TripPayment {
   })
   stripeRefundId: string | null;
 
+  /* ── Invoice / Receipt ── */
+
+  @Column({
+    name: 'receipt_url',
+    type: 'varchar',
+    length: 500,
+    nullable: true,
+    default: null,
+  })
+  receiptUrl: string | null;
+
   /* ── Timestamps ── */
   @Column({
     name: 'paid_at',

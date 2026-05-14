@@ -16,6 +16,7 @@ import {
   TripPayment,
   PaymentStatus,
 } from '../../../billing/entities/trip-payment.entity';
+import { InvoiceService } from '../../../billing/services/invoice.service';
 
 /** Rides within this window (ms) are considered "immediate" and dispatched right away */
 const IMMEDIATE_THRESHOLD_MS = 60 * 60_000; // 60 minutes
@@ -30,6 +31,7 @@ export class ConfirmRideUseCase {
     @InjectRepository(TripPayment)
     private readonly paymentRepo: Repository<TripPayment>,
     private readonly fallbackService: FallbackDispatchService,
+    private readonly invoiceService: InvoiceService,
   ) {}
 
   async execute(
@@ -71,6 +73,8 @@ export class ConfirmRideUseCase {
       ride.paymentMethod = paymentMethod.toUpperCase();
     }
 
+    const isCard = paymentMethod?.toUpperCase() === 'CARD';
+
     /* ── Decide: immediate dispatch or wait for scheduler ── */
     const now = Date.now();
     const rideTime = ride.scheduledAt
@@ -78,32 +82,36 @@ export class ConfirmRideUseCase {
       : now;
     const isImmediate = rideTime - now <= IMMEDIATE_THRESHOLD_MS;
 
-    const isCard = paymentMethod?.toUpperCase() === 'CARD';
+    // For CASH: transition ride status immediately (driver collects later).
+    // For CARD: keep ride status as PENDING until Stripe PaymentSheet succeeds.
+    // The app will call confirm-card-success after payment to finalize status.
+    if (!isCard) {
+      if (isImmediate) {
+        ride.status = RideStatus.SEARCHING_DRIVER;
+        await this.rideRepo.save(ride);
 
-    // Card payments are captured client-side (Stripe PaymentSheet) BEFORE this
-    // endpoint is called, so we transition the ride immediately. We no longer
-    // wait for the Stripe webhook — that would leave rides stuck in PENDING
-    // when webhooks aren't reachable (localhost, missing secret, etc.).
-    if (isImmediate) {
-      ride.status = RideStatus.SEARCHING_DRIVER;
-      await this.rideRepo.save(ride);
-
-      this.logger.log(
-        `⚡ Ride ${ride.id} is immediate ${isCard ? 'CARD' : 'CASH'} (within ${IMMEDIATE_THRESHOLD_MS / 60_000}min) — dispatching now`,
-      );
-      this.fallbackService.runFullDispatch(ride).catch((err) => {
-        this.logger.error(
-          `Auto-dispatch failed for ride ${ride.id}`,
-          err?.stack,
+        this.logger.log(
+          `⚡ Ride ${ride.id} is immediate CASH (within ${IMMEDIATE_THRESHOLD_MS / 60_000}min) — dispatching now`,
         );
-      });
-    } else {
-      // Future ride: scheduler will dispatch 30 min before ride time
-      ride.status = RideStatus.SCHEDULED;
-      await this.rideRepo.save(ride);
+        this.fallbackService.runFullDispatch(ride).catch((err) => {
+          this.logger.error(
+            `Auto-dispatch failed for ride ${ride.id}`,
+            err?.stack,
+          );
+        });
+      } else {
+        // Future ride: scheduler will dispatch 30 min before ride time
+        ride.status = RideStatus.SCHEDULED;
+        await this.rideRepo.save(ride);
 
+        this.logger.log(
+          `🕐 Ride ${ride.id} scheduled for ${ride.scheduledAt?.toISOString()} — CASH SCHEDULED, scheduler dispatches 30min before`,
+        );
+      }
+    } else {
+      // Card: keep PENDING until client confirms payment success
       this.logger.log(
-        `🕐 Ride ${ride.id} scheduled for ${ride.scheduledAt?.toISOString()} — ${isCard ? 'CARD' : 'CASH'} SCHEDULED, scheduler dispatches 30min before`,
+        `💳 Ride ${ride.id} confirmed with CARD — ride status stays PENDING until payment succeeds`,
       );
     }
 
@@ -115,16 +123,11 @@ export class ConfirmRideUseCase {
           const method = paymentMethod.toUpperCase();
           existing.paymentMethod = method as any;
 
-          // Card: payment was already captured client-side → mark PAID immediately.
           // Cash: stays PENDING until the driver marks the trip delivered.
-          if (method === 'CARD') {
-            existing.paymentStatus = PaymentStatus.PAID;
-            existing.paidAt = new Date();
-          }
-
+          // Card: stays PENDING until the client confirms Stripe PaymentSheet success.
           await this.paymentRepo.save(existing);
           this.logger.log(
-            `[BILLING] Updated TripPayment paymentMethod=${method}${method === 'CARD' ? ' status=PAID' : ''} for ride ${rideId}`,
+            `[BILLING] Updated TripPayment paymentMethod=${method} for ride ${rideId}`,
           );
         }
       } catch (err) {

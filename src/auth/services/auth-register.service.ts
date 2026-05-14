@@ -26,6 +26,8 @@ import { RegisterDto } from '../dto/register.dto';
 import { AuthMailService } from '../../mail/services/auth-mail.service';
 import { WelcomeMailService } from '../../mail/services/welcome-mail.service';
 import { AuthTokenService } from './auth-token.service';
+import { ConsentService } from './consent.service';
+import { ConsentType } from '../entities/user-consent.entity';
 
 @Injectable()
 export class AuthRegisterService {
@@ -39,6 +41,7 @@ export class AuthRegisterService {
     private readonly authMail: AuthMailService,
     private readonly welcomeMail: WelcomeMailService,
     private readonly tokenService: AuthTokenService,
+    private readonly consentService: ConsentService,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -109,6 +112,22 @@ export class AuthRegisterService {
       status: UserStatus.PENDING,
     });
     await this.userRepo.save(user);
+
+    // Store GDPR consents
+    await this.consentService.recordConsents(user.id, [
+      {
+        consentType: ConsentType.TERMS_OF_SERVICE,
+        granted: dto.termsOfServiceConsent,
+      },
+      {
+        consentType: ConsentType.LOCATION_TRACKING,
+        granted: dto.locationTrackingConsent,
+      },
+      {
+        consentType: ConsentType.MARKETING,
+        granted: dto.marketingConsent ?? false,
+      },
+    ]);
 
     const verifyToken = await this.jwtService.signAsync(
       { sub: user.id, purpose: 'verify-email' },
