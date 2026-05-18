@@ -27,7 +27,7 @@ export class AuthTokenService {
     private readonly config: ConfigService,
   ) {}
 
-  async generateTokens(user: User) {
+  async generateTokens(user: User, rememberMe = true) {
     const payload: JwtPayload = {
       sub: user.id,
       email: user.email,
@@ -40,7 +40,7 @@ export class AuthTokenService {
       }),
       this.jwtService.signAsync(payload, {
         secret: this.config.get<string>('jwt.refreshSecret')!,
-        expiresIn: '7d',
+        expiresIn: rememberMe ? '30d' : '1h',
       }),
     ]);
     return { accessToken, refreshToken };

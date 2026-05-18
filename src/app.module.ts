@@ -33,6 +33,7 @@ import { MembershipLevelsModule } from './membership-levels/membership-levels.mo
 import { PassengersModule } from './passenger/passengers.module';
 import { VoiceModule } from './voice/voice.module';
 import { ChatbotModule } from './chatbot/chatbot.module';
+import { PublicStatsModule } from './public-stats/public-stats.module';
 
 @Module({
   imports: [
@@ -68,6 +69,7 @@ import { ChatbotModule } from './chatbot/chatbot.module';
     PassengersModule,
     VoiceModule,
     ChatbotModule,
+    PublicStatsModule,
   ],
   controllers: [AppController],
   providers: [

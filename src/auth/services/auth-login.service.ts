@@ -150,7 +150,7 @@ export class AuthLoginService {
       );
 
     await this.userRepo.update(user.id, { lastLoginAt: new Date() });
-    const tokens = await this.tokenService.generateTokens(user);
+    const tokens = await this.tokenService.generateTokens(user, dto.rememberMe ?? true);
     await this.tokenService.saveRefreshToken(user.id, tokens.refreshToken);
     return { ...tokens, user: this.tokenService.safeUser(user) };
   }
