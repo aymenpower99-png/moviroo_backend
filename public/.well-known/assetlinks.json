@@ -1,0 +1,15 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls",
+      "delegate_permission/common.get_login_creds"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.example.moviroo",
+      "sha256_cert_fingerprints": [
+        "E0:09:0F:D8:0E:6C:AF:30:53:7E:7B:03:D2:A4:BC:A2:62:F5:47:AC:7A:D6:78:CB:14:1F:09:7C:65:F6:1B:71"
+      ]
+    }
+  }
+]

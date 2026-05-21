@@ -1,29 +1,45 @@
-import 'dotenv/config'; // ← must be first — loads .env before NestJS DI initializes
+import 'dotenv/config';
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
+
 import * as bodyParser from 'body-parser';
+import * as express from 'express';
 import { join } from 'path';
 import { existsSync, mkdirSync } from 'fs';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
-    rawBody: true, // enables req.rawBody for Stripe webhook
-    bodyParser: false, // disable NestJS's default parser — we register our own below
+    rawBody: true,
+    bodyParser: false,
   });
 
-  // ─── Ensure upload folders exist ─────────────────────────────
-  const uploadDirs = [join(process.cwd(), 'uploads', 'classes')];
-  for (const dir of uploadDirs) {
-    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  // ─── Ensure folders exist ─────────────────────
+  const publicDir = join(process.cwd(), 'public');
+  const wellKnownDir = join(publicDir, '.well-known');
+
+  if (!existsSync(wellKnownDir)) {
+    mkdirSync(wellKnownDir, { recursive: true });
   }
 
-  // ─── Serve uploaded files as static assets ────────────────────
-  app.useStaticAssets(join(process.cwd(), 'uploads'), { prefix: '/uploads' });
+  const uploadDir = join(process.cwd(), 'uploads');
+  if (!existsSync(uploadDir)) {
+    mkdirSync(uploadDir, { recursive: true });
+  }
 
-  // ─── Body parsers — capture rawBody for Stripe webhook ────────
-  // verify() runs before JSON.parse and saves the raw Buffer to req.rawBody
+  // ─── Static files ─────────────────────────────
+  app.useStaticAssets(uploadDir, { prefix: '/uploads' });
+
+  app.useStaticAssets(publicDir);
+
+  // IMPORTANT: explicit fix for .well-known (ANDROID ASSET LINKS)
+  app.use(
+    '/.well-known',
+    express.static(join(process.cwd(), 'public/.well-known')),
+  );
+
+  // ─── Body parsers ─────────────────────────────
   app.use(
     bodyParser.json({
       limit: '10mb',
@@ -32,33 +48,33 @@ async function bootstrap() {
       },
     }),
   );
+
   app.use(bodyParser.urlencoded({ extended: true, limit: '10mb' }));
 
+  // ─── CORS ─────────────────────────────────────
   app.enableCors({
     origin: true,
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: [
-      'Content-Type',
-      'Authorization',
-      'ngrok-skip-browser-warning',
-    ],
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
   });
 
-  // Trust proxy headers to capture real client IP addresses
   app.set('trust proxy', true);
 
+  // API prefix (IMPORTANT: AFTER static setup)
   app.setGlobalPrefix('api');
 
+  // ─── Validation ───────────────────────────────
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
-      forbidNonWhitelisted: true,
       transform: true,
+      forbidNonWhitelisted: true,
     }),
   );
 
   await app.listen(3000);
-  console.log('🚀 Moviroo backend running on http://localhost:3000/api');
+  console.log('🚀 Backend running on http://localhost:3000/api');
 }
+
 bootstrap();
