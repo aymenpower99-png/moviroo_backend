@@ -5,8 +5,11 @@ export interface GeocodingResult {
   lat: number;
   lon: number;
   display_name: string;
+  address?: string;
   city: string;
   country: string;
+  place_type?: string;
+  category?: string;
 }
 
 @Injectable()
@@ -62,9 +65,12 @@ export class GeocodingMapboxService {
   /**
    * Mapbox reverse geocoding (coordinates → address)
    */
-  async reverse(lat: number, lon: number): Promise<GeocodingResult | null> {
+  async reverse(lat: number, lon: number, options?: { lang?: string }): Promise<GeocodingResult | null> {
     try {
-      const url = `${this.MAPBOX_BASE_URL}/${lon},${lat}.json?access_token=${this.MAPBOX_ACCESS_TOKEN}&types=poi,address,place,locality,neighborhood`;
+      let url = `${this.MAPBOX_BASE_URL}/${lon},${lat}.json?access_token=${this.MAPBOX_ACCESS_TOKEN}&types=address,poi,neighborhood,locality,place`;
+      if (options?.lang) {
+        url += `&language=${options.lang}`;
+      }
 
       const res = await withRetry(
         () => fetch(url),
@@ -79,7 +85,16 @@ export class GeocodingMapboxService {
         return null;
       }
 
-      const feature = data.features[0];
+      // Pick the most precise result: prefer address/poi over city/neighborhood
+      let feature = data.features[0];
+      for (const f of data.features) {
+        const types = f.place_type || [];
+        if (types.includes('address') || types.includes('poi')) {
+          feature = f;
+          break;
+        }
+      }
+
       return this.parseMapboxResult(feature, lat, lon);
     } catch (err) {
       this.logger.warn(
@@ -92,9 +107,15 @@ export class GeocodingMapboxService {
   /**
    * Mapbox autocomplete
    */
-  async autocomplete(query: string): Promise<GeocodingResult[]> {
+  async autocomplete(query: string, options?: { proximity?: { lat: number; lon: number }; lang?: string }): Promise<GeocodingResult[]> {
     try {
-      const url = `${this.MAPBOX_BASE_URL}/${encodeURIComponent(query)}.json?access_token=${this.MAPBOX_ACCESS_TOKEN}&autocomplete=true&limit=10&country=tn&types=poi,address,place,locality,neighborhood`;
+      let url = `${this.MAPBOX_BASE_URL}/${encodeURIComponent(query)}.json?access_token=${this.MAPBOX_ACCESS_TOKEN}&autocomplete=true&limit=10&country=tn&types=poi,address,place,locality,neighborhood`;
+      if (options?.proximity) {
+        url += `&proximity=${options.proximity.lon},${options.proximity.lat}`;
+      }
+      if (options?.lang) {
+        url += `&language=${options.lang}`;
+      }
 
       const res = await withRetry(
         () => fetch(url),
@@ -135,6 +156,50 @@ export class GeocodingMapboxService {
   }
 
   /**
+   * Mapbox nearby places (reverse geocoding with POI types)
+   */
+  async nearby(lat: number, lon: number): Promise<GeocodingResult[]> {
+    try {
+      const url = `${this.MAPBOX_BASE_URL}/${lon},${lat}.json?access_token=${this.MAPBOX_ACCESS_TOKEN}&types=poi,address,neighborhood,locality,place&limit=10`;
+
+      const res = await withRetry(
+        () => fetch(url),
+        `Mapbox nearby (${lat}, ${lon})`,
+        { maxRetries: 2, initialDelayMs: 500 },
+        this.logger,
+      );
+
+      const data = (await res.json()) as any;
+
+      if (!data.features || data.features.length === 0) {
+        return [];
+      }
+
+      return data.features
+        .map((feature: any) => {
+          if (
+            !feature.center ||
+            !Array.isArray(feature.center) ||
+            feature.center.length < 2
+          ) {
+            return null;
+          }
+          const [centerLon, centerLat] = feature.center;
+          if (!this.isValidCoordinate(centerLat, centerLon)) {
+            return null;
+          }
+          return this.parseMapboxResult(feature, centerLat, centerLon);
+        })
+        .filter(
+          (r: GeocodingResult | null): r is GeocodingResult => r !== null,
+        );
+    } catch (err) {
+      this.logger.warn(`Mapbox nearby failed for (${lat}, ${lon}): ${err}`);
+      return [];
+    }
+  }
+
+  /**
    * Parse Mapbox result into standard format
    */
   private parseMapboxResult(
@@ -143,6 +208,7 @@ export class GeocodingMapboxService {
     lon: number,
   ): GeocodingResult {
     const placeName = feature.text || feature.place_name || '';
+    const fullContext = feature.place_name || placeName;
     const context = feature.context || [];
 
     // Extract city from context
@@ -155,12 +221,21 @@ export class GeocodingMapboxService {
     const countryContext = context.find((c: any) => c.id.includes('country'));
     const country = countryContext?.text || 'Tunisia';
 
+    // Extract place type and category for icon mapping
+    const placeType = Array.isArray(feature.place_type)
+      ? feature.place_type.join(',')
+      : '';
+    const category = feature.properties?.category || '';
+
     return {
       lat,
       lon,
       display_name: placeName,
+      address: fullContext,
       city,
       country,
+      place_type: placeType,
+      category,
     };
   }
 

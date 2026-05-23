@@ -100,22 +100,50 @@ export class RidesController {
   async reverseGeocode(
     @Query('lat', ParseFloatPipe) lat: number,
     @Query('lon', ParseFloatPipe) lon: number,
+    @Query('lang') lang?: string,
   ) {
-    return this.geocodingService.reverse(lat, lon);
+    return this.geocodingService.reverse(lat, lon, { lang });
+  }
+
+  /* ─── Nearby places: lat/lon → nearby POIs ─────────────────────────── */
+  @Get('geocode/nearby')
+  @Throttle({ default: { limit: 50, ttl: 60 } })
+  async nearby(
+    @Query('lat', ParseFloatPipe) lat: number,
+    @Query('lon', ParseFloatPipe) lon: number,
+    @Query('q') q?: string,
+  ) {
+    return this.geocodingService.nearby(lat, lon);
   }
 
   /* ─── Autocomplete search: query → merged results ───────────────────── */
   @Get('geocode/autocomplete')
   @Throttle({ default: { limit: 50, ttl: 60 } }) // 50 requests per minute
-  async autocomplete(@Query('q') query: string) {
-    return this.geocodingService.autocomplete(query);
+  async autocomplete(
+    @Query('q') query: string,
+    @Query('proximityLat') proximityLat?: string,
+    @Query('proximityLon') proximityLon?: string,
+    @Query('lang') lang?: string,
+  ) {
+    const proximity = proximityLat && proximityLon
+      ? { lat: parseFloat(proximityLat), lon: parseFloat(proximityLon) }
+      : undefined;
+    return this.geocodingService.autocomplete(query, { proximity, lang });
   }
 
   /* ─── Parallel search: query → Mapbox + Nominatim merged results ───── */
   @Get('geocode/search')
   @Throttle({ default: { limit: 50, ttl: 60 } }) // 50 requests per minute
-  async search(@Query('q') query: string) {
-    return this.geocodingService.autocompleteParallel(query);
+  async search(
+    @Query('q') query: string,
+    @Query('proximityLat') proximityLat?: string,
+    @Query('proximityLon') proximityLon?: string,
+    @Query('lang') lang?: string,
+  ) {
+    const proximity = proximityLat && proximityLon
+      ? { lat: parseFloat(proximityLat), lon: parseFloat(proximityLon) }
+      : undefined;
+    return this.geocodingService.autocompleteParallel(query, { proximity, lang });
   }
 
   /* ─── Create a new ride ───────────────────── */

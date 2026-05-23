@@ -7,6 +7,11 @@ import { GeocodingNominatimService } from './geocoding-nominatim.service';
 // Re-export types for backward compatibility
 export type { GeocodingResult };
 
+interface AutocompleteOptions {
+  proximity?: { lat: number; lon: number };
+  lang?: string;
+}
+
 /**
  * Main Geocoding Service Facade
  * This service aggregates all geocoding-related services for backward compatibility
@@ -26,13 +31,13 @@ export class GeocodingService {
     return this.mapboxService.forward(address);
   }
 
-  /** Coordinates → address (reverse geocoding) - Mapbox only - CACHED */
-  async reverse(lat: number, lon: number): Promise<GeocodingResult | null> {
+  /** Coordinates → address (reverse geocoding) - Mapbox primary + Nominatim fallback - CACHED */
+  async reverse(lat: number, lon: number, options?: { lang?: string }): Promise<GeocodingResult | null> {
     const startTime = Date.now();
     this.logger.log(`[GEOCODE] Reverse geocoding request: (${lat}, ${lon})`);
 
-    // Check cache first (new cache key to invalidate pre-migration data)
-    const cacheKey = `reverse_geocode_v2:${lat.toFixed(6)}:${lon.toFixed(6)}`;
+    const langKey = options?.lang ?? 'default';
+    const cacheKey = `reverse_geocode_v2:${lat.toFixed(6)}:${lon.toFixed(6)}:${langKey}`;
     const cached = await this.cacheManager.get<GeocodingResult>(cacheKey);
     if (cached) {
       const duration = Date.now() - startTime;
@@ -42,23 +47,39 @@ export class GeocodingService {
       return cached;
     }
 
-    // Use Mapbox only
-    const mapboxStart = Date.now();
-    const mapboxResult = await this.mapboxService.reverse(lat, lon);
-    const mapboxDuration = Date.now() - mapboxStart;
+    // Primary: Mapbox
+    const mapboxResult = await this.mapboxService.reverse(lat, lon, options);
 
-    if (mapboxResult) {
+    // Accept Mapbox only if it returns a precise result (address or poi level)
+    if (mapboxResult && this._getPrecisionScore(mapboxResult) >= 2) {
       const totalDuration = Date.now() - startTime;
       this.logger.log(
-        `[GEOCODE] Reverse geocoding via Mapbox: (${lat}, ${lon}) - ${totalDuration}ms`,
+        `[GEOCODE] Reverse geocoding via Mapbox (precise): (${lat}, ${lon}) - ${totalDuration}ms`,
       );
-      await this.cacheManager.set(cacheKey, mapboxResult, 600); // 10 minutes
+      await this.cacheManager.set(cacheKey, mapboxResult, 600);
       return mapboxResult;
     }
 
-    // Safe fallback: return minimal result with coordinates
+    // Fallback: Nominatim when Mapbox is low-precision or empty
+    const nominatimResult = await this.nominatimService.reverse(lat, lon, options);
+    if (nominatimResult) {
+      const totalDuration = Date.now() - startTime;
+      this.logger.log(
+        `[GEOCODE] Reverse geocoding via Nominatim fallback: (${lat}, ${lon}) - ${totalDuration}ms`,
+      );
+      await this.cacheManager.set(cacheKey, nominatimResult, 600);
+      return nominatimResult;
+    }
+
+    // Accept low-precision Mapbox if Nominatim also failed
+    if (mapboxResult) {
+      await this.cacheManager.set(cacheKey, mapboxResult, 600);
+      return mapboxResult;
+    }
+
+    // Safe fallback
     this.logger.warn(
-      `[GEOCODE] Mapbox geocoding failed, using safe fallback for (${lat}, ${lon})`,
+      `[GEOCODE] All reverse geocoding failed, using safe fallback for (${lat}, ${lon})`,
     );
     const safeResult: GeocodingResult = {
       lat,
@@ -67,17 +88,60 @@ export class GeocodingService {
       city: 'Unknown',
       country: 'Tunisia',
     };
-
-    const totalDuration = Date.now() - startTime;
-    this.logger.log(
-      `[GEOCODE] Safe fallback used: (${lat}, ${lon}) - ${totalDuration}ms`,
-    );
-    await this.cacheManager.set(cacheKey, safeResult, 300); // 5 minutes for safe fallback
+    await this.cacheManager.set(cacheKey, safeResult, 300);
     return safeResult;
   }
 
+  /** Nearby places around coordinates - Mapbox primary + Nominatim fallback - CACHED */
+  async nearby(lat: number, lon: number): Promise<GeocodingResult[]> {
+    const startTime = Date.now();
+    this.logger.log(`[GEOCODE] Nearby request: (${lat}, ${lon})`);
+
+    const cacheKey = `nearby_v2:${lat.toFixed(4)}:${lon.toFixed(4)}`;
+    const cached = await this.cacheManager.get<GeocodingResult[]>(cacheKey);
+    if (cached) {
+      const duration = Date.now() - startTime;
+      this.logger.log(
+        `[GEOCODE] Cache HIT for nearby: (${lat}, ${lon}) - ${duration}ms`,
+      );
+      return cached;
+    }
+
+    // Primary: Mapbox nearby
+    const mapboxResults = await this.mapboxService.nearby(lat, lon);
+
+    // If Mapbox returns only low-precision results (no address/poi), supplement with Nominatim
+    const mapboxHighPrecision = mapboxResults.filter(
+      (r) => this._getPrecisionScore(r) >= 2,
+    );
+
+    let results: GeocodingResult[] = [];
+
+    if (mapboxHighPrecision.length >= 3) {
+      // Mapbox is good enough
+      results = mapboxResults;
+    } else {
+      // Fallback: query Nominatim around this area
+      const nominatimResults = await this.nominatimService.autocomplete('', {
+        proximity: { lat, lon },
+      });
+      const merged = [...mapboxResults, ...nominatimResults];
+      const filtered = this.filterValidCoordinates(merged);
+      const deduplicated = this.deduplicateResults(filtered, 200); // relaxed threshold for nearby
+      results = this.rankByPrecision(deduplicated);
+    }
+
+    await this.cacheManager.set(cacheKey, results, 300);
+
+    const totalDuration = Date.now() - startTime;
+    this.logger.log(
+      `[GEOCODE] Nearby complete: (${lat}, ${lon}) - ${totalDuration}ms - ${results.length} results`,
+    );
+    return results;
+  }
+
   /** Autocomplete - Mapbox only - CACHED */
-  async autocomplete(query: string): Promise<GeocodingResult[]> {
+  async autocomplete(query: string, options?: AutocompleteOptions): Promise<GeocodingResult[]> {
     const startTime = Date.now();
     this.logger.log(`[GEOCODE] Autocomplete request: "${query}"`);
 
@@ -86,8 +150,10 @@ export class GeocodingService {
       return [];
     }
 
-    // Check cache first (new cache key to invalidate pre-migration data)
-    const cacheKey = `autocomplete_v2:${query.trim().toLowerCase()}`;
+    const proxKey = options?.proximity
+      ? `${options.proximity.lat.toFixed(2)},${options.proximity.lon.toFixed(2)}`
+      : 'none';
+    const cacheKey = `autocomplete_v2:${query.trim().toLowerCase()}:${proxKey}:${options?.lang ?? 'default'}`;
     const cached = await this.cacheManager.get<GeocodingResult[]>(cacheKey);
     if (cached) {
       const duration = Date.now() - startTime;
@@ -99,7 +165,7 @@ export class GeocodingService {
 
     // Query Mapbox only
     const apiStart = Date.now();
-    const mapboxResults = await this.mapboxService.autocomplete(query);
+    const mapboxResults = await this.mapboxService.autocomplete(query, options);
     const apiDuration = Date.now() - apiStart;
 
     this.logger.log(
@@ -116,8 +182,8 @@ export class GeocodingService {
     return results;
   }
 
-  /** Parallel autocomplete - Mapbox + Nominatim - CACHED */
-  async autocompleteParallel(query: string): Promise<GeocodingResult[]> {
+  /** Parallel autocomplete - Mapbox + Nominatim with precision ranking - CACHED */
+  async autocompleteParallel(query: string, options?: AutocompleteOptions): Promise<GeocodingResult[]> {
     const startTime = Date.now();
     this.logger.log(`[GEOCODE] Parallel autocomplete request: "${query}"`);
 
@@ -128,8 +194,10 @@ export class GeocodingService {
       return [];
     }
 
-    // Check cache first
-    const cacheKey = `autocomplete_parallel_v2:${query.trim().toLowerCase()}`;
+    const proxKey = options?.proximity
+      ? `${options.proximity.lat.toFixed(2)},${options.proximity.lon.toFixed(2)}`
+      : 'none';
+    const cacheKey = `autocomplete_parallel_v2:${query.trim().toLowerCase()}:${proxKey}:${options?.lang ?? 'default'}`;
     const cached = await this.cacheManager.get<GeocodingResult[]>(cacheKey);
     if (cached) {
       const duration = Date.now() - startTime;
@@ -142,8 +210,8 @@ export class GeocodingService {
     // Query both providers in parallel
     const apiStart = Date.now();
     const [mapboxResults, nominatimResults] = await Promise.allSettled([
-      this.mapboxService.autocomplete(query),
-      this.nominatimService.autocomplete(query),
+      this.mapboxService.autocomplete(query, options),
+      this.nominatimService.autocomplete(query, options),
     ]);
 
     const resultsMapbox =
@@ -157,18 +225,56 @@ export class GeocodingService {
       `[GEOCODE] Parallel autocomplete API results for "${query}" - Mapbox: ${resultsMapbox.length}, Nominatim: ${resultsNominatim.length} - ${apiDuration}ms`,
     );
 
-    // Merge, filter, and deduplicate results
+    // Merge all results
     const merged = [...resultsMapbox, ...resultsNominatim];
     const filtered = this.filterValidCoordinates(merged);
     const deduplicated = this.deduplicateResults(filtered);
-    const results = deduplicated.slice(0, 10); // Return top 10 results
-    await this.cacheManager.set(cacheKey, results, 300); // 5 minutes
+
+    // Rank by precision score (poi > address > neighborhood > locality > place)
+    const ranked = this.rankByPrecision(deduplicated);
+
+    // If we have high-precision results (poi/address), drop low-precision city-level results
+    const highPrecisionCount = ranked.filter((r) => this._getPrecisionScore(r) >= 2).length;
+    let results: GeocodingResult[];
+    if (highPrecisionCount >= 3) {
+      // Enough precise results — drop city-level 'place' results entirely
+      results = ranked.filter((r) => this._getPrecisionScore(r) >= 1);
+    } else {
+      // Not enough precise results — keep everything but still rank them
+      results = ranked;
+    }
+
+    // Return top 10 after ranking and filtering
+    const finalResults = results.slice(0, 10);
+    await this.cacheManager.set(cacheKey, finalResults, 300);
 
     const totalDuration = Date.now() - startTime;
     this.logger.log(
-      `[GEOCODE] Parallel autocomplete complete: "${query}" - ${totalDuration}ms - ${results.length} final results`,
+      `[GEOCODE] Parallel autocomplete complete: "${query}" - ${totalDuration}ms - ${finalResults.length} final results`,
     );
-    return results;
+    return finalResults;
+  }
+
+  /** Precision score based on place_type (higher = more precise) */
+  private _getPrecisionScore(result: GeocodingResult): number {
+    const type = (result.place_type || '').toLowerCase();
+    if (type.includes('poi')) return 4;
+    if (type.includes('address')) return 3;
+    if (type.includes('neighborhood')) return 2;
+    if (type.includes('locality')) return 1;
+    if (type.includes('place')) return 0;
+    return 1; // unknown defaults to medium
+  }
+
+  /** Rank results by precision score descending */
+  private rankByPrecision(results: GeocodingResult[]): GeocodingResult[] {
+    return [...results].sort((a, b) => {
+      const scoreA = this._getPrecisionScore(a);
+      const scoreB = this._getPrecisionScore(b);
+      if (scoreB !== scoreA) return scoreB - scoreA; // higher score first
+      // Tie-breaker: shorter display_name = more specific
+      return (a.display_name || '').length - (b.display_name || '').length;
+    });
   }
 
   /** Filter results with valid coordinates */
@@ -189,15 +295,17 @@ export class GeocodingService {
   }
 
   /** Deduplicate results by coordinate proximity */
-  private deduplicateResults(results: GeocodingResult[]): GeocodingResult[] {
-    const DEDUP_THRESHOLD_METERS = 50; // 50 meters threshold
+  private deduplicateResults(results: GeocodingResult[], thresholdMeters?: number): GeocodingResult[] {
+    const DEDUP_THRESHOLD_METERS = thresholdMeters ?? 50;
     const seen = new Set<string>();
     const deduplicated: GeocodingResult[] = [];
 
     for (const result of results) {
-      // Check if this location is too close to any already seen location
-      let isDuplicate = false;
+      // High-precision results (poi/address) use stricter dedup, low-precision uses looser
+      const isHighPrecision = this._getPrecisionScore(result) >= 2;
+      const effectiveThreshold = isHighPrecision ? Math.min(DEDUP_THRESHOLD_METERS, 50) : DEDUP_THRESHOLD_METERS;
 
+      let isDuplicate = false;
       for (const seenResult of seen) {
         const [seenLat, seenLon] = seenResult.split(',').map(Number);
         const distance = this.calculateDistance(
@@ -207,7 +315,7 @@ export class GeocodingService {
           seenLon,
         );
 
-        if (distance <= DEDUP_THRESHOLD_METERS) {
+        if (distance <= effectiveThreshold) {
           isDuplicate = true;
           break;
         }
@@ -215,7 +323,6 @@ export class GeocodingService {
 
       if (!isDuplicate) {
         deduplicated.push(result);
-        // Store coordinate key for future comparisons
         seen.add(`${result.lat},${result.lon}`);
       }
     }
