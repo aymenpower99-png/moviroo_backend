@@ -177,17 +177,22 @@ export class PricingService {
     }
 
     const carTypes = classes.map((c) => normalizeCarType(c.name));
+    const carMultipliers: Record<string, number> = {};
+    for (const cls of classes) {
+      carMultipliers[normalizeCarType(cls.name)] = cls.multiplier;
+    }
     this.logger.log(
       `[PRICING] Found ${classes.length} active classes: ${carTypes.join(', ')}`,
     );
 
-    // Call batch pricing with all active car types
+    // Call batch pricing with all active car types + their DB multipliers
     return await this.batchEstimate({
       pickupLat,
       pickupLon,
       dropoffLat,
       dropoffLon,
       carTypes,
+      carMultipliers,
       bookingDt,
     });
   }

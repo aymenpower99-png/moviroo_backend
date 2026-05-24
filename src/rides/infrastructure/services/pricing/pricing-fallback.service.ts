@@ -7,6 +7,7 @@ export interface PricingRequest {
   dropoffLat: number;
   dropoffLon: number;
   carType: string;
+  carMultiplier?: number;
   bookingDt?: string;
 }
 
@@ -26,6 +27,7 @@ export interface BatchPricingRequest {
   dropoffLat: number;
   dropoffLon: number;
   carTypes: string[];
+  carMultipliers?: Record<string, number>;
   bookingDt?: string;
 }
 
@@ -54,7 +56,7 @@ export class PricingFallbackService {
   private static readonly RATE_PER_MIN = 0.3;
   private static readonly MIN_FARE = 4.0;
 
-  /* Mirror of MULT_CAR in config.py (fallback only) */
+  /* Legacy fallback mirror of MULT_CAR — used only when no DB multiplier is provided */
   private static readonly CAR_MULT: Record<string, number> = {
     economy: 0.75,
     standard: 0.9,
@@ -65,6 +67,17 @@ export class PricingFallbackService {
   };
 
   constructor(private readonly haversine: HaversineService) {}
+
+  /**
+   * Get multiplier for a car type.
+   * Priority: 1) provided override, 2) legacy CAR_MULT, 3) default 1.0
+   */
+  private getMultiplier(carType: string, override?: number): number {
+    if (override !== undefined && override !== null) {
+      return override;
+    }
+    return PricingFallbackService.CAR_MULT[normalizeCarType(carType)] ?? 1.0;
+  }
 
   /**
    * Fallback pricing using pure business rules (single car type)
@@ -82,7 +95,10 @@ export class PricingFallbackService {
       distanceKm * PricingFallbackService.RATE_PER_KM +
       durationMin * PricingFallbackService.RATE_PER_MIN;
 
-    const exactPrice = Math.max(PricingFallbackService.MIN_FARE, +raw.toFixed(2));
+    const mult = this.getMultiplier(req.carType, req.carMultiplier);
+    const priced = raw * mult;
+
+    const exactPrice = Math.max(PricingFallbackService.MIN_FARE, +priced.toFixed(2));
     const finalPrice = Math.ceil(exactPrice / 5) * 5;
     const loyaltyPoints = Math.ceil((finalPrice * 0.5) / 5) * 5;
 
@@ -90,7 +106,7 @@ export class PricingFallbackService {
       finalPrice,
       exactPrice,
       loyaltyPoints,
-      surgeMultiplier: 1.0,
+      surgeMultiplier: mult,
       distanceKm,
       durationMin: Math.ceil(durationMin),
       fullResponse: {
@@ -98,6 +114,7 @@ export class PricingFallbackService {
         base_fare: PricingFallbackService.BASE_FARE,
         distance_cost: +(distanceKm * PricingFallbackService.RATE_PER_KM).toFixed(2),
         duration_cost: +(durationMin * PricingFallbackService.RATE_PER_MIN).toFixed(2),
+        car_multiplier: mult,
       },
     };
   }
@@ -119,7 +136,10 @@ export class PricingFallbackService {
       durationMin * PricingFallbackService.RATE_PER_MIN;
 
     const items: BatchPricingItem[] = req.carTypes.map((ct) => {
-      const mult = PricingFallbackService.CAR_MULT[normalizeCarType(ct)] ?? 1.0;
+      const mult = this.getMultiplier(
+        ct,
+        req.carMultipliers?.[normalizeCarType(ct)],
+      );
       const raw = rawComfort * mult;
       const exactPrice = Math.max(PricingFallbackService.MIN_FARE, +raw.toFixed(2));
       const finalPrice = Math.ceil(exactPrice / 5) * 5;
@@ -129,7 +149,7 @@ export class PricingFallbackService {
         finalPrice,
         exactPrice,
         loyaltyPoints,
-        surgeMultiplier: 1.0,
+        surgeMultiplier: mult,
       };
     });
 

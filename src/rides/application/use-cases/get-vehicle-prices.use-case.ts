@@ -49,6 +49,14 @@ export class GetVehiclePricesUseCase {
     const normalizedTypes = rawCarTypes.map((name) => normalizeCarType(name));
     const uniqueCarTypes = Array.from(new Set(normalizedTypes));
 
+    // Build multiplier map from DB
+    const carMultipliers: Record<string, number> = {};
+    for (const vc of vehicleClasses) {
+      const key = normalizeCarType(vc.name);
+      // If duplicate normalized names, last one wins (they should have same multiplier)
+      carMultipliers[key] = vc.multiplier;
+    }
+
     this.logger.log(
       `Batch pricing for ${vehicleClasses.length} vehicle classes (deduplicated to ${uniqueCarTypes.length}): ${uniqueCarTypes.join(', ')}`,
     );
@@ -60,6 +68,7 @@ export class GetVehiclePricesUseCase {
       dropoffLat: dto.dropoffLat,
       dropoffLon: dto.dropoffLon,
       carTypes: uniqueCarTypes,
+      carMultipliers,
       bookingDt: dto.bookingDt,
     };
 

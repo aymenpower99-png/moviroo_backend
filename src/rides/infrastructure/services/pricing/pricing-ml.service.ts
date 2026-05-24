@@ -7,6 +7,7 @@ export interface PricingRequest {
   dropoffLat: number;
   dropoffLon: number;
   carType: string;
+  carMultiplier?: number;
   bookingDt?: string;
 }
 
@@ -26,6 +27,7 @@ export interface BatchPricingRequest {
   dropoffLat: number;
   dropoffLon: number;
   carTypes: string[];
+  carMultipliers?: Record<string, number>;
   bookingDt?: string;
 }
 
@@ -54,7 +56,7 @@ export class PricingMlService {
    * Call ML API for single car type pricing
    */
   async callMlApi(req: PricingRequest): Promise<PricingResult> {
-    const body = {
+    const body: Record<string, any> = {
       lat_origin: req.pickupLat,
       lon_origin: req.pickupLon,
       lat_dest: req.dropoffLat,
@@ -62,6 +64,9 @@ export class PricingMlService {
       car_type: req.carType,
       booking_dt: req.bookingDt ?? new Date().toISOString(),
     };
+    if (req.carMultiplier !== undefined && req.carMultiplier !== null) {
+      body.car_multiplier = req.carMultiplier;
+    }
 
     const res = await withRetry(
       () =>
@@ -97,7 +102,7 @@ export class PricingMlService {
    * Call ML API for batch pricing (multiple car types)
    */
   async callMlApiBatch(req: BatchPricingRequest): Promise<BatchPricingResult> {
-    const body = {
+    const body: Record<string, any> = {
       lat_origin: req.pickupLat,
       lon_origin: req.pickupLon,
       lat_dest: req.dropoffLat,
@@ -105,6 +110,9 @@ export class PricingMlService {
       car_types: req.carTypes,
       booking_dt: req.bookingDt ?? new Date().toISOString(),
     };
+    if (req.carMultipliers && Object.keys(req.carMultipliers).length > 0) {
+      body.car_multipliers = req.carMultipliers;
+    }
 
     const res = await withRetry(
       () =>
