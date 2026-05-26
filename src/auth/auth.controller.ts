@@ -162,6 +162,7 @@ export class AuthController {
 
   @Post('resend-verification')
   @HttpCode(200)
+  @Throttle({ default: { limit: 3, ttl: 60000 } })
   resendVerification(@Body() body: { email: string }) {
     return this.authService.resendVerification(body.email);
   }
@@ -170,6 +171,7 @@ export class AuthController {
 
   @Post('google')
   @HttpCode(200)
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   googleSignIn(@Body() dto: GoogleSignInDto, @Req() req: Request) {
     const deviceLabel = (req.headers['x-device-name'] as string) ?? 'Unknown';
     const ipAddress = this.getRealIp(req);
@@ -180,6 +182,7 @@ export class AuthController {
 
   @Post('forgot-password')
   @HttpCode(200)
+  @Throttle({ default: { limit: 3, ttl: 60000 } })
   forgotPassword(@Body() dto: ForgotPasswordDto) {
     return this.passwordService.forgotPassword(dto.email);
   }
@@ -199,6 +202,7 @@ export class AuthController {
   // POST: JSON API — used by both the React frontend and the backend HTML form
   @Post('reset-password')
   @HttpCode(200)
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   resetPassword(@Body() dto: ResetPasswordDto) {
     return this.passwordService.resetPassword(dto.token, dto.newPassword);
   }
@@ -269,6 +273,7 @@ export class AuthController {
   @Post('2fa/totp/setup')
   @UseGuards(AuthGuard('jwt'), PassengerGuard)
   @HttpCode(200)
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   setupTotp(@CurrentUser() user: User) {
     return this.authService.setupTotp(user);
   }
@@ -276,6 +281,7 @@ export class AuthController {
   @Post('2fa/totp/confirm')
   @UseGuards(AuthGuard('jwt'), PassengerGuard)
   @HttpCode(200)
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   confirmTotpSetup(@CurrentUser() user: User, @Body() body: { code: string }) {
     return this.authService.confirmTotpSetup(user.id, body.code);
   }
@@ -284,6 +290,7 @@ export class AuthController {
   @UseGuards(AuthGuard('jwt'), PassengerGuard, SensitiveActionGuard)
   @ActionPurpose('disable-totp')
   @HttpCode(200)
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   disableTotp(@CurrentUser() user: User, @Body() body: { code: string }) {
     return this.authService.disableTotp(user.id, body.code);
   }
@@ -293,6 +300,7 @@ export class AuthController {
   @Patch('2fa')
   @UseGuards(AuthGuard('jwt'))
   @HttpCode(200)
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   toggle2fa(@CurrentUser() user: User, @Body() dto: Toggle2faDto) {
     return this.authService.toggle2fa(user.id, dto.enabled, dto.otp);
   }
@@ -302,6 +310,7 @@ export class AuthController {
   @Post('2fa/email/request-otp')
   @UseGuards(AuthGuard('jwt'))
   @HttpCode(200)
+  @Throttle({ default: { limit: 3, ttl: 60000 } })
   requestEmail2faEnableOtp(@CurrentUser() user: User) {
     return this.authService.sendEmail2faEnableOtp(user.id);
   }
@@ -311,6 +320,7 @@ export class AuthController {
   @Post('2fa/primary/email/request-otp')
   @UseGuards(AuthGuard('jwt'))
   @HttpCode(200)
+  @Throttle({ default: { limit: 3, ttl: 60000 } })
   requestPrimarySwitchEmailOtp(@CurrentUser() user: User) {
     return this.authService.sendPrimarySwitchEmailOtp(user.id);
   }
@@ -318,6 +328,7 @@ export class AuthController {
   @Patch('2fa/primary')
   @UseGuards(AuthGuard('jwt'))
   @HttpCode(200)
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   switchPrimary2fa(
     @CurrentUser() user: User,
     @Body() dto: SwitchPrimary2faDto,
@@ -334,6 +345,7 @@ export class AuthController {
   @Post('passkey/enable')
   @UseGuards(AuthGuard('jwt'))
   @HttpCode(200)
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   enablePasskey(@CurrentUser() user: User) {
     return this.biometricService.enablePasskey(user.id);
   }
@@ -341,6 +353,7 @@ export class AuthController {
   @Delete('passkey')
   @UseGuards(AuthGuard('jwt'))
   @HttpCode(200)
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   disablePasskey(@CurrentUser() user: User) {
     return this.biometricService.disablePasskey(user.id);
   }
@@ -353,6 +366,7 @@ export class AuthController {
   @Post('passkey/verify')
   @UseGuards(AuthGuard('jwt'))
   @HttpCode(200)
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   verifyPasskey(@CurrentUser() user: User, @Body() dto: PasskeyVerifyDto) {
     return this.biometricService.verifyPasskey(
       user.id,
@@ -366,6 +380,7 @@ export class AuthController {
   @Post('me/delete/request-otp')
   @UseGuards(AuthGuard('jwt'))
   @HttpCode(200)
+  @Throttle({ default: { limit: 3, ttl: 60000 } })
   requestDeleteOtp(@CurrentUser() user: User) {
     return this.accountService.requestDeleteOtp(user.id);
   }
@@ -374,6 +389,7 @@ export class AuthController {
   @UseGuards(AuthGuard('jwt'))
   @ActionPurpose('delete-account')
   @HttpCode(200)
+  @Throttle({ default: { limit: 3, ttl: 60000 } })
   deleteAccount(@CurrentUser() user: User, @Body() dto: DeleteAccountDto) {
     return this.accountService.deleteAccount(user.id, dto);
   }
@@ -419,6 +435,7 @@ export class AuthController {
   @Post('passkeys/register/start')
   @UseGuards(AuthGuard('jwt'))
   @HttpCode(200)
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   startPasskeyRegistration(
     @CurrentUser() user: User,
     @Body() dto: WebAuthnRegisterStartDto,
@@ -429,6 +446,7 @@ export class AuthController {
   @Post('passkeys/register/finish')
   @UseGuards(AuthGuard('jwt'))
   @HttpCode(200)
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   finishPasskeyRegistration(
     @CurrentUser() user: User,
     @Body() dto: WebAuthnRegisterFinishDto,

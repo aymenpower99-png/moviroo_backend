@@ -36,7 +36,7 @@ export class AuthWebAuthnService {
    */
   private challenges = new Map<
     string,
-    { challenge: string; userId?: string; expiresAt: Date }
+    { challenge: string; userId?: string; userHandle?: string; expiresAt: Date }
   >();
 
   constructor(
@@ -67,23 +67,25 @@ export class AuthWebAuthnService {
     key: string,
     challenge: string,
     userId?: string,
+    userHandle?: string,
     ttlMs = 120000,
   ) {
     this.challenges.set(key, {
       challenge,
       userId,
+      userHandle,
       expiresAt: new Date(Date.now() + ttlMs),
     });
   }
 
-  private getChallenge(key: string): { challenge: string; userId?: string } | null {
+  private getChallenge(key: string): { challenge: string; userId?: string; userHandle?: string } | null {
     const entry = this.challenges.get(key);
     if (!entry) return null;
     if (entry.expiresAt < new Date()) {
       this.challenges.delete(key);
       return null;
     }
-    return { challenge: entry.challenge, userId: entry.userId };
+    return { challenge: entry.challenge, userId: entry.userId, userHandle: entry.userHandle };
   }
 
   /**
@@ -130,6 +132,14 @@ export class AuthWebAuthnService {
 
   // ─── Registration ───────────────────────────────────────────────────────────
 
+  private readonly MAX_PASSKEYS_PER_USER = 5;
+
+  /** Stable user handle for a given user. Must be identical across
+   *  all registrations so the OS groups passkeys under a single account. */
+  private getUserHandle(userId: string): string {
+    return Buffer.from(userId, 'utf-8').toString('base64url');
+  }
+
   async startRegistration(user: User, deviceName?: string) {
     const { rpName, rpID } = this.getRpConfig();
 
@@ -137,18 +147,40 @@ export class AuthWebAuthnService {
       where: { userId: user.id },
     });
 
+    if (existing.length >= this.MAX_PASSKEYS_PER_USER) {
+      throw new BadRequestException(
+        `Maximum of ${this.MAX_PASSKEYS_PER_USER} passkeys reached. Remove one before adding a new passkey.`,
+      );
+    }
+
+    // Device-level deduplication: if a passkey with the same device name
+    // already exists, return the existing one instead of creating a duplicate.
+    const effectiveDeviceName = deviceName ?? 'Unknown Device';
+    const sameDevice = existing.find((c) => c.deviceName === effectiveDeviceName);
+    if (sameDevice) {
+      return {
+        optionsId: null,
+        options: null,
+        alreadyExists: true,
+        credentialId: sameDevice.credentialId,
+        deviceName: sameDevice.deviceName,
+      };
+    }
+
     const excludeCredentials = existing.map((c) => ({
       id: c.credentialId,
       type: 'public-key' as const,
       transports: (c.transports as any) ?? undefined,
     }));
 
+    const userHandle = this.getUserHandle(user.id);
+
     const options = await generateRegistrationOptions({
       rpName,
       rpID,
       userName: user.email,
       userDisplayName: `${user.firstName} ${user.lastName}`.trim(),
-      userID: Buffer.from(user.id, 'utf-8'),
+      userID: Buffer.from(userHandle, 'base64url'),
       attestationType: 'none',
       excludeCredentials,
       authenticatorSelection: {
@@ -158,9 +190,9 @@ export class AuthWebAuthnService {
     });
 
     const optionsId = randomUUID();
-    this.setChallenge(optionsId, options.challenge, user.id);
+    this.setChallenge(optionsId, options.challenge, user.id, userHandle);
 
-    return { optionsId, options, deviceName };
+    return { optionsId, options, deviceName: effectiveDeviceName };
   }
 
   async finishRegistration(
@@ -199,6 +231,20 @@ export class AuthWebAuthnService {
 
     const credential = verification.registrationInfo.credential;
 
+    // Guard against duplicate credentialId (idempotent for retries / races)
+    const existingCredential = await this.passkeyRepo.findOne({
+      where: { credentialId: credential.id },
+    });
+    if (existingCredential) {
+      this.challenges.delete(dto.optionsId);
+      return {
+        success: true,
+        credentialId: existingCredential.credentialId,
+        deviceName: existingCredential.deviceName,
+        message: 'This passkey is already registered.',
+      };
+    }
+
     const passkey = this.passkeyRepo.create({
       userId: user.id,
       credentialId: credential.id,
@@ -206,6 +252,7 @@ export class AuthWebAuthnService {
       counter: credential.counter,
       transports: credential.transports as string[] | null,
       deviceName: dto.deviceName ?? 'Unknown Device',
+      userHandle: entry.userHandle ?? null,
     });
 
     await this.passkeyRepo.save(passkey);
@@ -223,27 +270,13 @@ export class AuthWebAuthnService {
   async startAuthentication(dto?: { email?: string }) {
     const { rpID } = this.getRpConfig();
 
-    let allowCredentials: { id: string; type: 'public-key'; transports?: any[] }[] = [];
-
-    if (dto?.email) {
-      const user = await this.userRepo.findOne({
-        where: { email: dto.email.toLowerCase().trim() },
-      });
-      if (user) {
-        const credentials = await this.passkeyRepo.find({
-          where: { userId: user.id },
-        });
-        allowCredentials = credentials.map((c) => ({
-          id: c.credentialId,
-          type: 'public-key' as const,
-          transports: (c.transports as any) ?? undefined,
-        }));
-      }
-    }
-
+    // Use discoverable credentials (empty allowCredentials) so the OS
+    // groups all passkeys for the same RP under a single account identity.
+    // Passing a list of credential IDs causes Android to show one picker
+    // entry per ID, which creates duplicate account rows.
     const options = await generateAuthenticationOptions({
       rpID,
-      allowCredentials: allowCredentials.length ? allowCredentials : undefined,
+      allowCredentials: undefined, // ← discoverable: OS finds by RP ID
       userVerification: 'required',
     });
 

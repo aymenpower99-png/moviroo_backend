@@ -17,15 +17,20 @@ import { TripPayment } from '../billing/entities/trip-payment.entity';
 import { SupportTicket } from '../support/entities/support-ticket.entity';
 import { UserSession } from './entities/user-session.entity';
 import { PasskeyCredential } from './entities/passkey-credential.entity';
+import { UserConsent } from './entities/user-consent.entity';
+import { MembershipCouponEntity } from '../passenger/entities/membership-coupon.entity';
 import { AnonymizationService } from '../common/services/anonymization.service';
 
 /**
- * Account lifecycle: hard delete with mandatory re-authentication.
+ * Account lifecycle: GDPR deletion with mandatory re-authentication.
  *
  * Re-auth supports exactly ONE of:
  *   - password: current account password
  *   - otp:      email OTP (sent via requestDeleteOtp)
  *   - passkeyToken: action token from AuthBiometricService.verifyPasskey
+ *
+ * The user record is anonymized and soft-deleted (not hard-deleted) so that
+ * FK references from rides, payments, etc. remain valid for accounting.
  */
 @Injectable()
 export class AuthAccountService {
@@ -40,6 +45,10 @@ export class AuthAccountService {
     @InjectRepository(UserSession) private sessionRepo: Repository<UserSession>,
     @InjectRepository(PasskeyCredential)
     private passkeyRepo: Repository<PasskeyCredential>,
+    @InjectRepository(UserConsent)
+    private consentRepo: Repository<UserConsent>,
+    @InjectRepository(MembershipCouponEntity)
+    private couponRepo: Repository<MembershipCouponEntity>,
     private otpService: OtpService,
     private authMailService: AuthMailService,
     private biometricService: AuthBiometricService,
@@ -62,7 +71,7 @@ export class AuthAccountService {
     if (dto.password) {
       if (!user.password) {
         throw new BadRequestException(
-          'This account has no password set (social login).',
+          'This account has no password. Please request a verification code via email or use biometric authentication.',
         );
       }
       const ok = await bcrypt.compare(dto.password, user.password);
@@ -121,9 +130,45 @@ export class AuthAccountService {
     await this.ticketRepo.delete({ authorId: userId });
     this.logger.log(`Deleted support tickets for user: ${userId}`);
 
-    // ── Hard delete user ──────────────────────────────────────────────────
-    await this.userRepo.delete(userId);
-    this.logger.log(`Deleted user account: ${userId}`);
+    // ── Hard delete consents ──────────────────────────────────────────────
+    await this.consentRepo.delete({ userId });
+    this.logger.log(`Deleted consents for user: ${userId}`);
+
+    // ── Hard delete membership coupons ────────────────────────────────────
+    await this.couponRepo.delete({ userId });
+    this.logger.log(`Deleted membership coupons for user: ${userId}`);
+
+    // ── Anonymize user record ─────────────────────────────────────────────
+    const anonymizedEmail = `deleted-${this.anonymizationService.anonymizeString()}@anonymized.local`;
+    await this.userRepo.update(userId, {
+      email: anonymizedEmail,
+      firstName: 'Deleted',
+      lastName: 'User',
+      phone: null,
+      avatarUrl: null,
+      password: null,
+      refreshToken: null,
+      otpCode: null,
+      otpExpiry: null,
+      totpSecret: null,
+      totpEnabled: false,
+      is2faEnabled: false,
+      primary2faMethod: null,
+      passkeyEnabled: false,
+      actionTokenExpiry: null,
+      fcmToken: null,
+      pendingEmail: null,
+      emailChangeToken: null,
+      emailChangeExpiry: null,
+      emailVerified: false,
+      isActive: false,
+      status: 'pending' as any,
+    });
+    this.logger.log(`Anonymized user record for: ${userId}`);
+
+    // ── Soft-delete user (keeps row for FK integrity with rides / payments) ─
+    await this.userRepo.softDelete(userId);
+    this.logger.log(`Soft-deleted user account: ${userId}`);
 
     return { message: 'Account permanently deleted.' };
   }

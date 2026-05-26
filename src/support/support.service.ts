@@ -11,8 +11,9 @@ import { CreateTicketDto } from './dto/create-ticket.dto';
 import { ReplyTicketDto } from './dto/reply-ticket.dto';
 import { UpdateTicketStatusDto } from './dto/update-ticket-status.dto';
 import { UpdateMessageDto } from './dto/update-message.dto';
-import { User } from '../users/entites/user.entity';
+import { User, UserRole } from '../users/entites/user.entity';
 import { SupportGateway } from './support.gateway';
+import { FcmService } from '../notifications/services/fcm.service';
 
 @Injectable()
 export class SupportService {
@@ -24,9 +25,22 @@ export class SupportService {
     @InjectRepository(User)
     private userRepo: Repository<User>,
     private gateway: SupportGateway,
+    private readonly fcmService: FcmService,
   ) {}
 
   // ── helpers ────────────────────────────────────────────────────────────────
+
+  /** Notify all admin users via FCM (best-effort). */
+  private async _notifyAdmins(title: string, body: string, data?: Record<string, string>): Promise<void> {
+    const admins = await this.userRepo.find({
+      where: { role: UserRole.SUPER_ADMIN },
+      select: ['id'],
+    });
+    for (const admin of admins) {
+      this.fcmService.sendToUser(admin.id, title, body, data).catch(() => {});
+    }
+  }
+
   private async enrichTicketWithAuthorAndMessages(ticket: SupportTicket) {
     // fetch messages for this ticket
     const messages = await this.messageRepo.find({
@@ -98,7 +112,26 @@ export class SupportService {
       authorId,
       status: TicketStatus.OPEN,
     });
-    return this.ticketRepo.save(ticket);
+    const saved = await this.ticketRepo.save(ticket);
+
+    // Notify admins that a new ticket was opened
+    this._notifyAdmins(
+      'New Support Ticket',
+      dto.subject,
+      {
+        type: 'SUPPORT_TICKET_CREATED',
+        ticketId: saved.id,
+        subject: dto.subject,
+        channelId: 'support_messages',
+      },
+    ).catch(() => {});
+
+    // Real-time WebSocket broadcast to all admins
+    this.gateway.emitToAdmins('support:ticket:created', {
+      ticket: await this.enrichTicketWithAuthorAndMessages(saved),
+    });
+
+    return saved;
   }
 
   // ── User: list own tickets ─────────────────────────────────────────────────
@@ -155,6 +188,21 @@ export class SupportService {
       message: saved,
       senderId,
     });
+
+    // Push notify the assigned admin (or all admins if unassigned)
+    const notifyTitle = 'Ticket Reply';
+    const notifyBody = dto.body.length > 100 ? dto.body.substring(0, 100) + '…' : dto.body;
+    const notifyData: Record<string, string> = {
+      type: 'SUPPORT_TICKET_REPLY',
+      ticketId,
+      senderId,
+      channelId: 'support_messages',
+    };
+    if (ticket.assignedAdminId) {
+      this.fcmService.sendToUser(ticket.assignedAdminId, notifyTitle, notifyBody, notifyData).catch(() => {});
+    } else {
+      this._notifyAdmins(notifyTitle, notifyBody, notifyData).catch(() => {});
+    }
 
     return saved;
   }
@@ -252,6 +300,21 @@ export class SupportService {
       senderId: adminId,
       status: newStatus,
     });
+
+    // Push notify the ticket author
+    const notifyBody = dto.body.length > 100 ? dto.body.substring(0, 100) + '…' : dto.body;
+    this.fcmService.sendToUser(
+      ticket.authorId,
+      'Support Reply',
+      notifyBody,
+      {
+        type: 'SUPPORT_TICKET_REPLY',
+        ticketId,
+        senderId: adminId,
+        status: newStatus,
+        channelId: 'support_messages',
+      },
+    ).catch(() => {});
 
     return saved;
   }

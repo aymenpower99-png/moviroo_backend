@@ -9,9 +9,13 @@ import {
   SupportUserController,
   SupportAdminController,
 } from './support.controller';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([SupportTicket, TicketMessage, User])],
+  imports: [
+    TypeOrmModule.forFeature([SupportTicket, TicketMessage, User]),
+    NotificationsModule,
+  ],
   controllers: [SupportUserController, SupportAdminController],
   providers: [SupportService, SupportGateway],
 })

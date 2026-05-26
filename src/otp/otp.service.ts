@@ -2,6 +2,7 @@ import {
   Injectable,
   BadRequestException,
   UnauthorizedException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -13,12 +14,77 @@ import { User } from '../users/entites/user.entity';
 const OTP_TTL_MS = 10 * 60 * 1000;
 const OTP_LENGTH = 6;
 
+/** Account-level brute-force protection settings. */
+const MAX_OTP_ATTEMPTS = 5;
+const MAX_TOTP_ATTEMPTS = 5;
+const LOCKOUT_DURATION_MS = 15 * 60 * 1000; // 15 minutes
+
 @Injectable()
 export class OtpService {
   constructor(
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
   ) {}
+
+  // ─── Brute-force protection helpers ───────────────────────────────────────
+
+  private _assertNotLocked(
+    user: User,
+    kind: 'otp' | 'totp',
+  ): void {
+    const lockedUntil =
+      kind === 'otp' ? user.otpLockedUntil : user.totpLockedUntil;
+    if (lockedUntil && new Date() < lockedUntil) {
+      const mins = Math.ceil(
+        (lockedUntil.getTime() - Date.now()) / 60000,
+      );
+      throw new ForbiddenException(
+        `Too many failed attempts. Please wait ${mins} minute${mins === 1 ? '' : 's'} and try again.`,
+      );
+    }
+  }
+
+  private async _recordFailedAttempt(
+    userId: string,
+    kind: 'otp' | 'totp',
+  ): Promise<void> {
+    const colAttempts =
+      kind === 'otp' ? 'otpFailedAttempts' : 'totpFailedAttempts';
+    const colLocked =
+      kind === 'otp' ? 'otpLockedUntil' : 'totpLockedUntil';
+    const maxAttempts =
+      kind === 'otp' ? MAX_OTP_ATTEMPTS : MAX_TOTP_ATTEMPTS;
+
+    const user = await this.userRepo.findOneOrFail({ where: { id: userId } });
+    const attempts = (user[colAttempts] as number) + 1;
+
+    if (attempts >= maxAttempts) {
+      await this.userRepo.update(userId, {
+        [colAttempts]: attempts,
+        [colLocked]: new Date(Date.now() + LOCKOUT_DURATION_MS),
+      });
+      throw new ForbiddenException(
+        `Too many failed attempts. Please wait ${LOCKOUT_DURATION_MS / 60000} minutes and try again.`,
+      );
+    }
+
+    await this.userRepo.update(userId, { [colAttempts]: attempts });
+  }
+
+  private async _clearAttempts(
+    userId: string,
+    kind: 'otp' | 'totp',
+  ): Promise<void> {
+    const colAttempts =
+      kind === 'otp' ? 'otpFailedAttempts' : 'totpFailedAttempts';
+    const colLocked =
+      kind === 'otp' ? 'otpLockedUntil' : 'totpLockedUntil';
+
+    await this.userRepo.update(userId, {
+      [colAttempts]: 0,
+      [colLocked]: null,
+    });
+  }
 
   // ─── Email OTP ────────────────────────────────────────────────────────────
 
@@ -39,6 +105,8 @@ export class OtpService {
     const user = await this.userRepo.findOne({ where: { id: userId } });
     if (!user) throw new UnauthorizedException('User not found');
 
+    this._assertNotLocked(user, 'otp');
+
     if (!user.otpCode || !user.otpExpiry) {
       throw new BadRequestException('No OTP requested');
     }
@@ -50,9 +118,11 @@ export class OtpService {
 
     const inputHash = this.hash(code);
     if (inputHash !== user.otpCode) {
+      await this._recordFailedAttempt(userId, 'otp');
       throw new UnauthorizedException('Invalid OTP code');
     }
 
+    await this._clearAttempts(userId, 'otp');
     await this.clearOtp(userId);
   }
 
@@ -80,9 +150,15 @@ export class OtpService {
     if (!user) throw new UnauthorizedException('User not found');
     if (!user.totpSecret) throw new BadRequestException('TOTP setup not started');
 
-    const isValid = authenticator.verify({ token: code, secret: user.totpSecret });
-    if (!isValid) throw new UnauthorizedException('Invalid authenticator code');
+    this._assertNotLocked(user, 'totp');
 
+    const isValid = authenticator.verify({ token: code, secret: user.totpSecret });
+    if (!isValid) {
+      await this._recordFailedAttempt(userId, 'totp');
+      throw new UnauthorizedException('Invalid authenticator code');
+    }
+
+    await this._clearAttempts(userId, 'totp');
     await this.userRepo.update(userId, { totpEnabled: true });
   }
 
@@ -93,14 +169,23 @@ export class OtpService {
       throw new BadRequestException('TOTP not enabled');
     }
 
+    this._assertNotLocked(user, 'totp');
+
     const isValid = authenticator.verify({ token: code, secret: user.totpSecret });
-    if (!isValid) throw new UnauthorizedException('Invalid authenticator code');
+    if (!isValid) {
+      await this._recordFailedAttempt(userId, 'totp');
+      throw new UnauthorizedException('Invalid authenticator code');
+    }
+
+    await this._clearAttempts(userId, 'totp');
   }
 
   async disableTotp(userId: string): Promise<void> {
     await this.userRepo.update(userId, {
       totpSecret:  null,
       totpEnabled: false,
+      totpFailedAttempts: 0,
+      totpLockedUntil: null,
     });
   }
 

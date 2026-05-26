@@ -10,6 +10,7 @@ export interface GeocodingResult {
   country: string;
   place_type?: string;
   category?: string;
+  source?: string;
 }
 
 @Injectable()
@@ -158,9 +159,12 @@ export class GeocodingMapboxService {
   /**
    * Mapbox nearby places (reverse geocoding with POI types)
    */
-  async nearby(lat: number, lon: number): Promise<GeocodingResult[]> {
+  async nearby(lat: number, lon: number, options?: { lang?: string }): Promise<GeocodingResult[]> {
     try {
-      const url = `${this.MAPBOX_BASE_URL}/${lon},${lat}.json?access_token=${this.MAPBOX_ACCESS_TOKEN}&types=poi,address,neighborhood,locality,place&limit=10`;
+      let url = `${this.MAPBOX_BASE_URL}/${lon},${lat}.json?access_token=${this.MAPBOX_ACCESS_TOKEN}&types=poi,address,neighborhood,locality,place&limit=10`;
+      if (options?.lang) {
+        url += `&language=${options.lang}`;
+      }
 
       const res = await withRetry(
         () => fetch(url),
@@ -200,6 +204,37 @@ export class GeocodingMapboxService {
   }
 
   /**
+   * Build a clean localized display_name from Mapbox feature.
+   * Uses structured context to build address without mixed languages.
+   */
+  private buildMapboxDisplayName(feature: any): string {
+    const text = feature.text || '';
+    const context = feature.context || [];
+
+    const parts: string[] = [];
+    if (text) {
+      parts.push(text);
+    }
+
+    // Extract useful context layers (exclude country, region)
+    const usefulTypes = ['neighborhood', 'locality', 'place', 'district'];
+    for (const ctx of context) {
+      const ctxId = ctx.id || '';
+      const ctxText = ctx.text || '';
+      // Skip country and region-level admin
+      if (ctxId.includes('country')) continue;
+      if (ctxId.includes('region')) continue;
+      if (usefulTypes.some((t) => ctxId.includes(t))) {
+        if (ctxText && !parts.some((p) => p.toLowerCase() === ctxText.toLowerCase())) {
+          parts.push(ctxText);
+        }
+      }
+    }
+
+    return parts.join(', ');
+  }
+
+  /**
    * Parse Mapbox result into standard format
    */
   private parseMapboxResult(
@@ -227,15 +262,19 @@ export class GeocodingMapboxService {
       : '';
     const category = feature.properties?.category || '';
 
+    // Build clean localized display name
+    const localizedName = this.buildMapboxDisplayName(feature);
+
     return {
       lat,
       lon,
-      display_name: placeName,
-      address: fullContext,
+      display_name: localizedName || placeName,
+      address: localizedName || fullContext,
       city,
       country,
       place_type: placeType,
       category,
+      source: 'mapbox',
     };
   }
 

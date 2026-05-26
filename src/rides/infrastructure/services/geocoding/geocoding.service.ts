@@ -77,27 +77,31 @@ export class GeocodingService {
       return mapboxResult;
     }
 
-    // Safe fallback
+    // Safe fallback — localized generic label
     this.logger.warn(
       `[GEOCODE] All reverse geocoding failed, using safe fallback for (${lat}, ${lon})`,
     );
+    const safeLabel = this._localizedFallbackLabel(lat, lon, options?.lang);
     const safeResult: GeocodingResult = {
       lat,
       lon,
-      display_name: `Location (${lat.toFixed(4)}, ${lon.toFixed(4)})`,
+      display_name: safeLabel,
+      address: safeLabel,
       city: 'Unknown',
       country: 'Tunisia',
+      source: 'fallback',
     };
     await this.cacheManager.set(cacheKey, safeResult, 300);
     return safeResult;
   }
 
   /** Nearby places around coordinates - Mapbox primary + Nominatim fallback - CACHED */
-  async nearby(lat: number, lon: number): Promise<GeocodingResult[]> {
+  async nearby(lat: number, lon: number, options?: { lang?: string }): Promise<GeocodingResult[]> {
     const startTime = Date.now();
     this.logger.log(`[GEOCODE] Nearby request: (${lat}, ${lon})`);
 
-    const cacheKey = `nearby_v2:${lat.toFixed(4)}:${lon.toFixed(4)}`;
+    const langKey = options?.lang ?? 'default';
+    const cacheKey = `nearby_v2:${lat.toFixed(4)}:${lon.toFixed(4)}:${langKey}`;
     const cached = await this.cacheManager.get<GeocodingResult[]>(cacheKey);
     if (cached) {
       const duration = Date.now() - startTime;
@@ -107,8 +111,8 @@ export class GeocodingService {
       return cached;
     }
 
-    // Primary: Mapbox nearby
-    const mapboxResults = await this.mapboxService.nearby(lat, lon);
+    // Primary: Mapbox nearby (with locale for localized results)
+    const mapboxResults = await this.mapboxService.nearby(lat, lon, options);
 
     // If Mapbox returns only low-precision results (no address/poi), supplement with Nominatim
     const mapboxHighPrecision = mapboxResults.filter(
@@ -121,10 +125,8 @@ export class GeocodingService {
       // Mapbox is good enough
       results = mapboxResults;
     } else {
-      // Fallback: query Nominatim around this area
-      const nominatimResults = await this.nominatimService.autocomplete('', {
-        proximity: { lat, lon },
-      });
+      // Fallback: query Nominatim for the nearest POI/place with extratags
+      const nominatimResults = await this.nominatimService.nearby(lat, lon, options);
       const merged = [...mapboxResults, ...nominatimResults];
       const filtered = this.filterValidCoordinates(merged);
       const deduplicated = this.deduplicateResults(filtered, 200); // relaxed threshold for nearby
@@ -140,46 +142,11 @@ export class GeocodingService {
     return results;
   }
 
-  /** Autocomplete - Mapbox only - CACHED */
+  /** Autocomplete - delegates to parallel search (Mapbox + Nominatim) - CACHED */
   async autocomplete(query: string, options?: AutocompleteOptions): Promise<GeocodingResult[]> {
-    const startTime = Date.now();
-    this.logger.log(`[GEOCODE] Autocomplete request: "${query}"`);
-
-    if (!query || query.trim().length < 2) {
-      this.logger.warn(`[GEOCODE] Autocomplete query too short: "${query}"`);
-      return [];
-    }
-
-    const proxKey = options?.proximity
-      ? `${options.proximity.lat.toFixed(2)},${options.proximity.lon.toFixed(2)}`
-      : 'none';
-    const cacheKey = `autocomplete_v2:${query.trim().toLowerCase()}:${proxKey}:${options?.lang ?? 'default'}`;
-    const cached = await this.cacheManager.get<GeocodingResult[]>(cacheKey);
-    if (cached) {
-      const duration = Date.now() - startTime;
-      this.logger.log(
-        `[GEOCODE] Cache HIT for autocomplete: "${query}" - ${duration}ms - ${cached.length} results`,
-      );
-      return cached;
-    }
-
-    // Query Mapbox only
-    const apiStart = Date.now();
-    const mapboxResults = await this.mapboxService.autocomplete(query, options);
-    const apiDuration = Date.now() - apiStart;
-
-    this.logger.log(
-      `[GEOCODE] Autocomplete API results for "${query}" - Mapbox: ${mapboxResults.length} - ${apiDuration}ms`,
-    );
-
-    const results = mapboxResults.slice(0, 10); // Return top 10 results
-    await this.cacheManager.set(cacheKey, results, 300); // 5 minutes
-
-    const totalDuration = Date.now() - startTime;
-    this.logger.log(
-      `[GEOCODE] Autocomplete complete: "${query}" - ${totalDuration}ms - ${results.length} final results`,
-    );
-    return results;
+    // autocomplete() now uses the same parallel logic as autocompleteParallel()
+    // to ensure Nominatim fallback is always available
+    return this.autocompleteParallel(query, options);
   }
 
   /** Parallel autocomplete - Mapbox + Nominatim with precision ranking - CACHED */
@@ -364,5 +331,19 @@ export class GeocodingService {
 
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
+  }
+
+  /** Localized fallback label when all providers fail */
+  private _localizedFallbackLabel(lat: number, lon: number, lang?: string): string {
+    const coord = `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+    switch (lang?.toLowerCase()) {
+      case 'fr':
+        return `Lieu sélectionné (${coord})`;
+      case 'ar':
+        return `الموقع المحدد (${coord})`;
+      case 'en':
+      default:
+        return `Selected location (${coord})`;
+    }
   }
 }

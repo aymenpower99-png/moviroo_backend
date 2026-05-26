@@ -29,6 +29,7 @@ import { UserConsent } from './entities/user-consent.entity';
 import { Ride } from '../rides/domain/entities/ride.entity';
 import { TripPayment } from '../billing/entities/trip-payment.entity';
 import { SupportTicket } from '../support/entities/support-ticket.entity';
+import { MembershipCouponEntity } from '../passenger/entities/membership-coupon.entity';
 
 import { OtpService } from '../otp/otp.service';
 import { MailModule } from '../mail/mail.module';
@@ -53,6 +54,7 @@ import { ConsentService } from './services/consent.service';
       Ride,
       TripPayment,
       SupportTicket,
+      MembershipCouponEntity,
     ]),
     PassportModule,
     JwtModule.register({}),

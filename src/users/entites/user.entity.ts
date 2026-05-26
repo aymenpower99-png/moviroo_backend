@@ -160,6 +160,30 @@ export class User {
   @Column({ name: 'totp_enabled', type: 'boolean', default: false })
   totpEnabled: boolean;
 
+  // ─── Brute-force attempt tracking ──────────────────────────────────────────
+
+  @Column({ name: 'otp_failed_attempts', type: 'int', default: 0 })
+  otpFailedAttempts: number;
+
+  @Column({
+    name: 'otp_locked_until',
+    type: 'timestamptz',
+    nullable: true,
+    default: null,
+  })
+  otpLockedUntil: Date | null;
+
+  @Column({ name: 'totp_failed_attempts', type: 'int', default: 0 })
+  totpFailedAttempts: number;
+
+  @Column({
+    name: 'totp_locked_until',
+    type: 'timestamptz',
+    nullable: true,
+    default: null,
+  })
+  totpLockedUntil: Date | null;
+
   // Primary 2FA method used at login time ('email' or 'totp').
   // null means no 2FA primary selected (user has no 2FA on).
   @Column({

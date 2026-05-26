@@ -112,8 +112,9 @@ export class RidesController {
     @Query('lat', ParseFloatPipe) lat: number,
     @Query('lon', ParseFloatPipe) lon: number,
     @Query('q') q?: string,
+    @Query('lang') lang?: string,
   ) {
-    return this.geocodingService.nearby(lat, lon);
+    return this.geocodingService.nearby(lat, lon, { lang });
   }
 
   /* ─── Autocomplete search: query → merged results ───────────────────── */

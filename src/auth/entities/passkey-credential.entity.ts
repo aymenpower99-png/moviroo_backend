@@ -40,6 +40,12 @@ export class PasskeyCredential {
   @Column({ name: 'device_name', type: 'varchar', length: 255, nullable: true })
   deviceName: string | null;
 
+  /** WebAuthn user handle (base64url) used during registration.
+   *  Must be identical across all registrations for the same user
+   *  so the OS groups them under a single account identity. */
+  @Column({ name: 'user_handle', type: 'text', nullable: true })
+  userHandle: string | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 
