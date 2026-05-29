@@ -9,6 +9,8 @@ import { Driver, DriverAvailabilityStatus } from '../entities/driver.entity';
 import { Vehicle, VehicleStatus } from '../../vehicles/entities/vehicle.entity';
 import { User } from '../../users/entites/user.entity';
 import { WorkArea } from '../../work-area/entities/work-area.entity';
+import { Ride } from '../../rides/domain/entities/ride.entity';
+import { RideStatus } from '../../rides/domain/enums/ride-status.enum';
 import { CreateDriverDto } from '../dto/create-driver.dto';
 import { UpdateDriverDto } from '../dto/update-driver.dto';
 
@@ -19,6 +21,7 @@ export class DriverAdminService {
     @InjectRepository(Vehicle) private vehicleRepo: Repository<Vehicle>,
     @InjectRepository(User) private userRepo: Repository<User>,
     @InjectRepository(WorkArea) private workAreaRepo: Repository<WorkArea>,
+    @InjectRepository(Ride) private rideRepo: Repository<Ride>,
   ) {}
 
   // ─── Create ───────────────────────────────────────────────────────────────────
@@ -132,16 +135,24 @@ export class DriverAdminService {
   async findOne(id: string) {
     const driver = await this.findDriverOrFail(id);
 
-    const [user, vehicle] = await Promise.all([
+    const [user, vehicle, totalTrips, cancellationCount] = await Promise.all([
       this.userRepo.findOne({ where: { id: driver.userId } }),
       this.vehicleRepo.findOne({
         where: { driverId: driver.id },
         relations: ['vehicleClass'],
       }),
+      this.rideRepo.count({
+        where: { driverId: driver.userId, status: RideStatus.COMPLETED },
+      }),
+      this.rideRepo.count({
+        where: { driverId: driver.userId, status: RideStatus.CANCELLED },
+      }),
     ]);
 
     return {
       ...driver,
+      totalTrips,
+      cancellationCount,
       firstName: user?.firstName ?? null,
       lastName: user?.lastName ?? null,
       email: user?.email ?? null,

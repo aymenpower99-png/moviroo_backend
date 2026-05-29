@@ -241,12 +241,16 @@ export class RidesController {
         where: { id: ride.id },
         relations: ['passenger'],
       });
+      const payment = await this.paymentRepo.findOne({
+        where: { rideId: ride.id },
+      });
       if (rideWithPassenger?.passenger?.email) {
         await this.rideMail.sendRideCancelledRefundEmail(
           rideWithPassenger.passenger.email,
           rideWithPassenger.passenger.firstName || 'Passenger',
           rideWithPassenger,
           ride.cancelledBy ?? 'ADMIN',
+          payment?.paymentMethod,
           ride.cancellationReason,
         );
       }

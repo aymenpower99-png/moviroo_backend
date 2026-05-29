@@ -22,7 +22,7 @@ export class EarningsService {
 
   /**
    * Get earnings for a driver (called from GET /earnings/me).
-   * Pure computation — no stored earnings tables.
+   * Uses per-ride commission model: salary + sum of driverEarnings from completed rides.
    */
   async getDriverEarnings(userId: string, monthStr?: string) {
     const driver = await this.driverRepo.findOne({ where: { userId } });
@@ -40,25 +40,37 @@ export class EarningsService {
       },
     });
 
+    // Sum driver earnings (priceFinal minus commission) for all completed rides this month
+    const commissionResult = await this.rideRepo
+      .createQueryBuilder('r')
+      .select('COALESCE(SUM(r.driver_earnings), 0)', 'commission')
+      .where('r.driver_id = :uid', { uid: userId })
+      .andWhere('r.status = :status', { status: RideStatus.COMPLETED })
+      .andWhere('r.completed_at >= :start', { start: startDate })
+      .andWhere('r.completed_at <= :end', { end: endDate })
+      .getRawOne();
+    const commission = Number(commissionResult?.commission) || 0;
+
     // Get active commission tiers
     const allTiers = await this.tierRepo.find({
       where: { isActive: true },
       order: { sortOrder: 'ASC', requiredRides: 'ASC' },
     });
 
-    // Calculate commission from tiers
-    let commission = 0;
-    const tiers = allTiers.map((t) => {
-      const reached = completedRides >= t.requiredRides;
-      if (reached) commission += Number(t.bonusAmount);
-      return {
-        tierId: t.id,
-        tierName: t.name,
-        requiredRides: t.requiredRides,
-        bonusAmount: Number(t.bonusAmount),
-        reached,
-      };
-    });
+    // Determine current tier reached
+    const currentTier = allTiers.reduce((highest, tier) => {
+      if (completedRides >= tier.requiredRides) return tier;
+      return highest;
+    }, null as CommissionTier | null);
+
+    // Build tier progress list
+    const tiers = allTiers.map((t) => ({
+      tierId: t.id,
+      tierName: t.name,
+      requiredRides: t.requiredRides,
+      commissionRate: Number(t.commissionRate),
+      reached: completedRides >= t.requiredRides,
+    }));
 
     // Next tier
     const unreachedTier = allTiers.find(
@@ -71,7 +83,7 @@ export class EarningsService {
         }
       : null;
 
-    // Net earnings = salary + commission
+    // Net earnings = salary + sum of driver earnings from rides
     const netEarnings = Math.round((salary + commission) * 100) / 100;
 
     // Daily rides breakdown for chart
@@ -83,11 +95,23 @@ export class EarningsService {
     });
     const onlineTimeMs = onlineHistory?.onlineTimeMs || 0;
 
+    const totalTrips = await this.rideRepo.count({
+      where: { driverId: userId, status: RideStatus.COMPLETED },
+    });
+
     return {
       salary,
       commission: Math.round(commission * 100) / 100,
       netEarnings,
       ridesCompleted: completedRides,
+      totalTrips,
+      currentTier: currentTier
+        ? {
+            tierId: currentTier.id,
+            tierName: currentTier.name,
+            commissionRate: Number(currentTier.commissionRate),
+          }
+        : null,
       tiers,
       nextTier,
       dailyRides,
@@ -100,10 +124,6 @@ export class EarningsService {
    */
   async getAllDriversEarnings(monthStr?: string, page = 1, limit = 20) {
     const { startDate, endDate } = this.parseMonthRange(monthStr);
-    const allTiers = await this.tierRepo.find({
-      where: { isActive: true },
-      order: { sortOrder: 'ASC', requiredRides: 'ASC' },
-    });
 
     const [drivers, total] = await this.driverRepo.findAndCount({
       skip: (page - 1) * limit,
@@ -123,12 +143,19 @@ export class EarningsService {
           },
         });
 
-        let commission = 0;
-        for (const t of allTiers) {
-          if (completedRides >= t.requiredRides) {
-            commission += Number(t.bonusAmount);
-          }
-        }
+        const commissionResult = await this.rideRepo
+          .createQueryBuilder('r')
+          .select('COALESCE(SUM(r.driver_earnings), 0)', 'commission')
+          .where('r.driver_id = :uid', { uid: driver.userId })
+          .andWhere('r.status = :status', { status: RideStatus.COMPLETED })
+          .andWhere('r.completed_at >= :start', { start: startDate })
+          .andWhere('r.completed_at <= :end', { end: endDate })
+          .getRawOne();
+        const commission = Number(commissionResult?.commission) || 0;
+
+        const totalTrips = await this.rideRepo.count({
+          where: { driverId: driver.userId, status: RideStatus.COMPLETED },
+        });
 
         const netEarnings = Math.round((salary + commission) * 100) / 100;
         const userName = driver.user
@@ -140,6 +167,7 @@ export class EarningsService {
           driverId: driver.userId,
           driverName: userName,
           ridesCompleted: completedRides,
+          totalTrips,
           salary,
           commission: Math.round(commission * 100) / 100,
           netEarnings,

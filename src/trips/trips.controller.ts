@@ -28,6 +28,7 @@ import {
   Driver,
   DriverAvailabilityStatus,
 } from '../driver/entities/driver.entity';
+import { TripPayment } from '../billing/entities/trip-payment.entity';
 
 import { StartEnrouteUseCase } from './application/use-cases/start-enroute.use-case';
 import { ArrivedUseCase } from './application/use-cases/arrived.use-case';
@@ -60,6 +61,8 @@ export class TripsController {
     private readonly locRepo: Repository<DriverLocation>,
     @InjectRepository(Driver)
     private readonly driverRepo: Repository<Driver>,
+    @InjectRepository(TripPayment)
+    private readonly paymentRepo: Repository<TripPayment>,
     private readonly driverNotif: DriverNotificationService,
     private readonly passengerNotif: PassengerNotificationService,
   ) {}
@@ -245,15 +248,6 @@ export class TripsController {
     ride.cancellationReason = body?.reason ?? null;
     await this.rideRepo.save(ride);
 
-    // Increment driver's cancellation count
-    const driver = await this.driverRepo.findOne({
-      where: { userId: user.id },
-    });
-    if (driver) {
-      driver.cancellationCount = (driver.cancellationCount ?? 0) + 1;
-      await this.driverRepo.save(driver);
-    }
-
     // Free driver: reset availabilityStatus so they can receive next dispatch
     await this.driverRepo.update(
       { userId: user.id },
@@ -272,7 +266,14 @@ export class TripsController {
 
     // Push notification to passenger
     if (ride.passengerId) {
-      this.passengerNotif.rideCancelledByDriver(ride.passengerId, rideId);
+      const payment = await this.paymentRepo.findOne({
+        where: { rideId: rideId },
+      });
+      this.passengerNotif.rideCancelledByDriver(
+        ride.passengerId,
+        rideId,
+        payment?.paymentMethod ?? undefined,
+      );
     }
 
     // Send cancellation + refund email to passenger
@@ -281,12 +282,16 @@ export class TripsController {
         where: { id: rideId },
         relations: ['passenger'],
       });
+      const payment = await this.paymentRepo.findOne({
+        where: { rideId: rideId },
+      });
       if (rideWithPassenger?.passenger?.email) {
         await this.rideMail.sendRideCancelledRefundEmail(
           rideWithPassenger.passenger.email,
           rideWithPassenger.passenger.firstName || 'Passenger',
           rideWithPassenger,
           'DRIVER',
+          payment?.paymentMethod,
           body?.reason ?? null,
         );
       }

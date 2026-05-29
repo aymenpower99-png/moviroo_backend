@@ -42,6 +42,7 @@ import { DispatchModule } from '../dispatch/dispatch.module';
 import { ClassesModule } from '../classes/classes.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { BillingModule } from '../billing/billing.module';
+import { MailModule } from '../mail/mail.module';
 
 @Module({
   imports: [
@@ -65,6 +66,7 @@ import { BillingModule } from '../billing/billing.module';
     ClassesModule,
     NotificationsModule,
     BillingModule,
+    MailModule,
   ],
   controllers: [RidesController],
   providers: [

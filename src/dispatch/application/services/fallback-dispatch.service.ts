@@ -6,6 +6,7 @@ import { RideStatus } from '../../../rides/domain/enums/ride-status.enum';
 import { DispatchRideUseCase } from '../use-cases/dispatch-ride.use-case';
 import { PaymentService } from '../../../billing/services/payment.service';
 import { RideMailService } from '../../../mail/services/ride-mail.service';
+import { TripPayment } from '../../../billing/entities/trip-payment.entity';
 
 const DEFAULT_RADIUS_KM = 10;
 
@@ -18,6 +19,8 @@ export class FallbackDispatchService {
 
   constructor(
     @InjectRepository(Ride) private readonly rideRepo: Repository<Ride>,
+    @InjectRepository(TripPayment)
+    private readonly paymentRepo: Repository<TripPayment>,
     private readonly dispatchUC: DispatchRideUseCase,
     @Inject(forwardRef(() => PaymentService))
     private readonly paymentService: PaymentService,
@@ -39,7 +42,9 @@ export class FallbackDispatchService {
   async runFullDispatch(ride: Ride): Promise<void> {
     // Dedup guard: prevent concurrent dispatch for the same ride
     if (this.activeDispatches.has(ride.id)) {
-      this.logger.warn(`⚠️ Dispatch already running for ride ${ride.id}, skipping`);
+      this.logger.warn(
+        `⚠️ Dispatch already running for ride ${ride.id}, skipping`,
+      );
       return;
     }
     this.activeDispatches.add(ride.id);
@@ -128,17 +133,23 @@ export class FallbackDispatchService {
         where: { id: ride.id },
         relations: ['passenger'],
       });
+      const payment = await this.paymentRepo.findOne({
+        where: { rideId: ride.id },
+      });
       if (cancelledRide?.passenger?.email) {
         await this.rideMail.sendRideCancelledRefundEmail(
           cancelledRide.passenger.email,
           cancelledRide.passenger.firstName || 'Passenger',
           cancelledRide,
           'SYSTEM',
+          payment?.paymentMethod,
           'No drivers available after 3 dispatch attempts',
         );
       }
     } catch (err) {
-      this.logger.error(`Failed to send cancellation email for ride ${ride.id}: ${err}`);
+      this.logger.error(
+        `Failed to send cancellation email for ride ${ride.id}: ${err}`,
+      );
     }
   }
 }

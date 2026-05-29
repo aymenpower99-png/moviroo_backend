@@ -121,6 +121,30 @@ export class DriverNotificationService {
     }
   }
 
+  // ─── Tier / Commission ───────────────────────────────────────────────────
+
+  /** Driver unlocked a new commission tier. */
+  async tierUnlocked(
+    driverId: string,
+    tierName: string,
+    commissionRate: number,
+    monthlyRides: number,
+  ) {
+    const ratePercent = Math.round(commissionRate * 100);
+    return this.fcm.sendToUser(
+      driverId,
+      `You unlocked ${tierName} 🎉`,
+      `You reached ${monthlyRides} rides this month. Your commission rate is now ${ratePercent}%.`,
+      {
+        type: 'TIER_UNLOCKED',
+        tierName,
+        commissionRate: String(commissionRate),
+        monthlyRides: String(monthlyRides),
+        channelId: 'ride_updates',
+      },
+    );
+  }
+
   // ─── Chat ─────────────────────────────────────────────────────────────────
 
   /** New chat message from a passenger. */

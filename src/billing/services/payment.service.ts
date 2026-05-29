@@ -294,6 +294,15 @@ export class PaymentService {
       this.logger.log(
         `💸 [REFUND] Refund ${refund.id} issued for TripPayment ${payment.id} (ride ${rideId})`,
       );
+
+      // Send push notification to passenger about refund
+      if (payment.passengerId) {
+        this.passengerNotif
+          .refundIssued(payment.passengerId, rideId, payment.amount)
+          .catch((err) => {
+            this.logger.warn(`Failed to send refund notification: ${err}`);
+          });
+      }
     } catch (err) {
       this.logger.error(
         `[REFUND] Stripe refund failed for ride ${rideId}: ${err}`,

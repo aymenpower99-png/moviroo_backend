@@ -44,31 +44,39 @@ export class PassengerNotificationService {
   }
 
   /** Passenger-initiated cancellation confirmation. */
-  async rideCancelledByPassenger(passengerId: string, rideId: string) {
-    return this.fcm.sendToUser(
-      passengerId,
-      'Ride Cancelled',
-      'You have cancelled this ride.',
-      {
-        type: 'RIDE_CANCELLED_BY_PASSENGER',
-        rideId,
-        channelId: 'ride_updates',
-      },
-    );
+  async rideCancelledByPassenger(
+    passengerId: string,
+    rideId: string,
+    paymentMethod?: string,
+  ) {
+    const body =
+      paymentMethod === 'CARD'
+        ? 'You have cancelled this ride. Your refund will be processed.'
+        : 'You have cancelled this ride.';
+
+    return this.fcm.sendToUser(passengerId, 'Ride Cancelled', body, {
+      type: 'RIDE_CANCELLED_BY_PASSENGER',
+      rideId,
+      channelId: 'ride_updates',
+    });
   }
 
   /** Driver cancelled the ride — notify the passenger. */
-  async rideCancelledByDriver(passengerId: string, rideId: string) {
-    return this.fcm.sendToUser(
-      passengerId,
-      'Ride Cancelled',
-      'The driver has cancelled this ride.',
-      {
-        type: 'RIDE_CANCELLED_BY_DRIVER',
-        rideId,
-        channelId: 'ride_updates',
-      },
-    );
+  async rideCancelledByDriver(
+    passengerId: string,
+    rideId: string,
+    paymentMethod?: string,
+  ) {
+    const body =
+      paymentMethod === 'CARD'
+        ? 'The driver has cancelled this ride. Your refund will be processed.'
+        : 'The driver has cancelled this ride.';
+
+    return this.fcm.sendToUser(passengerId, 'Ride Cancelled', body, {
+      type: 'RIDE_CANCELLED_BY_DRIVER',
+      rideId,
+      channelId: 'ride_updates',
+    });
   }
 
   /** Admin cancelled the ride — notify the passenger with reason. */
@@ -76,20 +84,23 @@ export class PassengerNotificationService {
     passengerId: string,
     rideId: string,
     reason?: string,
+    paymentMethod?: string,
   ) {
-    return this.fcm.sendToUser(
-      passengerId,
-      'Ride Cancelled by Admin',
-      reason?.trim()
-        ? `This ride was cancelled by an admin. Reason: ${reason}`
-        : 'This ride was cancelled by an admin.',
-      {
-        type: 'RIDE_CANCELLED_BY_ADMIN',
-        rideId,
-        reason: reason ?? '',
-        channelId: 'ride_updates',
-      },
-    );
+    const body =
+      paymentMethod === 'CARD'
+        ? reason?.trim()
+          ? `This ride has been cancelled. Reason: ${reason}. Your refund will be processed.`
+          : 'This ride has been cancelled. Your refund will be processed.'
+        : reason?.trim()
+          ? `This ride has been cancelled. Reason: ${reason}`
+          : 'This ride has been cancelled.';
+
+    return this.fcm.sendToUser(passengerId, 'Ride Cancelled', body, {
+      type: 'RIDE_CANCELLED_BY_ADMIN',
+      rideId,
+      reason: reason ?? '',
+      channelId: 'ride_updates',
+    });
   }
 
   // ─── Ride status changes ──────────────────────────────────────────────────
@@ -182,6 +193,21 @@ export class PassengerNotificationService {
       {
         type: 'PAYMENT_FAILED',
         rideId,
+        channelId: 'payments',
+      },
+    );
+  }
+
+  /** Refund issued notification. */
+  async refundIssued(passengerId: string, rideId: string, amount: number) {
+    return this.fcm.sendToUser(
+      passengerId,
+      'Refund Issued',
+      `Your refund of $${amount.toFixed(2)} has been processed. It may take 5-7 business days to appear in your account.`,
+      {
+        type: 'REFUND_ISSUED',
+        rideId,
+        amount: amount.toFixed(2),
         channelId: 'payments',
       },
     );

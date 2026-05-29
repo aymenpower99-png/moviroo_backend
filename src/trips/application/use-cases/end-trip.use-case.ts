@@ -18,6 +18,9 @@ import {
 import { PassengerEntity } from '../../../passenger/entities/passengers.entity';
 import { BillingService } from '../../../billing/services/billing.service';
 import { InvoiceService } from '../../../billing/services/invoice.service';
+import { CommissionTier } from '../../../billing/entities/commission-tier.entity';
+import { DriverNotificationService } from '../../../notifications/services/driver-notification.service';
+import { Between } from 'typeorm';
 
 @Injectable()
 export class EndTripUseCase {
@@ -34,8 +37,11 @@ export class EndTripUseCase {
     private readonly driverRepo: Repository<Driver>,
     @InjectRepository(PassengerEntity)
     private readonly passengerRepo: Repository<PassengerEntity>,
+    @InjectRepository(CommissionTier)
+    private readonly tierRepo: Repository<CommissionTier>,
     private readonly billingService: BillingService,
     private readonly invoiceService: InvoiceService,
+    private readonly driverNotif: DriverNotificationService,
   ) {}
 
   async execute(driverUserId: string, rideId: string): Promise<Ride> {
@@ -106,13 +112,88 @@ export class EndTripUseCase {
       { availabilityStatus: DriverAvailabilityStatus.ONLINE },
     );
 
-    /* ── 5. Increment driver totalTrips ──── */
-    await this.driverRepo
-      .createQueryBuilder()
-      .update(Driver)
-      .set({ totalTrips: () => '"total_trips" + 1' })
-      .where('user_id = :uid', { uid: driverUserId })
-      .execute();
+    /* ── 5. Compute per-ride commission & check tier crossing ──── */
+    const driver = await this.driverRepo.findOne({ where: { userId: driverUserId } });
+    if (driver) {
+      const now = new Date();
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+
+      // Count monthly completed rides
+      const monthlyRides = await this.rideRepo.count({
+        where: {
+          driverId: driverUserId,
+          status: RideStatus.COMPLETED,
+          completedAt: Between(monthStart, monthEnd),
+        },
+      });
+
+      // Fetch active tiers sorted by required rides ascending
+      const allTiers = await this.tierRepo.find({
+        where: { isActive: true },
+        order: { requiredRides: 'ASC' },
+      });
+
+      // Find the highest tier reached
+      let newTier: CommissionTier | null = null;
+      for (const tier of allTiers) {
+        if (monthlyRides >= tier.requiredRides) {
+          newTier = tier;
+        } else {
+          break;
+        }
+      }
+
+      const prevTierId = driver.currentTierId;
+      const newTierId = newTier?.id ?? null;
+      const newRate = newTier?.commissionRate ?? 0.25;
+
+      // Determine if tier changed
+      const tierChanged = newTierId !== prevTierId;
+
+      if (tierChanged && newTier) {
+        // Update driver to new tier
+        driver.currentTierId = newTier.id;
+        driver.currentCommissionRate = newRate;
+        await this.driverRepo.save(driver);
+
+        this.logger.log(
+          `🎉 Driver ${driverUserId} upgraded to tier ${newTier.name} (${newRate * 100}% commission) after ${monthlyRides} monthly rides`,
+        );
+
+        // Recompute commission for ALL completed rides this month with new rate
+        const monthRides = await this.rideRepo.find({
+          where: {
+            driverId: driverUserId,
+            status: RideStatus.COMPLETED,
+            completedAt: Between(monthStart, monthEnd),
+          },
+        });
+
+        for (const r of monthRides) {
+          const price = Number(r.priceFinal) || Number(r.priceEstimate) || 0;
+          const commission = +(price * newRate).toFixed(2);
+          const earnings = +(price - commission).toFixed(2);
+          r.commissionAmount = commission;
+          r.driverEarnings = earnings;
+          await this.rideRepo.save(r);
+        }
+
+        // Send tier unlock notification
+        this.driverNotif
+          .tierUnlocked(driverUserId, newTier.name, newRate, monthlyRides)
+          .catch(() => {});
+      } else {
+        // No tier change — apply current rate to just this ride
+        const currentRate = driver.currentCommissionRate ?? 0.25;
+        const price = Number(ride.priceFinal) || Number(ride.priceEstimate) || 0;
+        const commission = +(price * currentRate).toFixed(2);
+        const earnings = +(price - commission).toFixed(2);
+        ride.commissionAmount = commission;
+        ride.driverEarnings = earnings;
+        await this.rideRepo.save(ride);
+      }
+    }
 
     /* ── 6. Award loyalty points to passenger ──── */
     const pointsEarned = ride.loyaltyPointsEarned ?? 0;

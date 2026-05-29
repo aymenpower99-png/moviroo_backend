@@ -162,6 +162,30 @@ export class Ride {
   })
   surgeMultiplier: number | null;
 
+  /** Commission amount deducted from ride price based on driver's current tier rate */
+  @Column({
+    name: 'commission_amount',
+    type: 'decimal',
+    precision: 10,
+    scale: 2,
+    nullable: true,
+    default: null,
+    transformer: numericTransformer,
+  })
+  commissionAmount: number | null;
+
+  /** Amount credited to driver after commission deduction */
+  @Column({
+    name: 'driver_earnings',
+    type: 'decimal',
+    precision: 10,
+    scale: 2,
+    nullable: true,
+    default: null,
+    transformer: numericTransformer,
+  })
+  driverEarnings: number | null;
+
   @Column({
     name: 'pricing_snapshot',
     type: 'jsonb',

@@ -7,6 +7,7 @@ import { Ride } from '../domain/entities/ride.entity';
 import { RideStatus } from '../domain/enums/ride-status.enum';
 import { PassengerNotificationService } from '../../notifications/services/passenger-notification.service';
 import { RideMailService } from '../../mail/services/ride-mail.service';
+import { TripPayment } from '../../billing/entities/trip-payment.entity';
 
 @Injectable()
 export class AutoCancelPendingRidesTask {
@@ -14,6 +15,7 @@ export class AutoCancelPendingRidesTask {
 
   constructor(
     @InjectRepository(Ride) private rideRepo: Repository<Ride>,
+    @InjectRepository(TripPayment) private paymentRepo: Repository<TripPayment>,
     private passengerNotif: PassengerNotificationService,
     private rideMail: RideMailService,
     private config: ConfigService,
@@ -56,10 +58,14 @@ export class AutoCancelPendingRidesTask {
         await this.rideRepo.save(ride);
 
         // Send notification to passenger
+        const payment = await this.paymentRepo.findOne({
+          where: { rideId: ride.id },
+        });
         await this.passengerNotif.rideCancelledByAdmin(
           ride.passengerId,
           ride.id,
           ride.cancellationReason,
+          payment?.paymentMethod ?? undefined,
         );
 
         // Send cancellation + refund email to passenger
@@ -70,11 +76,14 @@ export class AutoCancelPendingRidesTask {
               ride.passenger.firstName || 'Passenger',
               ride,
               'SYSTEM',
+              payment?.paymentMethod,
               ride.cancellationReason,
             );
           }
         } catch (err) {
-          this.logger.error(`Failed to send cancellation email for ride ${ride.id}: ${err}`);
+          this.logger.error(
+            `Failed to send cancellation email for ride ${ride.id}: ${err}`,
+          );
         }
 
         this.logger.log(

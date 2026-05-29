@@ -56,6 +56,26 @@ export class Driver {
   @Column({ name: 'work_area_id', type: 'uuid', nullable: true, default: null })
   workAreaId: string | null;
 
+  /** Current commission tier the driver has unlocked this month */
+  @Column({ name: 'current_tier_id', type: 'uuid', nullable: true, default: null })
+  currentTierId: string | null;
+
+  /** Active commission rate (0.0–1.0) applied to each completed ride */
+  @Column({
+    name: 'current_commission_rate',
+    type: 'decimal',
+    precision: 5,
+    scale: 4,
+    nullable: true,
+    default: 0.25,
+    transformer: {
+      to: (value: number | null): number | null => value,
+      from: (value: string | null): number | null =>
+        value === null ? null : parseFloat(value),
+    },
+  })
+  currentCommissionRate: number | null;
+
   /* ── Salary & Performance ──────────────────────── */
 
   @Column({

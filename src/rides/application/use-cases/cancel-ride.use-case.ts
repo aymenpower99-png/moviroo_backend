@@ -50,6 +50,10 @@ export class CancelRideUseCase {
     });
     if (!ride) throw new NotFoundException('Ride not found');
 
+    // Get payment method for notifications
+    const payment = await this.paymentRepo.findOne({ where: { rideId } });
+    const paymentMethod = payment?.paymentMethod ?? undefined;
+
     /* Authorization */
     if (
       currentUser.role !== UserRole.SUPER_ADMIN &&
@@ -89,14 +93,23 @@ export class CancelRideUseCase {
     // Send push notification to passenger about cancellation
     if (ride.passengerId) {
       if (ride.cancelledBy === 'PASSENGER') {
-        this.passengerNotif.rideCancelledByPassenger(ride.passengerId, ride.id);
+        this.passengerNotif.rideCancelledByPassenger(
+          ride.passengerId,
+          ride.id,
+          paymentMethod,
+        );
       } else if (ride.cancelledBy === 'DRIVER') {
-        this.passengerNotif.rideCancelledByDriver(ride.passengerId, ride.id);
+        this.passengerNotif.rideCancelledByDriver(
+          ride.passengerId,
+          ride.id,
+          paymentMethod,
+        );
       } else if (ride.cancelledBy === 'ADMIN') {
         this.passengerNotif.rideCancelledByAdmin(
           ride.passengerId,
           ride.id,
           ride.cancellationReason ?? undefined,
+          paymentMethod,
         );
       }
     }

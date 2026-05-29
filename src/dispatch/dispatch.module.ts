@@ -9,6 +9,7 @@ import { Vehicle } from '../vehicles/entities/vehicle.entity';
 import { User } from '../users/entites/user.entity';
 import { WorkArea } from '../work-area/entities/work-area.entity';
 import { DriverOnlineHistory } from '../earnings/entities/driver-online-history.entity';
+import { TripPayment } from '../billing/entities/trip-payment.entity';
 
 import { DispatchController } from './dispatch.controller';
 
@@ -35,6 +36,7 @@ import { BillingModule } from '../billing/billing.module';
       User,
       WorkArea,
       DriverOnlineHistory,
+      TripPayment,
     ]),
     NotificationsModule,
     forwardRef(() => DriversModule),

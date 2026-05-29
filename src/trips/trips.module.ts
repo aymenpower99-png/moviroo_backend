@@ -7,6 +7,8 @@ import { Ride } from '../rides/domain/entities/ride.entity';
 import { DriverLocation } from '../dispatch/domain/entities/driver-location.entity';
 import { Driver } from '../driver/entities/driver.entity';
 import { PassengerEntity } from '../passenger/entities/passengers.entity';
+import { TripPayment } from '../billing/entities/trip-payment.entity';
+import { CommissionTier } from '../billing/entities/commission-tier.entity';
 import { BillingModule } from '../billing/billing.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { RidesModule } from '../rides/rides.module';
@@ -29,6 +31,8 @@ import { SubmitRatingUseCase } from './application/use-cases/submit-rating.use-c
       DriverLocation,
       Driver,
       PassengerEntity,
+      TripPayment,
+      CommissionTier,
     ]),
     BillingModule,
     NotificationsModule,

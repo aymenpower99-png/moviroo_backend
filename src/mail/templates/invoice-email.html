@@ -1,100 +1,338 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Moviroo — Your Ride Receipt</title>
-</head>
-<body style="font-family:'Segoe UI',Arial,sans-serif; background:#F4F4F8; padding:40px 0; margin:0;">
-  <div style="max-width:600px; margin:0 auto;">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Moviroo — Your Ride Receipt</title>
+  </head>
+  <body
+    style="
+      font-family: 'Segoe UI', Arial, sans-serif;
+      background: #f4f4f8;
+      padding: 40px 0;
+      margin: 0;
+    "
+  >
+    <div style="max-width: 600px; margin: 0 auto">
+      <!-- Header -->
+      <div
+        style="
+          background: #fff;
+          padding: 32px 40px 24px;
+          border-radius: 16px 16px 0 0;
+          border: 1px solid #e5e7eb;
+          border-bottom: none;
+          text-align: center;
+        "
+      >
+        <img
+          src="https://res.cloudinary.com/dox9rfabz/image/upload/v1778712358/moviroo_light_dark_big_xormqg.png"
+          alt="Moviroo"
+          width="140"
+          height="auto"
+          style="display: block; margin: 0 auto"
+        />
+      </div>
 
-    <!-- Header -->
-    <div style="background:#fff; padding:32px 40px 24px; border-radius:16px 16px 0 0; border:1px solid #E5E7EB; border-bottom:none; text-align:center;">
-      <img src="https://res.cloudinary.com/dox9rfabz/image/upload/v1778712358/moviroo_light_dark_big_xormqg.png" alt="Moviroo" width="140" height="auto" style="display:block; margin:0 auto;"/>
+      <!-- Purple stripe -->
+      <div
+        style="
+          height: 4px;
+          background: linear-gradient(90deg, #7c3aed 0%, #5b21b6 100%);
+        "
+      ></div>
+
+      <!-- Body -->
+      <div
+        style="
+          background: #fff;
+          padding: 40px;
+          border-left: 1px solid #e5e7eb;
+          border-right: 1px solid #e5e7eb;
+        "
+      >
+        <h1
+          style="
+            font-size: 22px;
+            font-weight: 700;
+            color: #111827;
+            margin: 0 0 4px;
+          "
+        >
+          Your Ride Receipt
+        </h1>
+        <p
+          style="
+            font-size: 14px;
+            font-weight: 700;
+            color: #7c3aed;
+            margin: 0 0 24px;
+          "
+        >
+          {{REF}}
+        </p>
+
+        <hr
+          style="border: none; border-top: 1px solid #e5e7eb; margin: 0 0 20px"
+        />
+
+        <!-- Details table -->
+        <table style="width: 100%; border-collapse: collapse; margin: 0 0 20px">
+          <tr>
+            <td
+              style="
+                padding: 8px 0;
+                font-size: 13px;
+                color: #6b7280;
+                width: 120px;
+              "
+            >
+              Pickup
+            </td>
+            <td
+              style="
+                padding: 8px 0;
+                font-size: 13px;
+                color: #111827;
+                font-weight: 600;
+                text-align: right;
+              "
+            >
+              {{PICKUP}}
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 8px 0; font-size: 13px; color: #6b7280">
+              Dropoff
+            </td>
+            <td
+              style="
+                padding: 8px 0;
+                font-size: 13px;
+                color: #111827;
+                font-weight: 600;
+                text-align: right;
+              "
+            >
+              {{DROPOFF}}
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 8px 0; font-size: 13px; color: #6b7280">
+              Vehicle
+            </td>
+            <td
+              style="
+                padding: 8px 0;
+                font-size: 13px;
+                color: #111827;
+                font-weight: 600;
+                text-align: right;
+              "
+            >
+              {{VEHICLE}}
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 8px 0; font-size: 13px; color: #6b7280">
+              Distance
+            </td>
+            <td
+              style="
+                padding: 8px 0;
+                font-size: 13px;
+                color: #111827;
+                font-weight: 600;
+                text-align: right;
+              "
+            >
+              {{DISTANCE}}
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 8px 0; font-size: 13px; color: #6b7280">
+              Duration
+            </td>
+            <td
+              style="
+                padding: 8px 0;
+                font-size: 13px;
+                color: #111827;
+                font-weight: 600;
+                text-align: right;
+              "
+            >
+              {{DURATION}}
+            </td>
+          </tr>
+        </table>
+
+        <hr
+          style="border: none; border-top: 1px solid #e5e7eb; margin: 0 0 20px"
+        />
+
+        <!-- Pricing -->
+        <table style="width: 100%; border-collapse: collapse; margin: 0 0 20px">
+          <tr>
+            <td style="padding: 8px 0; font-size: 13px; color: #6b7280">
+              Subtotal
+            </td>
+            <td
+              style="
+                padding: 8px 0;
+                font-size: 13px;
+                color: #111827;
+                font-weight: 600;
+                text-align: right;
+              "
+            >
+              {{SUBTOTAL}}
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 8px 0; font-size: 13px; color: #6b7280">
+              Discount
+            </td>
+            <td
+              style="
+                padding: 8px 0;
+                font-size: 13px;
+                color: #111827;
+                font-weight: 600;
+                text-align: right;
+              "
+            >
+              {{DISCOUNT}}
+            </td>
+          </tr>
+          <tr>
+            <td
+              style="
+                padding: 10px 0;
+                font-size: 15px;
+                font-weight: 700;
+                color: #111827;
+                border-top: 1px solid #e5e7eb;
+              "
+            >
+              Total
+            </td>
+            <td
+              style="
+                padding: 10px 0;
+                font-size: 15px;
+                font-weight: 700;
+                color: #7c3aed;
+                text-align: right;
+                border-top: 1px solid #e5e7eb;
+              "
+            >
+              {{TOTAL}}
+            </td>
+          </tr>
+        </table>
+
+        <hr
+          style="border: none; border-top: 1px solid #e5e7eb; margin: 0 0 20px"
+        />
+
+        <!-- Payment info -->
+        <table style="width: 100%; border-collapse: collapse; margin: 0 0 20px">
+          <tr>
+            <td
+              style="
+                padding: 8px 0;
+                font-size: 13px;
+                color: #6b7280;
+                width: 120px;
+              "
+            >
+              Payment
+            </td>
+            <td
+              style="
+                padding: 8px 0;
+                font-size: 13px;
+                color: #111827;
+                font-weight: 600;
+                text-align: right;
+              "
+            >
+              {{METHOD}}
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 8px 0; font-size: 13px; color: #6b7280">
+              Status
+            </td>
+            <td style="padding: 8px 0; text-align: right">
+              <span
+                style="
+                  display: inline-block;
+                  background: #4caf50;
+                  color: #fff;
+                  font-size: 11px;
+                  font-weight: 700;
+                  padding: 4px 12px;
+                  border-radius: 10px;
+                "
+                >Paid</span
+              >
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 8px 0; font-size: 13px; color: #6b7280">
+              Date
+            </td>
+            <td
+              style="
+                padding: 8px 0;
+                font-size: 13px;
+                color: #111827;
+                font-weight: 600;
+                text-align: right;
+              "
+            >
+              {{DATE}}
+            </td>
+          </tr>
+        </table>
+
+        <p
+          style="
+            font-size: 12px;
+            color: #9ca3af;
+            text-align: center;
+            margin: 24px 0 0;
+          "
+        >
+          Your PDF receipt is attached to this email.
+        </p>
+      </div>
+
+      <!-- Footer -->
+      <div
+        style="
+          background: #f9fafb;
+          padding: 24px 40px;
+          border-radius: 0 0 16px 16px;
+          border: 1px solid #e5e7eb;
+          border-top: none;
+          text-align: center;
+        "
+      >
+        <p style="font-size: 13px; color: #6b7280; margin: 0 0 6px">
+          &copy; {{YEAR}} Moviroo. All rights reserved.
+        </p>
+        <p style="font-size: 12px; color: #9ca3af; margin: 0">
+          Questions?
+          <a
+            href="mailto:support@moviroo.tn"
+            style="color: #7c3aed; text-decoration: none; font-weight: 600"
+            >We're here to help</a
+          >
+        </p>
+      </div>
     </div>
-
-    <!-- Purple stripe -->
-    <div style="height:4px; background:linear-gradient(90deg,#7C3AED 0%,#5B21B6 100%);"></div>
-
-    <!-- Body -->
-    <div style="background:#fff; padding:40px; border-left:1px solid #E5E7EB; border-right:1px solid #E5E7EB;">
-
-      <h1 style="font-size:22px; font-weight:700; color:#111827; margin:0 0 4px;">Your Ride Receipt</h1>
-      <p style="font-size:14px; font-weight:700; color:#7C3AED; margin:0 0 24px;">{{REF}}</p>
-
-      <hr style="border:none; border-top:1px solid #E5E7EB; margin:0 0 20px;"/>
-
-      <!-- Details table -->
-      <table style="width:100%; border-collapse:collapse; margin:0 0 20px;">
-        <tr>
-          <td style="padding:8px 0; font-size:13px; color:#6B7280; width:120px;">Pickup</td>
-          <td style="padding:8px 0; font-size:13px; color:#111827; font-weight:600; text-align:right;">{{PICKUP}}</td>
-        </tr>
-        <tr>
-          <td style="padding:8px 0; font-size:13px; color:#6B7280;">Dropoff</td>
-          <td style="padding:8px 0; font-size:13px; color:#111827; font-weight:600; text-align:right;">{{DROPOFF}}</td>
-        </tr>
-        <tr>
-          <td style="padding:8px 0; font-size:13px; color:#6B7280;">Vehicle</td>
-          <td style="padding:8px 0; font-size:13px; color:#111827; font-weight:600; text-align:right;">{{VEHICLE}}</td>
-        </tr>
-        <tr>
-          <td style="padding:8px 0; font-size:13px; color:#6B7280;">Distance</td>
-          <td style="padding:8px 0; font-size:13px; color:#111827; font-weight:600; text-align:right;">{{DISTANCE}}</td>
-        </tr>
-        <tr>
-          <td style="padding:8px 0; font-size:13px; color:#6B7280;">Duration</td>
-          <td style="padding:8px 0; font-size:13px; color:#111827; font-weight:600; text-align:right;">{{DURATION}}</td>
-        </tr>
-      </table>
-
-      <hr style="border:none; border-top:1px solid #E5E7EB; margin:0 0 20px;"/>
-
-      <!-- Pricing -->
-      <table style="width:100%; border-collapse:collapse; margin:0 0 20px;">
-        <tr>
-          <td style="padding:8px 0; font-size:13px; color:#6B7280;">Subtotal</td>
-          <td style="padding:8px 0; font-size:13px; color:#111827; font-weight:600; text-align:right;">{{SUBTOTAL}}</td>
-        </tr>
-        <tr>
-          <td style="padding:8px 0; font-size:13px; color:#6B7280;">Discount</td>
-          <td style="padding:8px 0; font-size:13px; color:#111827; font-weight:600; text-align:right;">{{DISCOUNT}}</td>
-        </tr>
-        <tr>
-          <td style="padding:10px 0; font-size:15px; font-weight:700; color:#111827; border-top:1px solid #E5E7EB;">Total</td>
-          <td style="padding:10px 0; font-size:15px; font-weight:700; color:#7C3AED; text-align:right; border-top:1px solid #E5E7EB;">{{TOTAL}}</td>
-        </tr>
-      </table>
-
-      <hr style="border:none; border-top:1px solid #E5E7EB; margin:0 0 20px;"/>
-
-      <!-- Payment info -->
-      <table style="width:100%; border-collapse:collapse; margin:0 0 20px;">
-        <tr>
-          <td style="padding:8px 0; font-size:13px; color:#6B7280; width:120px;">Payment</td>
-          <td style="padding:8px 0; font-size:13px; color:#111827; font-weight:600; text-align:right;">{{METHOD}}</td>
-        </tr>
-        <tr>
-          <td style="padding:8px 0; font-size:13px; color:#6B7280;">Status</td>
-          <td style="padding:8px 0; text-align:right;">
-            <span style="display:inline-block; background:#4CAF50; color:#fff; font-size:11px; font-weight:700; padding:4px 12px; border-radius:10px;">Paid</span>
-          </td>
-        </tr>
-        <tr>
-          <td style="padding:8px 0; font-size:13px; color:#6B7280;">Date</td>
-          <td style="padding:8px 0; font-size:13px; color:#111827; font-weight:600; text-align:right;">{{DATE}}</td>
-        </tr>
-      </table>
-
-      <p style="font-size:12px; color:#9CA3AF; text-align:center; margin:24px 0 0;">Your PDF receipt is attached to this email.</p>
-    </div>
-
-    <!-- Footer -->
-    <div style="background:#F9FAFB; padding:24px 40px; border-radius:0 0 16px 16px; border:1px solid #E5E7EB; border-top:none; text-align:center;">
-      <p style="font-size:13px; color:#6B7280; margin:0 0 6px;">&copy; {{YEAR}} Moviroo. All rights reserved.</p>
-      <p style="font-size:12px; color:#9CA3AF; margin:0;">Questions? <a href="mailto:support@moviroo.com" style="color:#7C3AED; text-decoration:none; font-weight:600;">We're here to help</a></p>
-    </div>
-
-  </div>
-</body>
+  </body>
 </html>

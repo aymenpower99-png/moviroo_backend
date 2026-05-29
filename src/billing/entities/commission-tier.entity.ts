@@ -35,6 +35,17 @@ export class CommissionTier {
   })
   bonusAmount: number;
 
+  /** Commission rate (0.0–1.0) deducted from each ride when driver is in this tier */
+  @Column({
+    name: 'commission_rate',
+    type: 'decimal',
+    precision: 5,
+    scale: 4,
+    default: 0.25,
+    transformer: numericTransformer,
+  })
+  commissionRate: number;
+
   /** Display order (lowest first) */
   @Column({ name: 'sort_order', type: 'int', default: 0 })
   sortOrder: number;
