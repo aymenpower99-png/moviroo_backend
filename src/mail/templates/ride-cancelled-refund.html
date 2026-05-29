@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Moviroo — Ride Cancelled</title>
+</head>
+<body style="font-family:'Segoe UI',Arial,sans-serif; background:#F4F4F8; padding:40px 0; margin:0;">
+  <div style="max-width:600px; margin:0 auto;">
+
+    <!-- Header -->
+    <div style="background:#fff; padding:32px 40px 24px; border-radius:16px 16px 0 0; border:1px solid #E5E7EB; border-bottom:none; text-align:center;">
+      <img src="https://res.cloudinary.com/dox9rfabz/image/upload/v1778712358/moviroo_light_dark_big_xormqg.png" alt="Moviroo" width="350" height="auto" style="display:block; margin:0 auto;"/>
+    </div>
+
+    <!-- Purple stripe -->
+    <div style="height:4px; background:linear-gradient(90deg,#7C3AED 0%,#5B21B6 100%);"></div>
+
+    <!-- Body -->
+    <div style="background:#fff; padding:40px; border-left:1px solid #E5E7EB; border-right:1px solid #E5E7EB;">
+
+      <h1 style="font-size:22px; font-weight:700; color:#111827; margin:0 0 32px; text-align:center;">Your ride has been cancelled</h1>
+
+      <!-- Ride details -->
+      <div style="background:#F9FAFB; border-radius:12px; padding:20px; margin-bottom:24px;">
+        <table style="width:100%; border-collapse:collapse;">
+          <tr>
+            <td style="padding:6px 0; font-size:13px; color:#6B7280; width:100px;">Pickup</td>
+            <td style="padding:6px 0; font-size:13px; color:#111827; font-weight:600; text-align:right;">{{PICKUP}}</td>
+          </tr>
+          <tr>
+            <td style="padding:6px 0; font-size:13px; color:#6B7280;">Dropoff</td>
+            <td style="padding:6px 0; font-size:13px; color:#111827; font-weight:600; text-align:right;">{{DROPOFF}}</td>
+          </tr>
+          <tr>
+            <td style="padding:6px 0; font-size:13px; color:#6B7280;">Date</td>
+            <td style="padding:6px 0; font-size:13px; color:#111827; font-weight:600; text-align:right;">{{DATE}}</td>
+          </tr>
+          <tr>
+            <td style="padding:6px 0; font-size:13px; color:#6B7280;">Time</td>
+            <td style="padding:6px 0; font-size:13px; color:#111827; font-weight:600; text-align:right;">{{TIME}}</td>
+          </tr>
+        </table>
+      </div>
+
+      <!-- Refund notice -->
+      <div style="background:linear-gradient(135deg, rgba(124,58,237,0.06) 0%, rgba(91,33,182,0.06) 100%); border-radius:12px; padding:24px; border:1px solid rgba(124,58,237,0.15); margin-bottom:24px;">
+        <h2 style="font-size:16px; font-weight:700; color:#7C3AED; margin:0 0 12px;">Refund process started</h2>
+        <p style="font-size:14px; color:#374151; line-height:1.6; margin:0 0 12px;">
+          If you already paid for this ride, your refund / reimbursement process has been automatically initiated.
+        </p>
+        <p style="font-size:13px; color:#6B7280; line-height:1.6; margin:0;">
+          The time it takes for the refund to appear in your account depends on your payment method:
+        </p>
+        <ul style="font-size:13px; color:#6B7280; line-height:1.8; margin:8px 0 0 18px; padding:0;">
+          <li><strong>Credit / Debit card:</strong> 5–10 business days</li>
+          <li><strong>Cash payments:</strong> no charge was processed</li>
+        </ul>
+      </div>
+
+      <p style="font-size:14px; color:#374151; line-height:1.6; margin:0 0 24px;">
+        We sincerely apologise for the inconvenience. If you have any questions about your refund, feel free to reach out to our support team at any time.
+      </p>
+
+      <div style="text-align:center;">
+        <a href="mailto:support@moviroo.com" style="display:inline-block; background:#7C3AED; color:#fff; text-decoration:none; padding:12px 28px; border-radius:8px; font-size:14px; font-weight:600;">Contact Support</a>
+      </div>
+
+    </div>
+
+    <!-- Footer -->
+    <div style="background:#F9FAFB; padding:24px 40px; border-radius:0 0 16px 16px; border:1px solid #E5E7EB; border-top:none; text-align:center;">
+      <p style="font-size:12px; color:#9CA3AF; margin:0 0 4px;">Moviroo — Ride with confidence</p>
+      <p style="font-size:11px; color:#9CA3AF; margin:0;">&copy; {{YEAR}} Moviroo. All rights reserved.</p>
+    </div>
+
+  </div>
+</body>
+</html>

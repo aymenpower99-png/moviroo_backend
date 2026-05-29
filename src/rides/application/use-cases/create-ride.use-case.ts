@@ -19,7 +19,10 @@ import {
 } from '../../infrastructure/services/pricing/pricing.service';
 import { RoutingService } from '../../infrastructure/services/routing/routing.service';
 import { CreateRideDto } from '../dtos/create-ride.dto';
-import { TripPayment, PaymentStatus } from '../../../billing/entities/trip-payment.entity';
+import {
+  TripPayment,
+  PaymentStatus,
+} from '../../../billing/entities/trip-payment.entity';
 
 @Injectable()
 export class CreateRideUseCase {
@@ -138,13 +141,16 @@ export class CreateRideUseCase {
         `[BOOKING] Using ML-locked price from vehicle selection: ${dto.locked_price} TND`,
       );
       pricingResult = {
-        finalPrice:      dto.locked_price,
-        exactPrice:      dto.locked_price,
-        loyaltyPoints:   dto.locked_loyalty_points   ?? 0,
-        surgeMultiplier: dto.locked_surge             ?? 1.0,
-        distanceKm:      dto.locked_distance_km       ?? 0,
-        durationMin:     dto.locked_duration_min      ?? 0,
-        fullResponse:    { source: 'ml_vehicle_selection', price: dto.locked_price },
+        finalPrice: dto.locked_price,
+        exactPrice: dto.locked_price,
+        loyaltyPoints: dto.locked_loyalty_points ?? 0,
+        surgeMultiplier: dto.locked_surge ?? 1.0,
+        distanceKm: dto.locked_distance_km ?? 0,
+        durationMin: dto.locked_duration_min ?? 0,
+        fullResponse: {
+          source: 'ml_vehicle_selection',
+          price: dto.locked_price,
+        },
       };
     } else if (vehicleClass) {
       const pricingStart = Date.now();
@@ -192,10 +198,11 @@ export class CreateRideUseCase {
 
     // Apply coupon discount to final price if provided
     const discountPercent = dto.discount_percent ?? 0;
-    const rawFinalPrice   = pricingResult.finalPrice;
-    const discountedPrice = discountPercent > 0
-      ? parseFloat((rawFinalPrice * (1 - discountPercent / 100)).toFixed(2))
-      : rawFinalPrice;
+    const rawFinalPrice = pricingResult.finalPrice;
+    const discountedPrice =
+      discountPercent > 0
+        ? parseFloat((rawFinalPrice * (1 - discountPercent / 100)).toFixed(2))
+        : rawFinalPrice;
 
     const ride = this.rideRepo.create({
       passengerId,
@@ -207,6 +214,7 @@ export class CreateRideUseCase {
       dropoffAddress,
       dropoffLat,
       dropoffLon,
+      passengerCount: dto.passenger_count ?? null,
       distanceKm: pricingResult.distanceKm,
       durationMin: pricingResult.durationMin,
       priceEstimate: pricingResult.exactPrice,
@@ -216,7 +224,7 @@ export class CreateRideUseCase {
       pricingSnapshot: pricingResult.fullResponse,
       scheduledAt: new Date(dto.scheduled_at),
       paymentMethod: isAdminCreated ? 'CASH' : null,
-      couponCode:    dto.coupon_code ?? null,
+      couponCode: dto.coupon_code ?? null,
       discountPercent: discountPercent > 0 ? discountPercent : null,
     });
 
@@ -241,7 +249,9 @@ export class CreateRideUseCase {
         }),
       );
     } catch (err) {
-      this.logger.error(`[BOOKING] Failed to create billing record for ride ${saved.id}: ${err}`);
+      this.logger.error(
+        `[BOOKING] Failed to create billing record for ride ${saved.id}: ${err}`,
+      );
     }
 
     /* 9 ── Calculate and store Mapbox route in RouteHistory ───────────────────── */

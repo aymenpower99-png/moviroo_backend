@@ -16,6 +16,7 @@ import { Driver } from '../../../driver/entities/driver.entity';
 import { Vehicle } from '../../../vehicles/entities/vehicle.entity';
 import { User } from '../../../users/entites/user.entity';
 import { DriverNotificationService } from '../../../notifications/services/driver-notification.service';
+import { PassengerNotificationService } from '../../../notifications/services/passenger-notification.service';
 import { RoutingService } from '../../../rides/infrastructure/services/routing/routing.service';
 
 @Injectable()
@@ -34,6 +35,7 @@ export class RespondToOfferUseCase {
     @InjectRepository(Vehicle)
     private readonly vehicleRepo: Repository<Vehicle>,
     private readonly driverNotif: DriverNotificationService,
+    private readonly passengerNotif: PassengerNotificationService,
     private readonly routingService: RoutingService,
   ) {}
 
@@ -142,6 +144,22 @@ export class RespondToOfferUseCase {
         .filter(Boolean)
         .join(' ') || 'the passenger';
     this.driverNotif.rideAccepted(currentUser.id, ride.id, passengerName);
+
+    // Send push notification to passenger that driver has been assigned
+    if (fullRide.passengerId) {
+      const driverName =
+        [
+          (fullRide as any)?.driver?.firstName,
+          (fullRide as any)?.driver?.lastName,
+        ]
+          .filter(Boolean)
+          .join(' ') || 'Your driver';
+      this.passengerNotif.driverAssigned(
+        fullRide.passengerId,
+        ride.id,
+        driverName,
+      );
+    }
 
     return fullRide;
   }

@@ -83,6 +83,16 @@ export class Ride {
   @Column({ name: 'dropoff_lon', type: 'double precision' })
   dropoffLon: number;
 
+  /* ── Passenger count ──────────────────────── */
+
+  @Column({
+    name: 'passenger_count',
+    type: 'int',
+    nullable: true,
+    default: null,
+  })
+  passengerCount: number | null;
+
   /* ── Trip metrics ──────────────────────────── */
 
   @Column({

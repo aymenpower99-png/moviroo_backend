@@ -15,6 +15,7 @@ import { SavedCardsService } from './services/saved-cards.service';
 import { DriverEarningsService } from './services/driver-earnings.service';
 import { BillingController } from './billing.controller';
 import { DispatchModule } from '../dispatch/dispatch.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
@@ -27,9 +28,22 @@ import { DispatchModule } from '../dispatch/dispatch.module';
       PassengerEntity,
     ]),
     forwardRef(() => DispatchModule),
+    NotificationsModule,
   ],
   controllers: [BillingController],
-  providers: [BillingService, PaymentService, InvoiceService, SavedCardsService, DriverEarningsService],
-  exports: [BillingService, DriverEarningsService, PaymentService, SavedCardsService, InvoiceService],
+  providers: [
+    BillingService,
+    PaymentService,
+    InvoiceService,
+    SavedCardsService,
+    DriverEarningsService,
+  ],
+  exports: [
+    BillingService,
+    DriverEarningsService,
+    PaymentService,
+    SavedCardsService,
+    InvoiceService,
+  ],
 })
 export class BillingModule {}

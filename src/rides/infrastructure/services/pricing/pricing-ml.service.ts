@@ -1,5 +1,4 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { withRetry } from '../../../../common/utils/retry.util';
 
 export interface PricingRequest {
   pickupLat: number;
@@ -51,6 +50,8 @@ export class PricingMlService {
   private readonly logger = new Logger(PricingMlService.name);
   private readonly ML_API_URL =
     process.env.ML_API_URL ?? 'http://localhost:8000';
+  private readonly ML_TIMEOUT_MS =
+    +(process.env.ML_API_TIMEOUT_MS ?? 5000);
 
   /**
    * Call ML API for single car type pricing
@@ -68,18 +69,18 @@ export class PricingMlService {
       body.car_multiplier = req.carMultiplier;
     }
 
-    const res = await withRetry(
-      () =>
-        fetch(`${this.ML_API_URL}/price/quick`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-          signal: AbortSignal.timeout(10_000),
-        }),
-      `ML API pricing ${req.carType}`,
-      { maxRetries: 2, initialDelayMs: 1000 },
-      this.logger,
+    const singleFetch = fetch(`${this.ML_API_URL}/price/quick`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const singleTimeout = new Promise<never>((_, reject) =>
+      setTimeout(
+        () => reject(new Error(`ML API single timeout after ${this.ML_TIMEOUT_MS}ms`)),
+        this.ML_TIMEOUT_MS,
+      ),
     );
+    const res = await Promise.race([singleFetch, singleTimeout]);
 
     if (!res.ok) {
       throw new Error(`ML API responded with status ${res.status}`);
@@ -114,18 +115,23 @@ export class PricingMlService {
       body.car_multipliers = req.carMultipliers;
     }
 
-    const res = await withRetry(
-      () =>
-        fetch(`${this.ML_API_URL}/price/batch`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-          signal: AbortSignal.timeout(15_000),
-        }),
-      `ML API batch pricing ${req.carTypes.join(',')}`,
-      { maxRetries: 2, initialDelayMs: 1000 },
-      this.logger,
+    // Use Promise.race for a Node.js-version-safe hard timeout
+    const fetchPromise = fetch(`${this.ML_API_URL}/price/batch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(
+        () => reject(new Error(`ML API batch timeout after ${this.ML_TIMEOUT_MS}ms`)),
+        this.ML_TIMEOUT_MS,
+      ),
     );
+
+    this.logger.log(
+      `[ML] Batch pricing fetch started for: ${req.carTypes.join(',')}`,
+    );
+    const res = await Promise.race([fetchPromise, timeoutPromise]);
 
     if (!res.ok) {
       throw new Error(`ML API batch responded with status ${res.status}`);

@@ -8,6 +8,7 @@ import { Repository } from 'typeorm';
 import { Driver, DriverAvailabilityStatus } from '../entities/driver.entity';
 import { Vehicle, VehicleStatus } from '../../vehicles/entities/vehicle.entity';
 import { User } from '../../users/entites/user.entity';
+import { WorkArea } from '../../work-area/entities/work-area.entity';
 import { CreateDriverDto } from '../dto/create-driver.dto';
 import { UpdateDriverDto } from '../dto/update-driver.dto';
 
@@ -17,6 +18,7 @@ export class DriverAdminService {
     @InjectRepository(Driver) private driverRepo: Repository<Driver>,
     @InjectRepository(Vehicle) private vehicleRepo: Repository<Vehicle>,
     @InjectRepository(User) private userRepo: Repository<User>,
+    @InjectRepository(WorkArea) private workAreaRepo: Repository<WorkArea>,
   ) {}
 
   // ─── Create ───────────────────────────────────────────────────────────────────
@@ -175,41 +177,73 @@ export class DriverAdminService {
 
     await this.driverRepo.save(driver);
 
-    // ── Assign vehicle if provided ────────────────────────────────────────────
-    if (dto.vehicleId) {
-      const vehicle = await this.vehicleRepo.findOne({
-        where: { id: dto.vehicleId },
-      });
-      if (!vehicle)
-        throw new NotFoundException(`Vehicle "${dto.vehicleId}" not found.`);
-
-      if (vehicle.status !== VehicleStatus.AVAILABLE) {
-        const reason =
-          vehicle.status === VehicleStatus.MAINTENANCE
-            ? 'Vehicle is under Maintenance and cannot be assigned to a driver.'
-            : vehicle.status === VehicleStatus.ON_TRIP
-              ? 'Vehicle is currently On Trip and cannot be reassigned.'
-              : `Vehicle status is "${vehicle.status}". Only Available vehicles can be assigned.`;
-        throw new BadRequestException(reason);
-      }
-
-      // ✅ NEW: Enforce one-to-one — check this vehicle is not already taken by another driver
-      if (vehicle.driverId && vehicle.driverId !== driver.id) {
-        throw new BadRequestException(
-          `This vehicle is already assigned to another driver. Unassign it first.`,
+    // ── Assign or unassign vehicle ────────────────────────────────────────────
+    if (dto.vehicleId !== undefined) {
+      if (dto.vehicleId === null) {
+        // Explicitly unassign current vehicle
+        await this.vehicleRepo.update(
+          { driverId: driver.id },
+          { driverId: null },
         );
+      } else {
+        const vehicle = await this.vehicleRepo.findOne({
+          where: { id: dto.vehicleId },
+        });
+        if (!vehicle)
+          throw new NotFoundException(`Vehicle "${dto.vehicleId}" not found.`);
+
+        if (vehicle.status !== VehicleStatus.AVAILABLE) {
+          const reason =
+            vehicle.status === VehicleStatus.MAINTENANCE
+              ? 'Vehicle is under Maintenance and cannot be assigned to a driver.'
+              : vehicle.status === VehicleStatus.ON_TRIP
+                ? 'Vehicle is currently On Trip and cannot be reassigned.'
+                : `Vehicle status is "${vehicle.status}". Only Available vehicles can be assigned.`;
+          throw new BadRequestException(reason);
+        }
+
+        // Enforce one-to-one
+        if (vehicle.driverId && vehicle.driverId !== driver.id) {
+          throw new BadRequestException(
+            `This vehicle is already assigned to another driver. Unassign it first.`,
+          );
+        }
+
+        // Unlink this driver from any previously assigned vehicle
+        await this.vehicleRepo.update(
+          { driverId: driver.id },
+          { driverId: null },
+        );
+
+        vehicle.driverId = driver.id;
+        await this.vehicleRepo.save(vehicle);
       }
-
-      // ✅ NEW: Unlink this driver from any previously assigned vehicle
-      await this.vehicleRepo.update(
-        { driverId: driver.id },
-        { driverId: null },
-      );
-
-      vehicle.driverId = driver.id;
-      await this.vehicleRepo.save(vehicle);
     }
-    // ── Auto-promote status based on current state ────────────────────────────
+
+    // ── Assign or unassign work area ──────────────────────────────────────────
+    if (dto.workAreaId !== undefined) {
+      if (dto.workAreaId === null) {
+        driver.workAreaId = null;
+        // Demote active statuses back to SETUP_REQUIRED
+        const activeStatuses: DriverAvailabilityStatus[] = [
+          DriverAvailabilityStatus.OFFLINE,
+          DriverAvailabilityStatus.ONLINE,
+        ];
+        if (activeStatuses.includes(driver.availabilityStatus)) {
+          driver.availabilityStatus = DriverAvailabilityStatus.SETUP_REQUIRED;
+        }
+      } else {
+        const area = await this.workAreaRepo.findOne({
+          where: { id: dto.workAreaId },
+        });
+        if (!area)
+          throw new NotFoundException(`Work area "${dto.workAreaId}" not found.`);
+        driver.workAreaId = dto.workAreaId;
+      }
+      await this.driverRepo.save(driver);
+    }
+
+    // ── Auto-promote status based on final state ──────────────────────────────
     const vehicle = await this.vehicleRepo.findOne({
       where: { driverId: driver.id },
     });
@@ -228,12 +262,22 @@ export class DriverAdminService {
       await this.driverRepo.save(driver);
     }
 
-    // PENDING → SETUP_REQUIRED when a vehicle is first linked (regardless of other conditions)
+    // PENDING → SETUP_REQUIRED when a vehicle is first linked
     if (
       driver.availabilityStatus === DriverAvailabilityStatus.PENDING &&
       hasVehicle
     ) {
       driver.availabilityStatus = DriverAvailabilityStatus.SETUP_REQUIRED;
+      await this.driverRepo.save(driver);
+    }
+
+    // If vehicle was removed and driver has no vehicle, demote to PENDING
+    if (
+      !hasVehicle &&
+      (driver.availabilityStatus === DriverAvailabilityStatus.SETUP_REQUIRED ||
+        driver.availabilityStatus === DriverAvailabilityStatus.OFFLINE)
+    ) {
+      driver.availabilityStatus = DriverAvailabilityStatus.PENDING;
       await this.driverRepo.save(driver);
     }
 

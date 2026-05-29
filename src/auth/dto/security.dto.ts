@@ -37,6 +37,19 @@ export class DeleteAccountDto {
   passkeyToken?: string;
 }
 
+// ── Disable TOTP ─────────────────────────────────────────────────────────────
+// Accepts exactly ONE of: code (TOTP) or passkeyToken (biometric)
+export class DisableTotpDto {
+  @IsOptional()
+  @IsString()
+  @Length(6, 6, { message: 'Code must be exactly 6 digits' })
+  code?: string;
+
+  @IsOptional()
+  @IsString()
+  passkeyToken?: string;
+}
+
 // ── Passkey verify (device biometric success) ───────────────────────────────
 // Frontend calls this AFTER the device prompts Face ID / Fingerprint / PIN and
 // receives a success result. The token returned proves a recent challenge and

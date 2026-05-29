@@ -10,7 +10,7 @@ import {
 import { User } from '../../users/entites/user.entity';
 
 export enum SenderRole {
-  DRIVER    = 'driver',
+  DRIVER = 'driver',
   PASSENGER = 'passenger',
 }
 
@@ -40,6 +40,9 @@ export class ChatMessage {
 
   @Column({ name: 'is_edited', type: 'boolean', default: false })
   isEdited: boolean;
+
+  @Column({ type: 'json', nullable: true })
+  translations: Record<string, string>;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

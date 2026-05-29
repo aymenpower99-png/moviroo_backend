@@ -40,6 +40,7 @@ import {
   SwitchPrimary2faDto,
   DeleteAccountDto,
   PasskeyVerifyDto,
+  DisableTotpDto,
 } from './dto/security.dto';
 import { WebAuthnRegisterStartDto } from './dto/webauthn-register-start.dto';
 import { WebAuthnRegisterFinishDto } from './dto/webauthn-register-finish.dto';
@@ -129,6 +130,7 @@ export class AuthController {
 
   @Post('admin/login')
   @HttpCode(200)
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   adminLogin(@Body() dto: AdminLoginDto) {
     return this.authService.adminLogin(dto);
   }
@@ -291,8 +293,8 @@ export class AuthController {
   @ActionPurpose('disable-totp')
   @HttpCode(200)
   @Throttle({ default: { limit: 5, ttl: 60000 } })
-  disableTotp(@CurrentUser() user: User, @Body() body: { code: string }) {
-    return this.authService.disableTotp(user.id, body.code);
+  disableTotp(@CurrentUser() user: User, @Body() dto: DisableTotpDto) {
+    return this.authService.disableTotp(user.id, dto.code, dto.passkeyToken);
   }
 
   // ─── Email 2FA ─────────────────────────────────────────────────────────────
@@ -410,6 +412,7 @@ export class AuthController {
   @Delete('sessions')
   @UseGuards(AuthGuard('jwt'))
   @HttpCode(200)
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   revokeAllSessions(@CurrentUser() user: User) {
     return this.sessionService.revokeAllSessions(user.id);
   }
@@ -422,6 +425,7 @@ export class AuthController {
   @Delete('sessions/:id')
   @UseGuards(AuthGuard('jwt'))
   @HttpCode(200)
+  @Throttle({ default: { limit: 20, ttl: 60000 } })
   async deleteSession(
     @CurrentUser() user: User,
     @Param('id') sessionId: string,
@@ -514,6 +518,7 @@ export class AuthController {
   @Post('refresh')
   @UseGuards(AuthGuard('jwt-refresh'))
   @HttpCode(200)
+  @Throttle({ default: { limit: 20, ttl: 60000 } })
   refresh(@CurrentUser() user: User) {
     return this.authService.refresh(user);
   }
@@ -521,6 +526,7 @@ export class AuthController {
   @Post('logout')
   @UseGuards(AuthGuard('jwt'))
   @HttpCode(200)
+  @Throttle({ default: { limit: 20, ttl: 60000 } })
   logout(@CurrentUser() user: User) {
     return this.authService.logout(user.id);
   }

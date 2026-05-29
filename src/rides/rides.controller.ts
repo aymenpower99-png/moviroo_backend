@@ -37,10 +37,14 @@ import { CreateRideUseCase } from './application/use-cases/create-ride.use-case'
 import { ConfirmRideUseCase } from './application/use-cases/confirm-ride.use-case';
 import { CancelRideUseCase } from './application/use-cases/cancel-ride.use-case';
 import { GetVehiclePricesUseCase } from './application/use-cases/get-vehicle-prices.use-case';
+import { RideMailService } from '../mail/services/ride-mail.service';
 import { DispatchOffer } from '../dispatch/domain/entities/dispatch-offer.entity';
 import { TripPayment } from '../billing/entities/trip-payment.entity';
 import { DriverLocation } from '../dispatch/domain/entities/driver-location.entity';
+import { Driver } from '../driver/entities/driver.entity';
+import { PassengerEntity } from '../passenger/entities/passengers.entity';
 import { GeocodingService } from './infrastructure/services/geocoding/geocoding.service';
+import { GeocodingGoogleService } from './infrastructure/services/geocoding/geocoding-google.service';
 import { RoutingService } from './infrastructure/services/routing/routing.service';
 
 @Controller('rides')
@@ -53,7 +57,9 @@ export class RidesController {
     private readonly cancelRideUC: CancelRideUseCase,
     private readonly getVehiclePricesUC: GetVehiclePricesUseCase,
     private readonly geocodingService: GeocodingService,
+    private readonly googlePlacesService: GeocodingGoogleService,
     private readonly routingService: RoutingService,
+    private readonly rideMail: RideMailService,
     @InjectRepository(Ride)
     private readonly rideRepo: Repository<Ride>,
     @InjectRepository(DispatchOffer)
@@ -62,6 +68,10 @@ export class RidesController {
     private readonly paymentRepo: Repository<TripPayment>,
     @InjectRepository(DriverLocation)
     private readonly driverLocationRepo: Repository<DriverLocation>,
+    @InjectRepository(Driver)
+    private readonly driverRepo: Repository<Driver>,
+    @InjectRepository(PassengerEntity)
+    private readonly passengerRepo: Repository<PassengerEntity>,
   ) {}
 
   /* ─── Get vehicle class prices by coordinates ───────────────────── */
@@ -84,13 +94,16 @@ export class RidesController {
     @Query('dropoffLat', ParseFloatPipe) dropoffLat: number,
     @Query('dropoffLon', ParseFloatPipe) dropoffLon: number,
     @Query('bookingDt') bookingDt?: string,
+    @Query('passengerCount') passengerCount?: string,
   ) {
+    const passengers = passengerCount ? parseInt(passengerCount, 10) : 1;
     return this.getVehiclePricesUC.executeAll(
       pickupLat,
       pickupLon,
       dropoffLat,
       dropoffLon,
       bookingDt,
+      isNaN(passengers) ? 1 : passengers,
     );
   }
 
@@ -126,9 +139,10 @@ export class RidesController {
     @Query('proximityLon') proximityLon?: string,
     @Query('lang') lang?: string,
   ) {
-    const proximity = proximityLat && proximityLon
-      ? { lat: parseFloat(proximityLat), lon: parseFloat(proximityLon) }
-      : undefined;
+    const proximity =
+      proximityLat && proximityLon
+        ? { lat: parseFloat(proximityLat), lon: parseFloat(proximityLon) }
+        : undefined;
     return this.geocodingService.autocomplete(query, { proximity, lang });
   }
 
@@ -141,10 +155,53 @@ export class RidesController {
     @Query('proximityLon') proximityLon?: string,
     @Query('lang') lang?: string,
   ) {
-    const proximity = proximityLat && proximityLon
-      ? { lat: parseFloat(proximityLat), lon: parseFloat(proximityLon) }
-      : undefined;
-    return this.geocodingService.autocompleteParallel(query, { proximity, lang });
+    const proximity =
+      proximityLat && proximityLon
+        ? { lat: parseFloat(proximityLat), lon: parseFloat(proximityLon) }
+        : undefined;
+    return this.geocodingService.autocompleteParallel(query, {
+      proximity,
+      lang,
+    });
+  }
+
+  /* ─── Google Places Autocomplete: query → Google results (Tunisia only) ───── */
+  @Get('geocode/google-search')
+  @Throttle({ default: { limit: 50, ttl: 60 } }) // 50 requests per minute
+  async googleSearch(@Query('q') query: string, @Query('lang') lang?: string) {
+    this.logger.log(`[GOOGLE ENDPOINT] 🔍 Searching for: "${query}"`);
+
+    const predictions = await this.googlePlacesService.autocomplete(query, {
+      lang,
+    });
+
+    this.logger.log(
+      `[GOOGLE ENDPOINT] ✅ Got ${predictions.length} predictions from Google API`,
+    );
+
+    // Fetch details for each prediction to get coordinates
+    const results = await Promise.all(
+      predictions.map(async (prediction) => {
+        const details = await this.googlePlacesService.getPlaceDetails(
+          prediction.place_id,
+        );
+        const result = this.googlePlacesService.convertToGeocodingResult(
+          prediction,
+          details,
+        );
+        // Add debug source field to identify Google results
+        return { ...result, _debug_source: 'google_places_api' };
+      }),
+    );
+
+    // Filter out results without valid coordinates
+    const filtered = results.filter((r) => r.lat !== 0 && r.lon !== 0);
+
+    this.logger.log(
+      `[GOOGLE ENDPOINT] 📤 Returning ${filtered.length} results with coordinates`,
+    );
+
+    return filtered;
   }
 
   /* ─── Create a new ride ───────────────────── */
@@ -171,12 +228,35 @@ export class RidesController {
   @Patch(':id/cancel')
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(UserRole.PASSENGER, UserRole.SUPER_ADMIN)
-  cancel(
+  async cancel(
     @CurrentUser() user: User,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: CancelRideDto,
   ) {
-    return this.cancelRideUC.execute(user, id, dto);
+    const ride = await this.cancelRideUC.execute(user, id, dto);
+
+    // Send cancellation + refund email to passenger
+    try {
+      const rideWithPassenger = await this.rideRepo.findOne({
+        where: { id: ride.id },
+        relations: ['passenger'],
+      });
+      if (rideWithPassenger?.passenger?.email) {
+        await this.rideMail.sendRideCancelledRefundEmail(
+          rideWithPassenger.passenger.email,
+          rideWithPassenger.passenger.firstName || 'Passenger',
+          rideWithPassenger,
+          ride.cancelledBy ?? 'ADMIN',
+          ride.cancellationReason,
+        );
+      }
+    } catch (err) {
+      this.logger.error(
+        `Failed to send cancellation email for ride ${ride.id}: ${err}`,
+      );
+    }
+
+    return ride;
   }
 
   /* ─── Get single ride ────────────────────── */
@@ -190,7 +270,24 @@ export class RidesController {
       where: { id },
       relations: ['passenger', 'vehicleClass', 'driver', 'vehicle'],
     });
+
     if (!ride) throw new NotFoundException('Ride not found');
+
+    // Fetch driver profile to get rating
+    let driverProfile: any = null;
+    if (ride.driverId) {
+      driverProfile = await this.driverRepo.findOne({
+        where: { userId: ride.driverId },
+      });
+    }
+
+    // Fetch passenger profile to get rating
+    let passengerProfile: any = null;
+    if (ride.passengerId) {
+      passengerProfile = await this.passengerRepo.findOne({
+        where: { userId: ride.passengerId },
+      });
+    }
 
     if (user.role !== UserRole.SUPER_ADMIN && ride.passengerId !== user.id) {
       throw new ForbiddenException('Not your ride');
@@ -260,6 +357,8 @@ export class RidesController {
       progress: progress,
       etaMins: etaMins,
       remainingDistanceMeters: remainingDistanceMeters,
+      driverRating: driverProfile?.ratingAverage ?? null,
+      passengerRating: passengerProfile?.ratingAverage ?? null,
     };
   }
 

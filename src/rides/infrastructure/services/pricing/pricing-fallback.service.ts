@@ -98,7 +98,10 @@ export class PricingFallbackService {
     const mult = this.getMultiplier(req.carType, req.carMultiplier);
     const priced = raw * mult;
 
-    const exactPrice = Math.max(PricingFallbackService.MIN_FARE, +priced.toFixed(2));
+    const exactPrice = Math.max(
+      PricingFallbackService.MIN_FARE,
+      +priced.toFixed(2),
+    );
     const finalPrice = Math.ceil(exactPrice / 5) * 5;
     const loyaltyPoints = Math.ceil((finalPrice * 0.5) / 5) * 5;
 
@@ -112,8 +115,12 @@ export class PricingFallbackService {
       fullResponse: {
         fallback: true,
         base_fare: PricingFallbackService.BASE_FARE,
-        distance_cost: +(distanceKm * PricingFallbackService.RATE_PER_KM).toFixed(2),
-        duration_cost: +(durationMin * PricingFallbackService.RATE_PER_MIN).toFixed(2),
+        distance_cost: +(
+          distanceKm * PricingFallbackService.RATE_PER_KM
+        ).toFixed(2),
+        duration_cost: +(
+          durationMin * PricingFallbackService.RATE_PER_MIN
+        ).toFixed(2),
         car_multiplier: mult,
       },
     };
@@ -141,11 +148,14 @@ export class PricingFallbackService {
         req.carMultipliers?.[normalizeCarType(ct)],
       );
       const raw = rawComfort * mult;
-      const exactPrice = Math.max(PricingFallbackService.MIN_FARE, +raw.toFixed(2));
+      const exactPrice = Math.max(
+        PricingFallbackService.MIN_FARE,
+        +raw.toFixed(2),
+      );
       const finalPrice = Math.ceil(exactPrice / 5) * 5;
       const loyaltyPoints = Math.ceil((finalPrice * 0.5) / 5) * 5;
       return {
-        carType: ct,
+        carType: normalizeCarType(ct), // Normalize to match ML service format
         finalPrice,
         exactPrice,
         loyaltyPoints,
@@ -160,8 +170,12 @@ export class PricingFallbackService {
       fullResponse: {
         fallback: true,
         base_fare: PricingFallbackService.BASE_FARE,
-        distance_cost: +(distanceKm * PricingFallbackService.RATE_PER_KM).toFixed(2),
-        duration_cost: +(durationMin * PricingFallbackService.RATE_PER_MIN).toFixed(2),
+        distance_cost: +(
+          distanceKm * PricingFallbackService.RATE_PER_KM
+        ).toFixed(2),
+        duration_cost: +(
+          durationMin * PricingFallbackService.RATE_PER_MIN
+        ).toFixed(2),
       },
     };
   }

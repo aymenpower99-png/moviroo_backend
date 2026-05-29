@@ -72,12 +72,17 @@ export class GetVehiclePricesUseCase {
       bookingDt: dto.bookingDt,
     };
 
+    // 3. Single batch call to ML API with fallback handled by PricingService
     const batchResult = await this.pricingService.batchEstimate(batchReq);
+    this.logger.log(
+      `[GetVehiclePrices] batchEstimate returned ${batchResult.items.length} items (distance=${batchResult.distanceKm.toFixed(2)}km, duration=${batchResult.durationMin}min)`,
+    );
 
     // 4. Index prices by normalized car type for O(1) lookup
+    // carType is already normalized by both ML service and fallback service
     const priceByCarType = new Map<string, BatchPricingItem>();
     for (const item of batchResult.items) {
-      priceByCarType.set(normalizeCarType(item.carType), item);
+      priceByCarType.set(item.carType, item);
     }
 
     // 4. Merge DB metadata with ML prices
@@ -130,6 +135,7 @@ export class GetVehiclePricesUseCase {
     dropoffLat: number,
     dropoffLon: number,
     bookingDt?: string,
+    passengerCount?: number,
   ): Promise<GetVehiclePricesResponse> {
     const dto: GetVehiclePricesDto = {
       pickupLat,
@@ -138,7 +144,19 @@ export class GetVehiclePricesUseCase {
       dropoffLon,
       bookingDt,
     };
-    return this.execute(dto);
+    const response = await this.execute(dto);
+    // Filter vehicles by seat capacity if passengerCount is provided
+    if (passengerCount != null && passengerCount >= 1) {
+      const before = response.vehicleClasses.length;
+      response.vehicleClasses = response.vehicleClasses.filter(
+        (vc) => vc.seats >= passengerCount,
+      );
+      const after = response.vehicleClasses.length;
+      this.logger.log(
+        `Passenger filter: ${before} → ${after} vehicles with >=${passengerCount} seats`,
+      );
+    }
+    return response;
   }
 }
 

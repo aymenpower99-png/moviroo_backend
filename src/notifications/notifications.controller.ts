@@ -33,4 +33,19 @@ export class NotificationsController {
     await this.fcmService.registerToken(user.id, token);
     return { message: 'FCM token registered successfully' };
   }
+
+  /** POST /notifications/test-push - Send test push to current user */
+  @Post('test-push')
+  @HttpCode(HttpStatus.OK)
+  async testPush(@CurrentUser() user: User) {
+    const sent = await this.passengerNotificationService.rideStatusChanged(
+      user.id,
+      'test-ride-id',
+      'EN_ROUTE_TO_PICKUP' as any,
+    );
+    return {
+      message: sent ? 'Test push sent successfully' : 'Test push failed',
+      sent,
+    };
+  }
 }

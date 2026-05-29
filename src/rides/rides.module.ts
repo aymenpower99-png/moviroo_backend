@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { CacheModule } from '@nestjs/cache-manager';
+import { HttpModule } from '@nestjs/axios';
 
 import { Ride } from './domain/entities/ride.entity';
 import { RouteHistory } from './domain/entities/route-history.entity';
@@ -22,6 +23,7 @@ import { HaversineService } from './infrastructure/services/haversine.service';
 import { GeocodingService } from './infrastructure/services/geocoding/geocoding.service';
 import { GeocodingMapboxService } from './infrastructure/services/geocoding/geocoding-mapbox.service';
 import { GeocodingNominatimService } from './infrastructure/services/geocoding/geocoding-nominatim.service';
+import { GeocodingGoogleService } from './infrastructure/services/geocoding/geocoding-google.service';
 import { PricingService } from './infrastructure/services/pricing/pricing.service';
 import { PricingMlService } from './infrastructure/services/pricing/pricing-ml.service';
 import { PricingFallbackService } from './infrastructure/services/pricing/pricing-fallback.service';
@@ -58,6 +60,7 @@ import { BillingModule } from '../billing/billing.module';
       ttl: 300, // 5 minutes default TTL
       max: 100, // Maximum number of items in cache
     }),
+    HttpModule,
     DispatchModule,
     ClassesModule,
     NotificationsModule,
@@ -73,6 +76,7 @@ import { BillingModule } from '../billing/billing.module';
     GeocodingService,
     GeocodingMapboxService,
     GeocodingNominatimService,
+    GeocodingGoogleService,
     PricingService,
     PricingMlService,
     PricingFallbackService,

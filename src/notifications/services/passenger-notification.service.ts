@@ -107,7 +107,7 @@ export class PassengerNotificationService {
     return this.fcm.sendToUser(passengerId, title, body, {
       type: 'RIDE_STATUS_CHANGED',
       rideId,
-      status,
+      status: status.toString(),
       channelId: 'ride_updates',
     });
   }

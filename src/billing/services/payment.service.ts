@@ -12,7 +12,12 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import Stripe from 'stripe';
 
-import { TripPayment, PaymentStatus, PaymentMethod } from '../entities/trip-payment.entity';
+import {
+  TripPayment,
+  PaymentStatus,
+  PaymentMethod,
+} from '../entities/trip-payment.entity';
+import { PassengerNotificationService } from '../../notifications/services/passenger-notification.service';
 import { InvoiceService } from './invoice.service';
 import { PassengerEntity } from '../../passenger/entities/passengers.entity';
 import { Ride } from '../../rides/domain/entities/ride.entity';
@@ -38,10 +43,14 @@ export class PaymentService {
     private readonly fallbackService: FallbackDispatchService,
     private readonly savedCardsService: SavedCardsService,
     private readonly invoiceService: InvoiceService,
+    private readonly passengerNotif: PassengerNotificationService,
   ) {
-    this.stripe = new Stripe(process.env.STRIPE_SECRET_KEY ?? 'sk_test_placeholder', {
-      apiVersion: '2025-03-31.basil' as any,
-    });
+    this.stripe = new Stripe(
+      process.env.STRIPE_SECRET_KEY ?? 'sk_test_placeholder',
+      {
+        apiVersion: '2025-03-31.basil' as any,
+      },
+    );
   }
 
   /* ══════════════════════════════════════════════════
@@ -52,11 +61,15 @@ export class PaymentService {
     clientSecret: string;
     paymentIntentId: string;
   }> {
-    const payment = await this.paymentRepo.findOne({ where: { id: tripPaymentId } });
+    const payment = await this.paymentRepo.findOne({
+      where: { id: tripPaymentId },
+    });
     if (!payment) throw new NotFoundException('TripPayment not found');
 
     if (payment.paymentStatus !== PaymentStatus.PENDING) {
-      throw new ConflictException(`Payment is already ${payment.paymentStatus}`);
+      throw new ConflictException(
+        `Payment is already ${payment.paymentStatus}`,
+      );
     }
 
     if (payment.stripePaymentIntentId) {
@@ -104,7 +117,9 @@ export class PaymentService {
     payment.paymentMethod = PaymentMethod.CARD;
     await this.paymentRepo.save(payment);
 
-    this.logger.log(`Stripe PaymentIntent ${intent.id} created for TripPayment ${payment.id}`);
+    this.logger.log(
+      `Stripe PaymentIntent ${intent.id} created for TripPayment ${payment.id}`,
+    );
 
     return {
       clientSecret: intent.client_secret!,
@@ -127,18 +142,23 @@ export class PaymentService {
     ephemeralKey: string;
   }> {
     const payment = await this.paymentRepo.findOne({ where: { rideId } });
-    if (!payment) throw new NotFoundException('TripPayment not found for this ride');
-    if (payment.passengerId !== passengerId) throw new ForbiddenException('Not authorized to pay for this ride');
+    if (!payment)
+      throw new NotFoundException('TripPayment not found for this ride');
+    if (payment.passengerId !== passengerId)
+      throw new ForbiddenException('Not authorized to pay for this ride');
 
     const intentData = await this.createStripePaymentIntent(payment.id);
 
-    const passenger = await this.passengerRepo.findOne({ where: { userId: passengerId } });
+    const passenger = await this.passengerRepo.findOne({
+      where: { userId: passengerId },
+    });
     const stripeCustomerId = passenger?.stripeCustomerId;
     if (!stripeCustomerId) {
       return { ...intentData, customerId: '', ephemeralKey: '' };
     }
 
-    const ephemeralKey = await this.savedCardsService.createEphemeralKey(stripeCustomerId);
+    const ephemeralKey =
+      await this.savedCardsService.createEphemeralKey(stripeCustomerId);
     return { ...intentData, customerId: stripeCustomerId, ephemeralKey };
   }
 
@@ -183,20 +203,29 @@ export class PaymentService {
     }
 
     const now = Date.now();
-    const rideTime = ride.scheduledAt ? new Date(ride.scheduledAt).getTime() : now;
+    const rideTime = ride.scheduledAt
+      ? new Date(ride.scheduledAt).getTime()
+      : now;
     const isImmediate = rideTime - now <= IMMEDIATE_THRESHOLD_MS;
 
     if (isImmediate) {
-      await this.rideRepo.update(rideId, { status: RideStatus.SEARCHING_DRIVER });
+      await this.rideRepo.update(rideId, {
+        status: RideStatus.SEARCHING_DRIVER,
+      });
       ride.status = RideStatus.SEARCHING_DRIVER;
 
       this.logger.log(
         `⚡ [WEBHOOK] Ride ${rideId} paid → immediate, transitioning to SEARCHING_DRIVER + dispatching`,
       );
 
-      this.fallbackService.runFullDispatch(ride).catch((err) =>
-        this.logger.error(`[WEBHOOK] Dispatch failed for ride ${rideId}`, err?.stack),
-      );
+      this.fallbackService
+        .runFullDispatch(ride)
+        .catch((err) =>
+          this.logger.error(
+            `[WEBHOOK] Dispatch failed for ride ${rideId}`,
+            err?.stack,
+          ),
+        );
     } else {
       await this.rideRepo.update(rideId, { status: RideStatus.SCHEDULED });
 
@@ -247,7 +276,9 @@ export class PaymentService {
     }
 
     if (payment.stripeRefundId) {
-      this.logger.warn(`[REFUND] TripPayment ${payment.id} already refunded (${payment.stripeRefundId})`);
+      this.logger.warn(
+        `[REFUND] TripPayment ${payment.id} already refunded (${payment.stripeRefundId})`,
+      );
       return;
     }
 
@@ -264,7 +295,9 @@ export class PaymentService {
         `💸 [REFUND] Refund ${refund.id} issued for TripPayment ${payment.id} (ride ${rideId})`,
       );
     } catch (err) {
-      this.logger.error(`[REFUND] Stripe refund failed for ride ${rideId}: ${err}`);
+      this.logger.error(
+        `[REFUND] Stripe refund failed for ride ${rideId}: ${err}`,
+      );
     }
   }
 
@@ -313,14 +346,21 @@ export class PaymentService {
       const isImmediate = rideTime - now <= IMMEDIATE_THRESHOLD_MS;
 
       if (isImmediate) {
-        await this.rideRepo.update(rideId, { status: RideStatus.SEARCHING_DRIVER });
+        await this.rideRepo.update(rideId, {
+          status: RideStatus.SEARCHING_DRIVER,
+        });
         ride.status = RideStatus.SEARCHING_DRIVER;
         this.logger.log(
           `⚡ [CONFIRM] Ride ${rideId} paid → immediate, transitioning to SEARCHING_DRIVER + dispatching`,
         );
-        this.fallbackService.runFullDispatch(ride).catch((err) =>
-          this.logger.error(`[CONFIRM] Dispatch failed for ride ${rideId}`, err?.stack),
-        );
+        this.fallbackService
+          .runFullDispatch(ride)
+          .catch((err) =>
+            this.logger.error(
+              `[CONFIRM] Dispatch failed for ride ${rideId}`,
+              err?.stack,
+            ),
+          );
       } else {
         await this.rideRepo.update(rideId, { status: RideStatus.SCHEDULED });
         this.logger.log(
@@ -340,7 +380,9 @@ export class PaymentService {
     tripPaymentId: string,
     method: PaymentMethod,
   ): Promise<TripPayment> {
-    const payment = await this.paymentRepo.findOne({ where: { id: tripPaymentId } });
+    const payment = await this.paymentRepo.findOne({
+      where: { id: tripPaymentId },
+    });
     if (!payment) throw new NotFoundException('TripPayment not found');
 
     if (payment.paymentStatus === PaymentStatus.PAID) {
@@ -354,6 +396,15 @@ export class PaymentService {
     await this.paymentRepo.save(payment);
 
     this.logger.log(`TripPayment ${payment.id} → PAID (${method})`);
+
+    // Send push notification to passenger about successful payment
+    if (payment.passengerId) {
+      this.passengerNotif
+        .paymentSuccessful(payment.passengerId, payment.rideId, payment.amount)
+        .catch((err) => {
+          this.logger.warn(`Failed to send payment notification: ${err}`);
+        });
+    }
 
     // Generate invoice + email in background (never block payment flow)
     this.invoiceService.generateInvoiceIfNeeded(payment.id).catch(() => {});

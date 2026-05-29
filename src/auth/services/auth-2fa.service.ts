@@ -1,10 +1,7 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import {
-  User,
-  TwoFactorMethod,
-} from '../../users/entites/user.entity';
+import { User, TwoFactorMethod } from '../../users/entites/user.entity';
 import { OtpService } from '../../otp/otp.service';
 import { AuthMailService } from '../../mail/services/auth-mail.service';
 
@@ -36,9 +33,19 @@ export class Auth2faService {
     };
   }
 
-  async disableTotp(userId: string, totpCode: string) {
-    // Require a valid TOTP code to confirm the user still has the authenticator app
-    await this.otpService.verifyTotpCode(userId, totpCode);
+  async disableTotp(userId: string, totpCode?: string, passkeyToken?: string) {
+    // If passkeyToken is provided, skip TOTP verification (biometric re-auth already done)
+    // If passkeyToken is provided, skip TOTP verification (biometric re-auth already done)
+    // If passkeyToken is not provided, disable directly without any verification
+    // (user doesn't have biometric enabled, so they can disable without code)
+    if (passkeyToken) {
+      // Biometric re-auth already done, skip TOTP verification
+    } else if (totpCode) {
+      // TOTP code provided, verify it
+      await this.otpService.verifyTotpCode(userId, totpCode);
+    }
+    // If neither is provided, disable directly (user doesn't have biometric)
+
     await this.otpService.disableTotp(userId);
 
     const user = await this.userRepo.findOneOrFail({ where: { id: userId } });

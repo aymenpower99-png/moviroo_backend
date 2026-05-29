@@ -6,6 +6,7 @@ import { ConfigService } from '@nestjs/config';
 import { Ride } from '../domain/entities/ride.entity';
 import { RideStatus } from '../domain/enums/ride-status.enum';
 import { PassengerNotificationService } from '../../notifications/services/passenger-notification.service';
+import { RideMailService } from '../../mail/services/ride-mail.service';
 
 @Injectable()
 export class AutoCancelPendingRidesTask {
@@ -14,6 +15,7 @@ export class AutoCancelPendingRidesTask {
   constructor(
     @InjectRepository(Ride) private rideRepo: Repository<Ride>,
     private passengerNotif: PassengerNotificationService,
+    private rideMail: RideMailService,
     private config: ConfigService,
   ) {}
 
@@ -59,6 +61,21 @@ export class AutoCancelPendingRidesTask {
           ride.id,
           ride.cancellationReason,
         );
+
+        // Send cancellation + refund email to passenger
+        try {
+          if (ride.passenger?.email) {
+            await this.rideMail.sendRideCancelledRefundEmail(
+              ride.passenger.email,
+              ride.passenger.firstName || 'Passenger',
+              ride,
+              'SYSTEM',
+              ride.cancellationReason,
+            );
+          }
+        } catch (err) {
+          this.logger.error(`Failed to send cancellation email for ride ${ride.id}: ${err}`);
+        }
 
         this.logger.log(
           `Auto-cancelled ride ${ride.id} for passenger ${ride.passengerId}`,

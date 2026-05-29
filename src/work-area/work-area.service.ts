@@ -76,6 +76,21 @@ export class WorkAreaService {
   async remove(id: string): Promise<{ message: string }> {
     const area = await this.workAreaRepo.findOne({ where: { id } });
     if (!area) throw new NotFoundException(`Work area "${id}" not found.`);
+
+    // Unassign all drivers currently using this work area
+    const affectedDrivers = await this.driverRepo.find({ where: { workAreaId: id } });
+    for (const driver of affectedDrivers) {
+      driver.workAreaId = null;
+      const activeStatuses: DriverAvailabilityStatus[] = [
+        DriverAvailabilityStatus.OFFLINE,
+        DriverAvailabilityStatus.ONLINE,
+      ];
+      if (activeStatuses.includes(driver.availabilityStatus)) {
+        driver.availabilityStatus = DriverAvailabilityStatus.SETUP_REQUIRED;
+      }
+      await this.driverRepo.save(driver);
+    }
+
     await this.workAreaRepo.delete(id);
     return { message: 'Work area deleted.' };
   }

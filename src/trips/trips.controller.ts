@@ -37,6 +37,8 @@ import { SubmitRatingUseCase } from './application/use-cases/submit-rating.use-c
 import { SubmitRatingDto } from './application/dtos/submit-rating.dto';
 import { TripTrackingGateway } from './gateway/trip-tracking.gateway';
 import { DriverNotificationService } from '../notifications/services/driver-notification.service';
+import { PassengerNotificationService } from '../notifications/services/passenger-notification.service';
+import { RideMailService } from '../mail/services/ride-mail.service';
 import { RoutingService } from '../rides/infrastructure/services/routing/routing.service';
 
 @Controller('trips')
@@ -51,6 +53,7 @@ export class TripsController {
     private readonly submitRatingUC: SubmitRatingUseCase,
     private readonly tripGateway: TripTrackingGateway,
     private readonly routingService: RoutingService,
+    private readonly rideMail: RideMailService,
     @InjectRepository(Ride)
     private readonly rideRepo: Repository<Ride>,
     @InjectRepository(DriverLocation)
@@ -58,6 +61,7 @@ export class TripsController {
     @InjectRepository(Driver)
     private readonly driverRepo: Repository<Driver>,
     private readonly driverNotif: DriverNotificationService,
+    private readonly passengerNotif: PassengerNotificationService,
   ) {}
 
   /* ─── STEP 1: Driver starts en-route to pickup ──── */
@@ -83,6 +87,15 @@ export class TripsController {
       RideStatus.EN_ROUTE_TO_PICKUP,
     );
 
+    // Push notification to passenger
+    if (ride.passengerId) {
+      this.passengerNotif.rideStatusChanged(
+        ride.passengerId,
+        rideId,
+        RideStatus.EN_ROUTE_TO_PICKUP,
+      );
+    }
+
     return ride;
   }
 
@@ -103,6 +116,15 @@ export class TripsController {
     });
 
     this.driverNotif.rideStatusChanged(user.id, rideId, RideStatus.ARRIVED);
+
+    // Push notification to passenger
+    if (ride.passengerId) {
+      this.passengerNotif.rideStatusChanged(
+        ride.passengerId,
+        rideId,
+        RideStatus.ARRIVED,
+      );
+    }
 
     return ride;
   }
@@ -125,6 +147,15 @@ export class TripsController {
     });
 
     this.driverNotif.rideStatusChanged(user.id, rideId, RideStatus.IN_TRIP);
+
+    // Push notification to passenger
+    if (ride.passengerId) {
+      this.passengerNotif.rideStatusChanged(
+        ride.passengerId,
+        rideId,
+        RideStatus.IN_TRIP,
+      );
+    }
 
     return ride;
   }
@@ -152,6 +183,15 @@ export class TripsController {
     });
 
     this.driverNotif.rideStatusChanged(user.id, rideId, RideStatus.COMPLETED);
+
+    // Push notification to passenger
+    if (ride.passengerId) {
+      this.passengerNotif.rideStatusChanged(
+        ride.passengerId,
+        rideId,
+        RideStatus.COMPLETED,
+      );
+    }
 
     /* Send rating prompt after 5-second delay */
     setTimeout(() => {
@@ -229,6 +269,32 @@ export class TripsController {
 
     // Push notification to driver confirming cancellation
     this.driverNotif.rideCancelledByDriver(user.id, rideId);
+
+    // Push notification to passenger
+    if (ride.passengerId) {
+      this.passengerNotif.rideCancelledByDriver(ride.passengerId, rideId);
+    }
+
+    // Send cancellation + refund email to passenger
+    try {
+      const rideWithPassenger = await this.rideRepo.findOne({
+        where: { id: rideId },
+        relations: ['passenger'],
+      });
+      if (rideWithPassenger?.passenger?.email) {
+        await this.rideMail.sendRideCancelledRefundEmail(
+          rideWithPassenger.passenger.email,
+          rideWithPassenger.passenger.firstName || 'Passenger',
+          rideWithPassenger,
+          'DRIVER',
+          body?.reason ?? null,
+        );
+      }
+    } catch (err) {
+      this.logger.error(
+        `Failed to send cancellation email for ride ${rideId}: ${err}`,
+      );
+    }
 
     return ride;
   }

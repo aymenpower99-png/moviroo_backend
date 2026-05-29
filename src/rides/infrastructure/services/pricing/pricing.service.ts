@@ -137,16 +137,25 @@ export class PricingService {
       return result;
     } catch (err) {
       const fallbackStart = Date.now();
+      // ── FALLBACK TRIGGERED ──────────────────────────────────────────────
       this.logger.warn(
-        `[PRICING] ML API batch unavailable, using fallback: ${err}`,
+        `[PRICING] *** FALLBACK TRIGGERED *** ML error type=${(err as any)?.constructor?.name} msg="${(err as any)?.message}" — switching to rule-based fallback`,
       );
-      const fallbackResult = this.pricingFallback.batchFallback(req);
+      let fallbackResult: BatchPricingResult;
+      try {
+        fallbackResult = this.pricingFallback.batchFallback(req);
+      } catch (fallbackErr) {
+        this.logger.error(
+          `[PRICING] batchFallback itself threw: ${fallbackErr}`,
+        );
+        throw fallbackErr;
+      }
       const fallbackDuration = Date.now() - fallbackStart;
       const totalDuration = Date.now() - startTime;
 
-      await this.cacheManager.set(cacheKey, fallbackResult, 60); // 1 minute for fallback
+      await this.cacheManager.set(cacheKey, fallbackResult, 60);
       this.logger.log(
-        `[PRICING] Fallback used for batch: ${req.carTypes.join(', ')} - ${totalDuration}ms (Fallback: ${fallbackDuration}ms)`,
+        `[PRICING] Fallback complete: ${req.carTypes.join(', ')} - ${totalDuration}ms total (Fallback: ${fallbackDuration}ms) - ${fallbackResult.items.length} items`,
       );
       return fallbackResult;
     }

@@ -5,6 +5,7 @@ import { Ride } from '../../../rides/domain/entities/ride.entity';
 import { RideStatus } from '../../../rides/domain/enums/ride-status.enum';
 import { DispatchRideUseCase } from '../use-cases/dispatch-ride.use-case';
 import { PaymentService } from '../../../billing/services/payment.service';
+import { RideMailService } from '../../../mail/services/ride-mail.service';
 
 const DEFAULT_RADIUS_KM = 10;
 
@@ -20,6 +21,7 @@ export class FallbackDispatchService {
     private readonly dispatchUC: DispatchRideUseCase,
     @Inject(forwardRef(() => PaymentService))
     private readonly paymentService: PaymentService,
+    private readonly rideMail: RideMailService,
   ) {}
 
   /** Returns true if dispatch is already running for this ride */
@@ -119,5 +121,24 @@ export class FallbackDispatchService {
 
     // Issue refund if the passenger paid by card
     await this.paymentService.issueRefundByRideId(ride.id);
+
+    // Send cancellation + refund email to passenger
+    try {
+      const cancelledRide = await this.rideRepo.findOne({
+        where: { id: ride.id },
+        relations: ['passenger'],
+      });
+      if (cancelledRide?.passenger?.email) {
+        await this.rideMail.sendRideCancelledRefundEmail(
+          cancelledRide.passenger.email,
+          cancelledRide.passenger.firstName || 'Passenger',
+          cancelledRide,
+          'SYSTEM',
+          'No drivers available after 3 dispatch attempts',
+        );
+      }
+    } catch (err) {
+      this.logger.error(`Failed to send cancellation email for ride ${ride.id}: ${err}`);
+    }
   }
 }

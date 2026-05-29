@@ -105,4 +105,11 @@ export class CreateRideDto {
   @IsNumber()
   @Min(0)
   locked_surge?: number;
+
+  /** Number of passengers chosen by the passenger at booking time. */
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  @Max(20)
+  passenger_count?: number;
 }

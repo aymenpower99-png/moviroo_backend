@@ -3,6 +3,7 @@ import { AuthMailService } from './services/auth-mail.service';
 import { InvitationMailService } from './services/invitation-mail.service';
 import { WelcomeMailService } from './services/welcome-mail.service';
 import { InvoiceMailService } from './services/invoice-mail.service';
+import { RideMailService } from './services/ride-mail.service';
 import { BaseMailService } from './services/base-mail.service';
 import { MailController } from './mail.controller';
 
@@ -14,6 +15,7 @@ import { MailController } from './mail.controller';
  *   InvitationMailService  → admin invite (activation link)
  *   WelcomeMailService     → welcome email on first real interaction
  *   InvoiceMailService     → ride receipt / invoice emails
+ *   RideMailService        → ride cancellation / refund notices
  */
 @Global()
 @Module({
@@ -23,6 +25,7 @@ import { MailController } from './mail.controller';
     InvitationMailService,
     WelcomeMailService,
     InvoiceMailService,
+    RideMailService,
   ],
   controllers: [MailController],
   exports: [
@@ -31,6 +34,7 @@ import { MailController } from './mail.controller';
     InvitationMailService,
     WelcomeMailService,
     InvoiceMailService,
+    RideMailService,
   ],
 })
 export class MailModule {}

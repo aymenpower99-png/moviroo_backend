@@ -21,6 +21,7 @@ import {
   TripPayment,
   PaymentStatus,
 } from '../../../billing/entities/trip-payment.entity';
+import { PassengerNotificationService } from '../../../notifications/services/passenger-notification.service';
 
 @Injectable()
 export class CancelRideUseCase {
@@ -35,6 +36,7 @@ export class CancelRideUseCase {
     private readonly driverRepo: Repository<Driver>,
     @InjectRepository(TripPayment)
     private readonly paymentRepo: Repository<TripPayment>,
+    private readonly passengerNotif: PassengerNotificationService,
   ) {}
 
   async execute(
@@ -83,6 +85,21 @@ export class CancelRideUseCase {
     }
 
     await this.rideRepo.save(ride);
+
+    // Send push notification to passenger about cancellation
+    if (ride.passengerId) {
+      if (ride.cancelledBy === 'PASSENGER') {
+        this.passengerNotif.rideCancelledByPassenger(ride.passengerId, ride.id);
+      } else if (ride.cancelledBy === 'DRIVER') {
+        this.passengerNotif.rideCancelledByDriver(ride.passengerId, ride.id);
+      } else if (ride.cancelledBy === 'ADMIN') {
+        this.passengerNotif.rideCancelledByAdmin(
+          ride.passengerId,
+          ride.id,
+          ride.cancellationReason ?? undefined,
+        );
+      }
+    }
 
     /* Remove PENDING billing record — cancelled rides should not appear in billing */
     try {

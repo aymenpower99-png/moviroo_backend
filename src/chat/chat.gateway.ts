@@ -13,6 +13,12 @@ import { Repository } from 'typeorm';
 import { Server, Socket } from 'socket.io';
 
 import { ChatMessage, SenderRole } from './entities/chat-message.entity';
+import { PassengerNotificationService } from '../notifications/services/passenger-notification.service';
+import { DriverNotificationService } from '../notifications/services/driver-notification.service';
+import { Driver } from '../driver/entities/driver.entity';
+import { PassengerEntity } from '../passenger/entities/passengers.entity';
+import { Ride } from '../rides/domain/entities/ride.entity';
+import { User } from '../users/entites/user.entity';
 
 interface SendPayload {
   ride_id: string;
@@ -46,6 +52,16 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   constructor(
     @InjectRepository(ChatMessage)
     private readonly msgRepo: Repository<ChatMessage>,
+    @InjectRepository(Driver)
+    private readonly driverRepo: Repository<Driver>,
+    @InjectRepository(PassengerEntity)
+    private readonly passengerRepo: Repository<PassengerEntity>,
+    @InjectRepository(Ride)
+    private readonly rideRepo: Repository<Ride>,
+    @InjectRepository(User)
+    private readonly userRepo: Repository<User>,
+    private readonly passengerNotif: PassengerNotificationService,
+    private readonly driverNotif: DriverNotificationService,
   ) {}
 
   handleConnection(client: Socket) {
@@ -114,6 +130,65 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     // Broadcast to everyone in the ride chat room (including sender)
     this.server.to(`chat:${payload.ride_id}`).emit('chat:message', broadcast);
 
+    // Send push notification to passenger if sender is driver
+    if (payload.sender_role === 'driver') {
+      try {
+        const driver = await this.driverRepo.findOne({
+          where: { userId: payload.sender_id },
+          relations: ['user'],
+        });
+        const driverName = driver?.user
+          ? `${driver.user.firstName} ${driver.user.lastName}`.trim()
+          : 'Your driver';
+
+        // Get ride to get passengerId
+        const ride = await this.rideRepo.findOne({
+          where: { id: payload.ride_id },
+        });
+
+        if (ride?.passengerId) {
+          this.passengerNotif.newMessageFromDriver(
+            ride.passengerId,
+            payload.ride_id,
+            driverName,
+            payload.text,
+          );
+        }
+      } catch (err) {
+        this.logger.warn(
+          `Failed to send chat notification to passenger: ${err}`,
+        );
+      }
+    }
+
+    // Send push notification to driver if sender is passenger
+    if (payload.sender_role === 'passenger') {
+      try {
+        const user = await this.userRepo.findOne({
+          where: { id: payload.sender_id },
+        });
+        const passengerName = user
+          ? `${user.firstName} ${user.lastName}`.trim()
+          : 'Your passenger';
+
+        // Get ride to get driverId
+        const ride = await this.rideRepo.findOne({
+          where: { id: payload.ride_id },
+        });
+
+        if (ride?.driverId) {
+          this.driverNotif.newMessageFromPassenger(
+            ride.driverId,
+            payload.ride_id,
+            passengerName,
+            payload.text,
+          );
+        }
+      } catch (err) {
+        this.logger.warn(`Failed to send chat notification to driver: ${err}`);
+      }
+    }
+
     return { event: 'chat:sent', data: { id: saved.id } };
   }
 
@@ -157,6 +232,9 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       message_id: payload.message_id,
     });
 
-    return { event: 'chat:delete_ok', data: { message_id: payload.message_id } };
+    return {
+      event: 'chat:delete_ok',
+      data: { message_id: payload.message_id },
+    };
   }
 }

@@ -20,9 +20,13 @@ export class UpdateDriverDto {
   @IsEnum(DriverAvailabilityStatus) @IsOptional()
   availabilityStatus?: DriverAvailabilityStatus;
 
-  /** Assign a vehicle to this driver by vehicle UUID */
+  /** Assign or unassign a vehicle to this driver by vehicle UUID (null = unassign) */
   @IsUUID() @IsOptional()
-  vehicleId?: string;
+  vehicleId?: string | null;
+
+  /** Assign or unassign a work area to this driver by work area UUID (null = unassign) */
+  @IsUUID() @IsOptional()
+  workAreaId?: string | null;
 
   @IsNumber() @IsOptional() @Min(0)
   fixedMonthlySalary?: number;

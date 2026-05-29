@@ -256,6 +256,9 @@ export class User {
   })
   emailNotificationsEnabled: boolean;
 
+  @Column({ name: 'language', type: 'varchar', length: 10, default: 'en' })
+  language: string;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

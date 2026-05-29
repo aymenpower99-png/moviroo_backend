@@ -51,7 +51,12 @@ export class AuthService {
     deviceLabel?: string,
     ipAddress?: string,
   ) {
-    return this.loginService.verifyLoginOtp(preAuthToken, code, deviceLabel, ipAddress);
+    return this.loginService.verifyLoginOtp(
+      preAuthToken,
+      code,
+      deviceLabel,
+      ipAddress,
+    );
   }
 
   resendOtp(userId: string, purpose: 'verify-email' | 'login') {
@@ -76,8 +81,8 @@ export class AuthService {
     return this.twoFaService.confirmTotpSetup(userId, code);
   }
 
-  disableTotp(userId: string, totpCode: string) {
-    return this.twoFaService.disableTotp(userId, totpCode);
+  disableTotp(userId: string, totpCode?: string, passkeyToken?: string) {
+    return this.twoFaService.disableTotp(userId, totpCode, passkeyToken);
   }
 
   toggle2fa(userId: string, enable: boolean, otp?: string) {
@@ -116,4 +121,3 @@ export class AuthService {
     return this.tokenService.safeUser(user);
   }
 }
-
