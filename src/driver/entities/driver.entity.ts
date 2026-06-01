@@ -44,6 +44,18 @@ export class Driver {
   @Column({ name: 'total_trips', type: 'int', default: 0 })
   totalTrips: number;
 
+  @Column({ name: 'monthly_rides', type: 'int', default: 0 })
+  monthlyRides: number;
+
+  @Column({
+    name: 'current_month',
+    type: 'varchar',
+    length: 7,
+    nullable: true,
+    default: null,
+  })
+  currentMonth: string | null;
+
   @Column({
     name: 'availability_status',
     type: 'enum',
@@ -57,7 +69,12 @@ export class Driver {
   workAreaId: string | null;
 
   /** Current commission tier the driver has unlocked this month */
-  @Column({ name: 'current_tier_id', type: 'uuid', nullable: true, default: null })
+  @Column({
+    name: 'current_tier_id',
+    type: 'uuid',
+    nullable: true,
+    default: null,
+  })
   currentTierId: string | null;
 
   /** Active commission rate (0.0–1.0) applied to each completed ride */
@@ -95,6 +112,19 @@ export class Driver {
 
   @Column({ name: 'accepted_offers_count', type: 'int', default: 0 })
   acceptedOffersCount: number;
+
+  /** Driver profile photo (Cloudinary) */
+  @Column({ name: 'logo_url', type: 'text', nullable: true, default: null })
+  logoUrl: string | null;
+
+  @Column({
+    name: 'logo_public_id',
+    type: 'varchar',
+    length: 255,
+    nullable: true,
+    default: null,
+  })
+  logoPublicId: string | null;
 
   @Column({
     name: 'notif_push_enabled',

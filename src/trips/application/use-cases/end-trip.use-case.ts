@@ -19,6 +19,7 @@ import { PassengerEntity } from '../../../passenger/entities/passengers.entity';
 import { BillingService } from '../../../billing/services/billing.service';
 import { InvoiceService } from '../../../billing/services/invoice.service';
 import { CommissionTier } from '../../../billing/entities/commission-tier.entity';
+import { DriverMonthlyStats } from '../../../billing/entities/driver-monthly-stats.entity';
 import { DriverNotificationService } from '../../../notifications/services/driver-notification.service';
 import { Between } from 'typeorm';
 
@@ -39,6 +40,8 @@ export class EndTripUseCase {
     private readonly passengerRepo: Repository<PassengerEntity>,
     @InjectRepository(CommissionTier)
     private readonly tierRepo: Repository<CommissionTier>,
+    @InjectRepository(DriverMonthlyStats)
+    private readonly monthlyStatsRepo: Repository<DriverMonthlyStats>,
     private readonly billingService: BillingService,
     private readonly invoiceService: InvoiceService,
     private readonly driverNotif: DriverNotificationService,
@@ -113,20 +116,58 @@ export class EndTripUseCase {
     );
 
     /* ── 5. Compute per-ride commission & check tier crossing ──── */
-    const driver = await this.driverRepo.findOne({ where: { userId: driverUserId } });
+    const driver = await this.driverRepo.findOne({
+      where: { userId: driverUserId },
+    });
     if (driver) {
       const now = new Date();
+      const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
       const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-      const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+      const monthEnd = new Date(
+        now.getFullYear(),
+        now.getMonth() + 1,
+        0,
+        23,
+        59,
+        59,
+        999,
+      );
 
-      // Count monthly completed rides
-      const monthlyRides = await this.rideRepo.count({
-        where: {
+      // Check if month changed - save previous month stats and reset
+      if (driver.currentMonth && driver.currentMonth !== currentMonthStr) {
+        // Save previous month stats
+        const prevMonthStats = this.monthlyStatsRepo.create({
           driverId: driverUserId,
-          status: RideStatus.COMPLETED,
-          completedAt: Between(monthStart, monthEnd),
-        },
-      });
+          month: driver.currentMonth,
+          ridesCount: driver.monthlyRides,
+          tierAchievedId: driver.currentTierId,
+          totalEarnings: 0, // TODO: Calculate from rides if needed
+          totalCommission: 0, // TODO: Calculate from rides if needed
+        });
+        await this.monthlyStatsRepo.save(prevMonthStats);
+
+        this.logger.log(
+          `📊 Saved month ${driver.currentMonth} stats for driver ${driverUserId}: ${driver.monthlyRides} rides`,
+        );
+
+        // Reset for new month
+        driver.monthlyRides = 0;
+        driver.currentMonth = currentMonthStr;
+        driver.currentTierId = null;
+        driver.currentCommissionRate = 0.25;
+        await this.driverRepo.save(driver);
+      } else if (!driver.currentMonth) {
+        // First time - initialize current month
+        driver.currentMonth = currentMonthStr;
+        await this.driverRepo.save(driver);
+      }
+
+      // Increment monthly rides
+      driver.monthlyRides = (driver.monthlyRides || 0) + 1;
+      driver.totalTrips = (driver.totalTrips || 0) + 1;
+      await this.driverRepo.save(driver);
+
+      const monthlyRides = driver.monthlyRides;
 
       // Fetch active tiers sorted by required rides ascending
       const allTiers = await this.tierRepo.find({
@@ -186,7 +227,8 @@ export class EndTripUseCase {
       } else {
         // No tier change — apply current rate to just this ride
         const currentRate = driver.currentCommissionRate ?? 0.25;
-        const price = Number(ride.priceFinal) || Number(ride.priceEstimate) || 0;
+        const price =
+          Number(ride.priceFinal) || Number(ride.priceEstimate) || 0;
         const commission = +(price * currentRate).toFixed(2);
         const earnings = +(price - commission).toFixed(2);
         ride.commissionAmount = commission;

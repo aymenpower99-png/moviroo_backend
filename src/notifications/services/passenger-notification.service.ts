@@ -72,11 +72,23 @@ export class PassengerNotificationService {
         ? 'The driver has cancelled this ride. Your refund will be processed.'
         : 'The driver has cancelled this ride.';
 
-    return this.fcm.sendToUser(passengerId, 'Ride Cancelled', body, {
-      type: 'RIDE_CANCELLED_BY_DRIVER',
-      rideId,
-      channelId: 'ride_updates',
-    });
+    this.logger.log(
+      `[PassengerNotif] Sending rideCancelledByDriver to passenger ${passengerId.slice(0, 8)} for ride ${rideId} (payment: ${paymentMethod})`,
+    );
+    const result = await this.fcm.sendToUser(
+      passengerId,
+      'Ride Cancelled',
+      body,
+      {
+        type: 'RIDE_CANCELLED_BY_DRIVER',
+        rideId,
+        channelId: 'ride_updates',
+      },
+    );
+    this.logger.log(
+      `[PassengerNotif] rideCancelledByDriver result: ${result ? 'SUCCESS' : 'FAILED/SKIPPED'}`,
+    );
+    return result;
   }
 
   /** Admin cancelled the ride — notify the passenger with reason. */
@@ -86,6 +98,20 @@ export class PassengerNotificationService {
     reason?: string,
     paymentMethod?: string,
   ) {
+    // Special case: "No driver found" - use simple message without reason prefix
+    if (reason === 'No driver found') {
+      const body =
+        paymentMethod === 'CARD'
+          ? 'No driver found. Your refund will be processed.'
+          : 'No driver found.';
+      return this.fcm.sendToUser(passengerId, 'Ride Cancelled', body, {
+        type: 'RIDE_CANCELLED_BY_ADMIN',
+        rideId,
+        reason: reason ?? '',
+        channelId: 'ride_updates',
+      });
+    }
+
     const body =
       paymentMethod === 'CARD'
         ? reason?.trim()
@@ -203,7 +229,7 @@ export class PassengerNotificationService {
     return this.fcm.sendToUser(
       passengerId,
       'Refund Issued',
-      `Your refund of $${amount.toFixed(2)} has been processed. It may take 5-7 business days to appear in your account.`,
+      'Your refund has been processed. It may take 5-7 business days to appear in your account.',
       {
         type: 'REFUND_ISSUED',
         rideId,

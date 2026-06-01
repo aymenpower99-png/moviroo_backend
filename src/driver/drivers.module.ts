@@ -12,6 +12,7 @@ import { DriverProfileService } from './services/driver-profile.service';
 import { DriverAvailabilityService } from './services/driver-availability.service';
 import { DriverAdminService } from './services/driver-admin.service';
 import { EarningsModule } from '../earnings/earnings.module';
+import { CloudinaryService } from '../common/services/cloudinary.service';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { EarningsModule } from '../earnings/earnings.module';
     DriverProfileService,
     DriverAvailabilityService,
     DriverAdminService,
+    CloudinaryService,
   ],
   exports: [DriversService, DriverAvailabilityService],
 })

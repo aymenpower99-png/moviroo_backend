@@ -7,6 +7,7 @@ import { DispatchRideUseCase } from '../use-cases/dispatch-ride.use-case';
 import { PaymentService } from '../../../billing/services/payment.service';
 import { RideMailService } from '../../../mail/services/ride-mail.service';
 import { TripPayment } from '../../../billing/entities/trip-payment.entity';
+import { PassengerNotificationService } from '../../../notifications/services/passenger-notification.service';
 
 const DEFAULT_RADIUS_KM = 10;
 
@@ -25,6 +26,7 @@ export class FallbackDispatchService {
     @Inject(forwardRef(() => PaymentService))
     private readonly paymentService: PaymentService,
     private readonly rideMail: RideMailService,
+    private readonly passengerNotif: PassengerNotificationService,
   ) {}
 
   /** Returns true if dispatch is already running for this ride */
@@ -146,9 +148,22 @@ export class FallbackDispatchService {
           'No drivers available after 3 dispatch attempts',
         );
       }
+
+      // Send push notification to passenger about cancellation
+      if (cancelledRide?.passengerId) {
+        this.logger.log(
+          `[FallbackDispatch] Sending cancellation notification to passenger ${cancelledRide.passengerId.slice(0, 8)}`,
+        );
+        await this.passengerNotif.rideCancelledByAdmin(
+          cancelledRide.passengerId,
+          ride.id,
+          'No driver found',
+          payment?.paymentMethod ?? undefined,
+        );
+      }
     } catch (err) {
       this.logger.error(
-        `Failed to send cancellation email for ride ${ride.id}: ${err}`,
+        `Failed to send cancellation notification for ride ${ride.id}: ${err}`,
       );
     }
   }

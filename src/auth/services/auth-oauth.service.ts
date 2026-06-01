@@ -35,6 +35,9 @@ export class AuthOAuthService {
     dto: GoogleSignInDto,
     deviceLabel?: string,
     ipAddress?: string,
+    deviceId?: string,
+    platform?: string,
+    userAgent?: string,
   ) {
     const payload = this.tokenService.parseJwt(dto.idToken);
     const email = payload.email as string;
@@ -87,7 +90,7 @@ export class AuthOAuthService {
     const tokens = await this.tokenService.generateTokens(user);
     await this.tokenService.saveRefreshToken(user.id, tokens.refreshToken);
     this.sessionService
-      .createSession(user.id, deviceLabel ?? 'Unknown', ipAddress )
+      .upsertSession(user.id, deviceLabel ?? 'Unknown', ipAddress, deviceId, platform, userAgent)
       .catch(() => {});
     const isProfileComplete = !!user.phone;
     return { ...tokens, user: this.tokenService.safeUser(user), isProfileComplete };

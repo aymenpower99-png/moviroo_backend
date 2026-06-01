@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ChatMessage } from './entities/chat-message.entity';
 import { AuthGuard } from '@nestjs/passport';
-import { LibreTranslateService } from './services/libre-translate.service';
+import { HuggingFaceTranslateService } from './services/huggingface-translate.service';
 
 @Controller('chat')
 @UseGuards(AuthGuard('jwt'))
@@ -11,7 +11,7 @@ export class ChatController {
   constructor(
     @InjectRepository(ChatMessage)
     private readonly msgRepo: Repository<ChatMessage>,
-    private readonly libreTranslate: LibreTranslateService,
+    private readonly huggingFaceTranslate: HuggingFaceTranslateService,
   ) {}
 
   /** GET /api/chat/:rideId/messages?limit=50&before=<uuid>&translate=true&lang=ar */
@@ -53,7 +53,7 @@ export class ChatController {
           } else {
             // Translate and cache
             try {
-              const translated = await this.libreTranslate.translate(
+              const translated = await this.huggingFaceTranslate.translate(
                 m.text,
                 targetLang,
               );

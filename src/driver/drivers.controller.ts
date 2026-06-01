@@ -11,6 +11,7 @@ import {
   Query,
   Req,
   UseGuards,
+  Logger,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import type { Request } from 'express';
@@ -24,11 +25,16 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { UserRole } from '../users/entites/user.entity';
 import { DriverAvailabilityStatus } from './entities/driver.entity';
+import { CloudinaryService } from '../common/services/cloudinary.service';
 
 @Controller('drivers')
 @UseGuards(AuthGuard('jwt'))
 export class DriversController {
-  constructor(private readonly driversService: DriversService) {}
+  private readonly logger = new Logger(DriversController.name);
+  constructor(
+    private readonly driversService: DriversService,
+    private readonly cloudinary: CloudinaryService,
+  ) {}
 
   // ─── Driver: Get Notification Preferences ────────────────────────────────────
 
@@ -72,6 +78,67 @@ export class DriversController {
   getMyProfile(@Req() req: Request) {
     const userId = (req.user as any).id as string;
     return this.driversService.getMyProfile(userId);
+  }
+
+  // ─── Driver: Cloudinary Signature for Direct Upload ───────────────────────────
+
+  @Post('me/logo/signature')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.DRIVER)
+  @HttpCode(200)
+  getLogoUploadSignature(@Req() req: Request) {
+    const userId = (req.user as any).id as string;
+    const timestamp = Math.floor(Date.now() / 1000);
+    const folder = `Photo_profile/drivers/${userId}`;
+    const public_id = `logo_${timestamp}`;
+    const params = {
+      folder,
+      public_id,
+      overwrite: true,
+      invalidate: true,
+      timestamp,
+    } as const;
+    this.logger.log(
+      `Signature request: userId=${userId} folder=${folder} public_id=${public_id} ts=${timestamp}`,
+    );
+    const signature = this.cloudinary.signUpload(params as any);
+    const resp = {
+      cloudName: this.cloudinary.getCloudName(),
+      apiKey: this.cloudinary.getApiKey(),
+      timestamp,
+      signature,
+      folder,
+      publicId: public_id,
+    };
+    this.logger.log(
+      `Signature response: cloud=${resp.cloudName} apiKey=${resp.apiKey ? 'set' : '(missing)'} ts=${resp.timestamp} folder=${resp.folder} publicId=${resp.publicId}`,
+    );
+    return resp;
+  }
+
+  // ─── Driver: Persist Uploaded Logo URL ────────────────────────────────────────
+
+  @Patch('me/logo')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.DRIVER)
+  @HttpCode(200)
+  async saveLogo(
+    @Req() req: Request,
+    @Body() body: { url: string; publicId: string },
+  ) {
+    const userId = (req.user as any).id as string;
+    return this.driversService.saveDriverLogo(userId, body);
+  }
+
+  // ─── Driver: Delete Logo (revert to initials avatar client-side) ──────────────
+
+  @Delete('me/logo')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.DRIVER)
+  @HttpCode(200)
+  async deleteLogo(@Req() req: Request) {
+    const userId = (req.user as any).id as string;
+    return this.driversService.deleteDriverLogo(userId);
   }
 
   // ─── Driver: Set Own Availability (online / offline only) ────────────────────────

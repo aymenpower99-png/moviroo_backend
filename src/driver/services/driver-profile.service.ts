@@ -12,6 +12,8 @@ import { User, UserStatus } from '../../users/entites/user.entity';
 import { WorkArea } from '../../work-area/entities/work-area.entity';
 import { CompleteDriverProfileDto } from '../dto/complete-driver-profile.dto';
 import { DriverOnlineHistory } from '../../earnings/entities/driver-online-history.entity';
+import { CloudinaryService } from '../../common/services/cloudinary.service';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class DriverProfileService {
@@ -22,6 +24,8 @@ export class DriverProfileService {
     @InjectRepository(WorkArea) private workAreaRepo: Repository<WorkArea>,
     @InjectRepository(DriverOnlineHistory)
     private onlineHistoryRepo: Repository<DriverOnlineHistory>,
+    private readonly cloudinary: CloudinaryService,
+    private readonly config: ConfigService,
   ) {}
 
   async completeProfile(
@@ -47,6 +51,91 @@ export class DriverProfileService {
     });
 
     return this.driverRepo.save(driver);
+  }
+
+  /** Persist driver logo after Cloudinary direct upload */
+  async saveDriverLogo(
+    userId: string,
+    body: { url: string; publicId: string },
+  ) {
+    const driver = await this.driverRepo.findOne({ where: { userId } });
+    if (!driver) throw new NotFoundException('Driver not found');
+
+    const cloudName = this.config.get<string>('CLOUDINARY_CLOUD_NAME');
+    if (!cloudName)
+      throw new BadRequestException('Cloudinary not configured on server');
+
+    // Validate URL and publicId path
+    try {
+      const u = new URL(body.url);
+      const isHostOk = u.host === 'res.cloudinary.com';
+      const isPathOk = u.pathname.includes(`/${cloudName}/`);
+      if (!isHostOk || !isPathOk) {
+        throw new BadRequestException('Invalid Cloudinary URL');
+      }
+    } catch (_) {
+      throw new BadRequestException('Invalid URL');
+    }
+    if (!body.publicId.startsWith(`Photo_profile/drivers/${userId}/`)) {
+      throw new BadRequestException('publicId path mismatch');
+    }
+
+    // Validate allowed formats by extension in URL or publicId hint
+    const lowerUrl = body.url.toLowerCase();
+    const isAllowed =
+      lowerUrl.endsWith('.png') ||
+      lowerUrl.endsWith('.jpg') ||
+      lowerUrl.endsWith('.jpeg') ||
+      lowerUrl.endsWith('.webp');
+    if (!isAllowed) {
+      throw new BadRequestException(
+        'Unsupported image format. Allowed: png, jpg, jpeg, webp.',
+      );
+    }
+
+    // Optional size validation via admin API (best-effort)
+    const meta = await this.cloudinary.getResource(body.publicId);
+    if (meta && meta.bytes > 5 * 1024 * 1024) {
+      throw new BadRequestException(
+        'Your profile image is too large. Maximum allowed size is 5MB.',
+      );
+    }
+
+    // Delete previous if exists
+    if (driver.logoPublicId && driver.logoPublicId !== body.publicId) {
+      await this.cloudinary.deleteByPublicId(driver.logoPublicId, true);
+    }
+
+    await this.driverRepo.update(
+      { userId },
+      {
+        logoUrl: body.url,
+        logoPublicId: body.publicId,
+      },
+    );
+
+    const updated = await this.driverRepo.findOne({ where: { userId } });
+    return { logoUrl: updated?.logoUrl, logoPublicId: updated?.logoPublicId };
+  }
+
+  /** Delete driver logo and clear fields */
+  async deleteDriverLogo(userId: string) {
+    const driver = await this.driverRepo.findOne({ where: { userId } });
+    if (!driver) throw new NotFoundException('Driver not found');
+
+    if (driver.logoPublicId) {
+      await this.cloudinary.deleteByPublicId(driver.logoPublicId, true);
+    }
+
+    await this.driverRepo.update(
+      { userId },
+      {
+        logoUrl: null,
+        logoPublicId: null,
+      },
+    );
+
+    return { logoUrl: null, logoPublicId: null };
   }
 
   private _currentMonth(): string {

@@ -1,10 +1,11 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository }       from 'typeorm';
+import { IsNull, Repository } from 'typeorm';
 import { Vehicle, VehicleStatus } from '../entities/vehicle.entity';
 import { Driver, DriverAvailabilityStatus } from '../../driver/entities/driver.entity';
 import { CreateVehicleDto } from '../dto/create-vehicle.dto';
@@ -28,15 +29,19 @@ export class VehicleCrudService {
   async create(dto: CreateVehicleDto): Promise<Vehicle> {
     await this.classesService.findOne(dto.classId);
 
-    if (dto.licensePlate) {
-      const existing = await this.vehicleRepo.findOne({
-        where: { licensePlate: dto.licensePlate },
-      });
-      if (existing) {
-        throw new BadRequestException(
-          `License plate "${dto.licensePlate}" is already registered.`,
-        );
-      }
+    // Duplicate detection: all 6 identity fields must match
+    const duplicate = await this.vehicleRepo.findOne({
+      where: {
+        licensePlate: dto.licensePlate ? dto.licensePlate : IsNull(),
+        make: dto.make,
+        model: dto.model,
+        year: dto.year,
+        classId: dto.classId,
+        color: dto.color ? dto.color : IsNull(),
+      },
+    });
+    if (duplicate) {
+      throw new ConflictException('Véhicule déjà existant');
     }
 
     // One driver ↔ one vehicle on create
@@ -51,9 +56,7 @@ export class VehicleCrudService {
       }
     }
 
-    const hasPhotos = Array.isArray(dto.photos) && dto.photos.length > 0;
-    const hasDriver = !!dto.driverId;
-    const status    = hasPhotos && hasDriver ? VehicleStatus.AVAILABLE : VehicleStatus.PENDING;
+    const status = VehicleStatus.AVAILABLE;
 
     const vehicle = this.vehicleRepo.create({
       classId:                 dto.classId,
@@ -71,7 +74,6 @@ export class VehicleCrudService {
       insuranceExpiry:         dto.insuranceExpiry         ? new Date(dto.insuranceExpiry)    : null,
       technicalControlUrl:     dto.technicalControlUrl     ?? null,
       technicalControlExpiry:  dto.technicalControlExpiry  ? new Date(dto.technicalControlExpiry) : null,
-      photos: dto.photos ?? null,
       status,
     });
 
@@ -200,7 +202,6 @@ export class VehicleCrudService {
       ...(dto.insuranceExpiry          !== undefined && { insuranceExpiry:         new Date(dto.insuranceExpiry) }),
       ...(dto.technicalControlUrl      !== undefined && { technicalControlUrl:     dto.technicalControlUrl }),
       ...(dto.technicalControlExpiry   !== undefined && { technicalControlExpiry:  new Date(dto.technicalControlExpiry) }),
-      ...(dto.photos                   !== undefined && { photos:                  dto.photos }),
       ...(dto.isActive                 !== undefined && { isActive:                dto.isActive }),
     });
 
@@ -210,15 +211,6 @@ export class VehicleCrudService {
     //    and the re-fetch can return the old class name in some cache scenarios.
     if (dto.classId !== undefined) {
       (vehicle as any).vehicleClass = undefined;
-    }
-
-    // Auto-upgrade PENDING → AVAILABLE when fully ready
-    if (
-      vehicle.status === VehicleStatus.PENDING &&
-      Array.isArray(vehicle.photos) && vehicle.photos.length > 0 &&
-      vehicle.driverId
-    ) {
-      vehicle.status = VehicleStatus.AVAILABLE;
     }
 
     await this.vehicleRepo.save(vehicle);

@@ -26,6 +26,7 @@ export class DriverNotificationService {
       'Ride Accepted',
       `You are on the way to pick up ${passengerName}.`,
       { type: 'RIDE_ACCEPTED', rideId, channelId: 'ride_updates' },
+      false, // Use data-only for custom icon
     );
   }
 
@@ -36,6 +37,7 @@ export class DriverNotificationService {
       'Ride Cancelled',
       'You have cancelled this ride.',
       { type: 'RIDE_CANCELLED_BY_DRIVER', rideId, channelId: 'ride_updates' },
+      false, // Use data-only for custom icon
     );
   }
 
@@ -50,6 +52,7 @@ export class DriverNotificationService {
         rideId,
         channelId: 'ride_updates',
       },
+      false, // Use data-only for custom icon
     );
   }
 
@@ -71,6 +74,7 @@ export class DriverNotificationService {
         reason: reason ?? '',
         channelId: 'ride_updates',
       },
+      false, // Use data-only for custom icon
     );
   }
 
@@ -86,12 +90,18 @@ export class DriverNotificationService {
     status: RideStatus,
   ) {
     const { title, body } = this.buildStatusCopy(status);
-    return this.fcm.sendToUser(driverId, title, body, {
-      type: 'RIDE_STATUS_CHANGED',
-      rideId,
-      status,
-      channelId: 'ride_updates',
-    });
+    return this.fcm.sendToUser(
+      driverId,
+      title,
+      body,
+      {
+        type: 'RIDE_STATUS_CHANGED',
+        rideId,
+        status,
+        channelId: 'ride_updates',
+      },
+      false,
+    ); // Use data-only for custom icon
   }
 
   private buildStatusCopy(status: RideStatus): { title: string; body: string } {
@@ -142,6 +152,7 @@ export class DriverNotificationService {
         monthlyRides: String(monthlyRides),
         channelId: 'ride_updates',
       },
+      false, // Use data-only for custom icon
     );
   }
 
@@ -154,11 +165,17 @@ export class DriverNotificationService {
     passengerName: string,
     messagePreview: string,
   ) {
-    return this.fcm.sendToUser(driverId, passengerName, messagePreview, {
-      type: 'CHAT_MESSAGE',
-      rideId,
-      senderName: passengerName,
-      channelId: 'chat_messages',
-    });
+    return this.fcm.sendToUser(
+      driverId,
+      passengerName,
+      messagePreview,
+      {
+        type: 'CHAT_MESSAGE',
+        rideId,
+        senderName: passengerName,
+        channelId: 'chat_messages',
+      },
+      false,
+    ); // Use data-only for custom icon
   }
 }

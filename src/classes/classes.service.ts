@@ -140,7 +140,6 @@ export class ClassesService {
       driverId: v.driverId,
       driverName: v.driverId ? (driverNameMap.get(v.driverId) ?? null) : null,
       status: v.status,
-      photos: v.photos,
       isActive: v.isActive,
       createdAt: v.createdAt,
     }));

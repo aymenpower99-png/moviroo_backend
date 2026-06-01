@@ -78,10 +78,6 @@ export class Vehicle {
   @Column({ name: 'technical_control_expiry', type: 'date', nullable: true, default: null })
   technicalControlExpiry: Date | null;
 
-  // ─── Photos ───────────────────────────────────────────────────────────────
-  @Column({ name: 'photos', type: 'jsonb', nullable: true, default: null })
-  photos: string[] | null;
-
   // ─── Status ───────────────────────────────────────────────────────────────
   @Column({
     name: 'status',

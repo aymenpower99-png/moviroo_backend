@@ -124,8 +124,11 @@ export class AuthController {
   @Throttle({ default: { limit: 5, ttl: 60000 } })
   login(@Body() dto: LoginDto, @Req() req: Request) {
     const deviceLabel = (req.headers['x-device-name'] as string) ?? 'Unknown';
+    const deviceId = (req.headers['x-device-id'] as string) ?? undefined;
+    const platform = (req.headers['x-device-platform'] as string) ?? undefined;
+    const userAgent = req.headers['user-agent'] as string;
     const ipAddress = this.getRealIp(req);
-    return this.authService.login(dto, deviceLabel, ipAddress);
+    return this.authService.login(dto, deviceLabel, ipAddress, deviceId, platform, userAgent);
   }
 
   @Post('admin/login')
@@ -143,12 +146,18 @@ export class AuthController {
     @Req() req: Request,
   ) {
     const deviceLabel = (req.headers['x-device-name'] as string) ?? 'Unknown';
+    const deviceId = (req.headers['x-device-id'] as string) ?? undefined;
+    const platform = (req.headers['x-device-platform'] as string) ?? undefined;
+    const userAgent = req.headers['user-agent'] as string;
     const ipAddress = this.getRealIp(req);
     return this.authService.verifyLoginOtp(
       body.preAuthToken,
       body.code,
       deviceLabel,
       ipAddress,
+      deviceId,
+      platform,
+      userAgent,
     );
   }
 
@@ -176,8 +185,11 @@ export class AuthController {
   @Throttle({ default: { limit: 10, ttl: 60000 } })
   googleSignIn(@Body() dto: GoogleSignInDto, @Req() req: Request) {
     const deviceLabel = (req.headers['x-device-name'] as string) ?? 'Unknown';
+    const deviceId = (req.headers['x-device-id'] as string) ?? undefined;
+    const platform = (req.headers['x-device-platform'] as string) ?? undefined;
+    const userAgent = req.headers['user-agent'] as string;
     const ipAddress = this.getRealIp(req);
-    return this.authService.googleSignIn(dto, deviceLabel, ipAddress);
+    return this.authService.googleSignIn(dto, deviceLabel, ipAddress, deviceId, platform, userAgent);
   }
 
   // ─── Forgot / Reset / Update Password ────────────────────────────────────
@@ -473,11 +485,17 @@ export class AuthController {
     @Req() req: Request,
   ) {
     const deviceLabel = (req.headers['x-device-name'] as string) ?? 'Unknown';
+    const deviceId = (req.headers['x-device-id'] as string) ?? undefined;
+    const platform = (req.headers['x-device-platform'] as string) ?? undefined;
+    const userAgent = req.headers['user-agent'] as string;
     const ipAddress = this.getRealIp(req);
     return this.webauthnService.finishAuthentication(
       dto,
       deviceLabel,
       ipAddress,
+      deviceId,
+      platform,
+      userAgent,
     );
   }
 

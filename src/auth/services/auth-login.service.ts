@@ -31,7 +31,7 @@ export class AuthLoginService {
     private readonly sessionService: AuthSessionService,
   ) {}
 
-  async login(dto: LoginDto, deviceLabel?: string, ipAddress?: string) {
+  async login(dto: LoginDto, deviceLabel?: string, ipAddress?: string, deviceId?: string, platform?: string, userAgent?: string) {
     const user = await this.userRepo.findOne({ where: { email: dto.email } });
     if (!user || !user.password)
       throw new UnauthorizedException('Invalid credentials');
@@ -128,7 +128,7 @@ export class AuthLoginService {
     const tokens = await this.tokenService.generateTokens(user);
     await this.tokenService.saveRefreshToken(user.id, tokens.refreshToken);
     this.sessionService
-      .createSession(user.id, deviceLabel ?? 'Unknown', ipAddress)
+      .upsertSession(user.id, deviceLabel ?? 'Unknown', ipAddress, deviceId, platform, userAgent)
       .catch(() => {});
     return { ...tokens, user: this.tokenService.safeUser(user) };
   }
@@ -160,6 +160,9 @@ export class AuthLoginService {
     code: string,
     deviceLabel?: string,
     ipAddress?: string,
+    deviceId?: string,
+    platform?: string,
+    userAgent?: string,
   ) {
     const payload = await this.tokenService.verifyPreAuthToken(preAuthToken);
 
@@ -177,7 +180,7 @@ export class AuthLoginService {
     const tokens = await this.tokenService.generateTokens(user);
     await this.tokenService.saveRefreshToken(user.id, tokens.refreshToken);
     this.sessionService
-      .createSession(user.id, deviceLabel ?? 'Unknown', ipAddress)
+      .upsertSession(user.id, deviceLabel ?? 'Unknown', ipAddress, deviceId, platform, userAgent)
       .catch(() => {});
     return { ...tokens, user: this.tokenService.safeUser(user) };
   }

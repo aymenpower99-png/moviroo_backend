@@ -37,8 +37,8 @@ export class AuthService {
 
   // ─── Login ────────────────────────────────────────────────────────────────
 
-  login(dto: LoginDto, deviceLabel?: string, ipAddress?: string) {
-    return this.loginService.login(dto, deviceLabel, ipAddress);
+  login(dto: LoginDto, deviceLabel?: string, ipAddress?: string, deviceId?: string, platform?: string, userAgent?: string) {
+    return this.loginService.login(dto, deviceLabel, ipAddress, deviceId, platform, userAgent);
   }
 
   adminLogin(dto: AdminLoginDto) {
@@ -50,12 +50,18 @@ export class AuthService {
     code: string,
     deviceLabel?: string,
     ipAddress?: string,
+    deviceId?: string,
+    platform?: string,
+    userAgent?: string,
   ) {
     return this.loginService.verifyLoginOtp(
       preAuthToken,
       code,
       deviceLabel,
       ipAddress,
+      deviceId,
+      platform,
+      userAgent,
     );
   }
 
@@ -111,8 +117,8 @@ export class AuthService {
 
   // ─── OAuth ────────────────────────────────────────────────────────────────
 
-  googleSignIn(dto: GoogleSignInDto, deviceLabel?: string, ipAddress?: string) {
-    return this.oauthService.googleSignIn(dto, deviceLabel, ipAddress);
+  googleSignIn(dto: GoogleSignInDto, deviceLabel?: string, ipAddress?: string, deviceId?: string, platform?: string, userAgent?: string) {
+    return this.oauthService.googleSignIn(dto, deviceLabel, ipAddress, deviceId, platform, userAgent);
   }
 
   // ─── Shared ───────────────────────────────────────────────────────────────

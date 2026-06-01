@@ -1,18 +1,18 @@
 import { Injectable } from '@nestjs/common';
-import { DriverProfileService }      from './services/driver-profile.service';
+import { DriverProfileService } from './services/driver-profile.service';
 import { DriverAvailabilityService } from './services/driver-availability.service';
-import { DriverAdminService }        from './services/driver-admin.service';
+import { DriverAdminService } from './services/driver-admin.service';
 import { Driver, DriverAvailabilityStatus } from './entities/driver.entity';
-import { CompleteDriverProfileDto }  from './dto/complete-driver-profile.dto';
-import { CreateDriverDto }           from './dto/create-driver.dto';
-import { UpdateDriverDto }           from './dto/update-driver.dto';
+import { CompleteDriverProfileDto } from './dto/complete-driver-profile.dto';
+import { CreateDriverDto } from './dto/create-driver.dto';
+import { UpdateDriverDto } from './dto/update-driver.dto';
 
 @Injectable()
 export class DriversService {
   constructor(
-    private profileService:      DriverProfileService,
+    private profileService: DriverProfileService,
     private availabilityService: DriverAvailabilityService,
-    private adminService:        DriverAdminService,
+    private adminService: DriverAdminService,
   ) {}
 
   // ── Driver self-service ───────────────────────────────────────────────────────
@@ -31,30 +31,65 @@ export class DriversService {
   getNotificationPrefs(userId: string) {
     return this.profileService.getNotificationPrefs(userId);
   }
-  updateNotificationPrefs(userId: string, prefs: { pushEnabled?: boolean; emailEnabled?: boolean }) {
+  updateNotificationPrefs(
+    userId: string,
+    prefs: { pushEnabled?: boolean; emailEnabled?: boolean },
+  ) {
     return this.profileService.updateNotificationPrefs(userId, prefs);
   }
-  seedMonthlyOnlineTime(userId: string, monthlyOnlineMs: number, month: string) {
-    return this.availabilityService.seedMonthlyOnlineTime(userId, monthlyOnlineMs, month);
+  saveDriverLogo(userId: string, body: { url: string; publicId: string }) {
+    return this.profileService.saveDriverLogo(userId, body);
+  }
+  deleteDriverLogo(userId: string) {
+    return this.profileService.deleteDriverLogo(userId);
+  }
+  seedMonthlyOnlineTime(
+    userId: string,
+    monthlyOnlineMs: number,
+    month: string,
+  ) {
+    return this.availabilityService.seedMonthlyOnlineTime(
+      userId,
+      monthlyOnlineMs,
+      month,
+    );
   }
 
   // ── Internal transitions ──────────────────────────────────────────────────────
-  markSetupRequired(userId: string)    { return this.availabilityService.markSetupRequired(userId); }
-  markOfflineIfReady(driverId: string) { return this.availabilityService.markOfflineIfReady(driverId); }
+  markSetupRequired(userId: string) {
+    return this.availabilityService.markSetupRequired(userId);
+  }
+  markOfflineIfReady(driverId: string) {
+    return this.availabilityService.markOfflineIfReady(driverId);
+  }
 
   /**
    * Called when a vehicle enters MAINTENANCE.
    * Forces the driver (by driver.id) back to SETUP_REQUIRED so they cannot go online
    * until a new AVAILABLE vehicle is assigned.
    */
-  forceSetupRequired(driverId: string) { return this.availabilityService.forceSetupRequired(driverId); }
+  forceSetupRequired(driverId: string) {
+    return this.availabilityService.forceSetupRequired(driverId);
+  }
 
   // ── Admin CRUD ────────────────────────────────────────────────────────────────
-  create(dto: CreateDriverDto)             { return this.adminService.create(dto); }
-  findAll(page?: number, limit?: number, availabilityStatus?: DriverAvailabilityStatus) {
+  create(dto: CreateDriverDto) {
+    return this.adminService.create(dto);
+  }
+  findAll(
+    page?: number,
+    limit?: number,
+    availabilityStatus?: DriverAvailabilityStatus,
+  ) {
     return this.adminService.findAll(page, limit, availabilityStatus);
   }
-  findOne(id: string)                      { return this.adminService.findOne(id); }
-  update(id: string, dto: UpdateDriverDto) { return this.adminService.update(id, dto); }
-  remove(id: string)                       { return this.adminService.remove(id); }
+  findOne(id: string) {
+    return this.adminService.findOne(id);
+  }
+  update(id: string, dto: UpdateDriverDto) {
+    return this.adminService.update(id, dto);
+  }
+  remove(id: string) {
+    return this.adminService.remove(id);
+  }
 }

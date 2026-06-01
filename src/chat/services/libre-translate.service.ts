@@ -12,7 +12,12 @@ export interface DetectResponse {
 @Injectable()
 export class LibreTranslateService {
   private readonly logger = new Logger(LibreTranslateService.name);
-  private readonly apiUrl = process.env.LIBRETRANSLATE_API_URL || 'https://libretranslate.de';
+  private readonly apiUrl =
+    process.env.LIBRETRANSLATE_API_URL || 'https://libretranslate.de';
+
+  constructor() {
+    this.logger.log(`LibreTranslate configured with API URL: ${this.apiUrl}`);
+  }
 
   /**
    * Translate text to target language using LibreTranslate.
@@ -34,6 +39,10 @@ export class LibreTranslateService {
         body.source = sourceLang;
       }
 
+      this.logger.log(
+        `[LibreTranslate] Requesting translation to ${targetLang} for: "${text.substring(0, 30)}..."`,
+      );
+
       const response = await fetch(`${this.apiUrl}/translate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -41,17 +50,23 @@ export class LibreTranslateService {
       });
 
       if (!response.ok) {
-        throw new Error(`LibreTranslate API error: ${response.status}`);
+        const errorText = await response.text();
+        this.logger.error(
+          `[LibreTranslate] API error ${response.status}: ${errorText}`,
+        );
+        throw new Error(
+          `LibreTranslate API error: ${response.status} - ${errorText}`,
+        );
       }
 
       const data = (await response.json()) as TranslateResponse;
       this.logger.log(
-        `[LibreTranslate] Translated "${text.substring(0, 30)}..." to ${targetLang}`,
+        `[LibreTranslate] Successfully translated to ${targetLang}: "${data.translatedText.substring(0, 30)}..."`,
       );
       return data.translatedText;
     } catch (error) {
       this.logger.error(
-        `[LibreTranslate] Translation failed: ${error}`,
+        `[LibreTranslate] Translation failed for "${text.substring(0, 30)}...": ${error}`,
       );
       throw error;
     }
@@ -75,9 +90,7 @@ export class LibreTranslateService {
       const data = (await response.json()) as DetectResponse[];
       return data[0]?.language || 'en';
     } catch (error) {
-      this.logger.error(
-        `[LibreTranslate] Language detection failed: ${error}`,
-      );
+      this.logger.error(`[LibreTranslate] Language detection failed: ${error}`);
       return 'en'; // fallback to English
     }
   }

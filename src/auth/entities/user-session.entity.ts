@@ -25,9 +25,21 @@ export class UserSession {
   @Index()
   userId: string;
 
-  /** Human-readable device/platform label (e.g. "android", "ios"). */
+  /** Human-readable device/platform label (e.g. "Samsung Galaxy S23"). */
   @Column({ name: 'device_label', length: 100, default: 'Unknown' })
   deviceLabel: string;
+
+  /** Stable device identifier for deduplication (Android ID / iOS identifierForVendor / persisted UUID). */
+  @Column({ name: 'device_id', type: 'varchar', length: 255, nullable: true, default: null })
+  deviceId: string | null;
+
+  /** Platform extracted from user-agent or app header (android, ios, web). */
+  @Column({ name: 'platform', type: 'varchar', length: 50, nullable: true, default: null })
+  platform: string | null;
+
+  /** Raw User-Agent string for debugging / fallback device naming. */
+  @Column({ name: 'user_agent', type: 'text', nullable: true, default: null })
+  userAgent: string | null;
 
   @Column({ name: 'ip_address', type: 'varchar', length: 50, nullable: true, default: null })
   ipAddress: string | null;

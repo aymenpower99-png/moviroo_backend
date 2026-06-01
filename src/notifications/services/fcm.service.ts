@@ -91,7 +91,12 @@ export class FcmService implements OnModuleInit {
     title: string,
     body: string,
     data?: Record<string, string>,
+    includeNotification = true,
   ): Promise<boolean> {
+    this.logger.log(
+      `[FCM] sendToUser called for ${userId.slice(0, 8)}: "${title}"`,
+    );
+
     if (!this.initialized) {
       this.logger.warn('FCM not initialized — skipping push');
       return false;
@@ -101,6 +106,10 @@ export class FcmService implements OnModuleInit {
       where: { id: userId },
       select: ['id', 'fcmToken', 'pushNotificationsEnabled', 'role'],
     });
+
+    this.logger.log(
+      `[FCM] User lookup: role=${user?.role}, hasToken=${!!user?.fcmToken}, pushEnabled=${user?.pushNotificationsEnabled}`,
+    );
 
     // Respect push-enabled toggle for both driver and passenger
     if (user?.pushNotificationsEnabled === false) {
@@ -129,10 +138,9 @@ export class FcmService implements OnModuleInit {
 
     try {
       const channelId = data?.channelId ?? 'ride_offers';
-      await admin.messaging().send({
+      const message: admin.messaging.Message = {
         token: user.fcmToken,
-        notification: { title, body },
-        data: data ?? {},
+        data: { ...data, title, body },
         android: {
           priority: 'high',
           notification: {
@@ -140,7 +148,13 @@ export class FcmService implements OnModuleInit {
             priority: 'max',
           },
         },
-      });
+      };
+
+      if (includeNotification) {
+        message.notification = { title, body };
+      }
+
+      await admin.messaging().send(message);
       this.logger.log(` Push sent to ${userId.slice(0, 8)}: "${title}"`);
       return true;
     } catch (err) {
@@ -181,6 +195,7 @@ export class FcmService implements OnModuleInit {
         price: String(price),
         distanceKm: String(distanceKm),
       },
+      true, // Include notification to show title and body
     );
   }
 
@@ -192,5 +207,46 @@ export class FcmService implements OnModuleInit {
       'The passenger has cancelled this ride.',
       { type: 'RIDE_CANCELLED', rideId },
     );
+  }
+
+  /** Send push notification directly to a specific FCM token (bypasses user lookup) */
+  async sendToToken(
+    token: string,
+    title: string,
+    body: string,
+    data?: Record<string, string>,
+  ): Promise<boolean> {
+    if (!this.initialized) {
+      this.logger.warn('FCM not initialized — skipping push');
+      return false;
+    }
+
+    if (!token) {
+      this.logger.warn('No FCM token provided');
+      return false;
+    }
+
+    try {
+      const channelId = data?.channelId ?? 'ride_offers';
+      const message: admin.messaging.Message = {
+        token,
+        data: { ...data, title, body },
+        android: {
+          priority: 'high',
+          notification: {
+            channelId,
+            priority: 'max',
+          },
+        },
+      };
+
+      await admin.messaging().send(message);
+      this.logger.log(` Push sent to token: "${title}"`);
+      return true;
+    } catch (err) {
+      const errorMsg = (err as Error).message;
+      this.logger.error(`FCM send failed for token: ${errorMsg}`);
+      return false;
+    }
   }
 }

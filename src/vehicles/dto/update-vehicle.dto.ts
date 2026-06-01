@@ -3,7 +3,6 @@ import {
   IsInt,
   IsOptional,
   IsDateString,
-  IsArray,
   IsUUID,
   IsBoolean,
   Min,
@@ -88,12 +87,6 @@ export class UpdateVehicleDto {
   @IsOptional()
   @IsDateString()
   technicalControlExpiry?: string;
-
-  // ─── Photos ──────���────────────────────────────────────────────────────────
-  @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
-  photos?: string[];
 
   @IsOptional()
   @IsBoolean()

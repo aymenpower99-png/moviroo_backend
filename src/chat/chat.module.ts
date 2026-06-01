@@ -3,7 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ChatMessage } from './entities/chat-message.entity';
 import { ChatGateway } from './chat.gateway';
 import { ChatController } from './chat.controller';
-import { LibreTranslateService } from './services/libre-translate.service';
+import { HuggingFaceTranslateService } from './services/huggingface-translate.service';
 import { Driver } from '../driver/entities/driver.entity';
 import { PassengerEntity } from '../passenger/entities/passengers.entity';
 import { Ride } from '../rides/domain/entities/ride.entity';
@@ -22,7 +22,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     NotificationsModule,
   ],
   controllers: [ChatController],
-  providers: [ChatGateway, LibreTranslateService],
+  providers: [ChatGateway, HuggingFaceTranslateService],
   exports: [ChatGateway],
 })
 export class ChatModule {}

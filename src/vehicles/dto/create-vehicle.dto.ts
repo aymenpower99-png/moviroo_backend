@@ -81,8 +81,5 @@ export class CreateVehicleDto {
   @IsDateString()
   technicalControlExpiry?: string;
 
-  // ─── Photos ───────────────────────────────────────────────────────────────
-  @IsOptional()
-  @IsString({ each: true })
-  photos?: string[];
+
 }

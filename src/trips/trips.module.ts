@@ -9,6 +9,7 @@ import { Driver } from '../driver/entities/driver.entity';
 import { PassengerEntity } from '../passenger/entities/passengers.entity';
 import { TripPayment } from '../billing/entities/trip-payment.entity';
 import { CommissionTier } from '../billing/entities/commission-tier.entity';
+import { DriverMonthlyStats } from '../billing/entities/driver-monthly-stats.entity';
 import { BillingModule } from '../billing/billing.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { RidesModule } from '../rides/rides.module';
@@ -33,6 +34,7 @@ import { SubmitRatingUseCase } from './application/use-cases/submit-rating.use-c
       PassengerEntity,
       TripPayment,
       CommissionTier,
+      DriverMonthlyStats,
     ]),
     BillingModule,
     NotificationsModule,

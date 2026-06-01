@@ -12,17 +12,46 @@ export class AuthSessionService {
     @InjectRepository(User) private readonly userRepo: Repository<User>,
   ) {}
 
-  /** Record a new login session. */
-  async createSession(
+  /**
+   * Record or update a login session.
+   * If a session with the same (userId, deviceId) exists, update lastSeenAt
+   * and ipAddress instead of creating a duplicate row.
+   */
+  async upsertSession(
     userId: string,
     deviceLabel: string,
     ipAddress?: string,
+    deviceId?: string,
+    platform?: string,
+    userAgent?: string,
   ): Promise<UserSession> {
+    const label = deviceLabel?.trim() || 'Unknown';
+    const now = new Date();
+
+    // If we have a stable deviceId, try to update existing session
+    if (deviceId) {
+      const existing = await this.sessionRepo.findOne({
+        where: { userId, deviceId },
+      });
+      if (existing) {
+        existing.lastSeenAt = now;
+        if (ipAddress) existing.ipAddress = ipAddress;
+        if (label !== 'Unknown') existing.deviceLabel = label;
+        if (platform) existing.platform = platform;
+        if (userAgent) existing.userAgent = userAgent;
+        return this.sessionRepo.save(existing);
+      }
+    }
+
+    // No existing session found — create new
     const session = this.sessionRepo.create({
       userId,
-      deviceLabel: deviceLabel || 'Unknown',
+      deviceLabel: label,
+      deviceId: deviceId ?? null,
+      platform: platform ?? null,
+      userAgent: userAgent ?? null,
       ipAddress: ipAddress ?? null,
-      lastSeenAt: new Date(),
+      lastSeenAt: now,
     });
     return this.sessionRepo.save(session);
   }

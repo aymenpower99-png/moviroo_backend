@@ -266,13 +266,23 @@ export class TripsController {
 
     // Push notification to passenger
     if (ride.passengerId) {
+      this.logger.log(
+        `[Trips] Driver cancelled ride ${rideId}, notifying passenger ${ride.passengerId.slice(0, 8)}`,
+      );
       const payment = await this.paymentRepo.findOne({
         where: { rideId: rideId },
       });
+      this.logger.log(
+        `[Trips] Payment lookup for ride ${rideId}: method=${payment?.paymentMethod ?? 'NOT_FOUND'}`,
+      );
       this.passengerNotif.rideCancelledByDriver(
         ride.passengerId,
         rideId,
         payment?.paymentMethod ?? undefined,
+      );
+    } else {
+      this.logger.warn(
+        `[Trips] Ride ${rideId} has no passengerId, cannot notify passenger`,
       );
     }
 

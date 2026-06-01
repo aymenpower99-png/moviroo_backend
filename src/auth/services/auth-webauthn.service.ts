@@ -297,6 +297,9 @@ export class AuthWebAuthnService {
     },
     deviceLabel?: string,
     ipAddress?: string,
+    deviceId?: string,
+    platform?: string,
+    userAgent?: string,
   ) {
     const entry = this.getChallenge(dto.optionsId);
     if (!entry) {
@@ -356,7 +359,7 @@ export class AuthWebAuthnService {
     const tokens = await this.tokenService.generateTokens(user);
     await this.tokenService.saveRefreshToken(user.id, tokens.refreshToken);
     this.sessionService
-      .createSession(user.id, deviceLabel ?? 'Unknown', ipAddress)
+      .upsertSession(user.id, deviceLabel ?? 'Unknown', ipAddress, deviceId, platform, userAgent)
       .catch(() => {});
 
     return { ...tokens, user: this.tokenService.safeUser(user) };
