@@ -126,8 +126,8 @@ export class FallbackDispatchService {
       dispatchSnapshot: failSnap as any,
     });
 
-    // Issue refund if the passenger paid by card
-    await this.paymentService.issueRefundByRideId(ride.id);
+    // Clean up payment record (cash → delete; card + paid → refund; card + pending → delete)
+    await this.paymentService.cancelPaymentForRide(ride.id);
 
     // Send cancellation + refund email to passenger
     try {

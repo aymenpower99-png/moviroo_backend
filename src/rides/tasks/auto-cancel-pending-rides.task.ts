@@ -8,6 +8,7 @@ import { RideStatus } from '../domain/enums/ride-status.enum';
 import { PassengerNotificationService } from '../../notifications/services/passenger-notification.service';
 import { RideMailService } from '../../mail/services/ride-mail.service';
 import { TripPayment } from '../../billing/entities/trip-payment.entity';
+import { PaymentService } from '../../billing/services/payment.service';
 
 @Injectable()
 export class AutoCancelPendingRidesTask {
@@ -16,6 +17,7 @@ export class AutoCancelPendingRidesTask {
   constructor(
     @InjectRepository(Ride) private rideRepo: Repository<Ride>,
     @InjectRepository(TripPayment) private paymentRepo: Repository<TripPayment>,
+    private readonly paymentService: PaymentService,
     private passengerNotif: PassengerNotificationService,
     private rideMail: RideMailService,
     private config: ConfigService,
@@ -56,6 +58,11 @@ export class AutoCancelPendingRidesTask {
         ride.cancellationReason =
           'Payment timeout - no payment received within time limit';
         await this.rideRepo.save(ride);
+
+        // Clean up payment record (cash → delete; card + paid → refund; card + pending → delete)
+        this.paymentService.cancelPaymentForRide(ride.id).catch((err) => {
+          this.logger.error(`[AutoCancel] Payment cleanup failed for ride ${ride.id}: ${err}`);
+        });
 
         // Send notification to passenger
         const payment = await this.paymentRepo.findOne({

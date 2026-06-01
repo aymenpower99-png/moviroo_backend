@@ -29,6 +29,7 @@ import {
   DriverAvailabilityStatus,
 } from '../driver/entities/driver.entity';
 import { TripPayment } from '../billing/entities/trip-payment.entity';
+import { PaymentService } from '../billing/services/payment.service';
 
 import { StartEnrouteUseCase } from './application/use-cases/start-enroute.use-case';
 import { ArrivedUseCase } from './application/use-cases/arrived.use-case';
@@ -63,6 +64,7 @@ export class TripsController {
     private readonly driverRepo: Repository<Driver>,
     @InjectRepository(TripPayment)
     private readonly paymentRepo: Repository<TripPayment>,
+    private readonly paymentService: PaymentService,
     private readonly driverNotif: DriverNotificationService,
     private readonly passengerNotif: PassengerNotificationService,
   ) {}
@@ -247,6 +249,11 @@ export class TripsController {
     ride.cancelledAt = new Date();
     ride.cancellationReason = body?.reason ?? null;
     await this.rideRepo.save(ride);
+
+    // Clean up payment record (cash → delete; card + paid → refund; card + pending → delete)
+    this.paymentService.cancelPaymentForRide(rideId).catch((err) => {
+      this.logger.error(`[DriverCancel] Payment cleanup failed for ride ${rideId}: ${err}`);
+    });
 
     // Free driver: reset availabilityStatus so they can receive next dispatch
     await this.driverRepo.update(

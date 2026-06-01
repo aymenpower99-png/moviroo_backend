@@ -21,6 +21,7 @@ import {
   TripPayment,
   PaymentStatus,
 } from '../../../billing/entities/trip-payment.entity';
+import { PaymentService } from '../../../billing/services/payment.service';
 import { PassengerNotificationService } from '../../../notifications/services/passenger-notification.service';
 
 @Injectable()
@@ -36,6 +37,7 @@ export class CancelRideUseCase {
     private readonly driverRepo: Repository<Driver>,
     @InjectRepository(TripPayment)
     private readonly paymentRepo: Repository<TripPayment>,
+    private readonly paymentService: PaymentService,
     private readonly passengerNotif: PassengerNotificationService,
   ) {}
 
@@ -114,18 +116,12 @@ export class CancelRideUseCase {
       }
     }
 
-    /* Remove PENDING billing record — cancelled rides should not appear in billing */
+    /* Clean up payment record according to cancellation rules */
     try {
-      const payment = await this.paymentRepo.findOne({ where: { rideId } });
-      if (payment && payment.paymentStatus === PaymentStatus.PENDING) {
-        await this.paymentRepo.remove(payment);
-        this.logger.log(
-          `[BILLING] Removed PENDING TripPayment for cancelled ride ${rideId}`,
-        );
-      }
+      await this.paymentService.cancelPaymentForRide(rideId);
     } catch (err) {
       this.logger.error(
-        `[BILLING] Failed to remove TripPayment for cancelled ride ${rideId}: ${err}`,
+        `[CANCEL] Failed to clean up TripPayment for cancelled ride ${rideId}: ${err}`,
       );
     }
 

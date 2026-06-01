@@ -16,17 +16,15 @@ export class BillingService {
 
   /**
    * Called automatically when a trip completes.
-   * Creates a PENDING TripPayment record.
+   * For CASH: immediately marks PAID (driver collected cash at trip end).
+   * For CARD: leaves status as-is (should already be PAID from Stripe).
    */
   async createTripPayment(ride: Ride): Promise<TripPayment> {
     const existing = await this.paymentRepo.findOne({ where: { rideId: ride.id } });
     if (existing) {
-      // Update with final driver and payment info (cash = mark paid)
-      const isCash = ride.paymentMethod?.toUpperCase() === 'CASH';
       existing.driverId = ride.driverId ?? existing.driverId;
       existing.amount = ride.priceFinal ?? ride.priceEstimate ?? existing.amount;
-      if (isCash && existing.paymentStatus !== PaymentStatus.PAID) {
-        existing.paymentMethod = PaymentMethod.CASH;
+      if (existing.paymentMethod === PaymentMethod.CASH && existing.paymentStatus !== PaymentStatus.PAID) {
         existing.paymentStatus = PaymentStatus.PAID;
         existing.paidAt = new Date();
       }
@@ -86,6 +84,8 @@ export class BillingService {
     return { data, total };
   }
 
+
+
   async findByRideId(rideId: string): Promise<TripPayment | null> {
     return this.paymentRepo.findOne({
       where: { rideId },
@@ -100,26 +100,26 @@ export class BillingService {
     });
   }
 
-  /** KPI: revenue stats */
+  /** KPI: revenue stats (financial view only — excludes PENDING and cancelled cash) */
   async getRevenueStats(): Promise<{
     totalEarnings: number;
     paidRevenue: number;
-    pendingPayments: number;
     refundedAmount: number;
     totalTrips: number;
   }> {
     const result = await this.paymentRepo
       .createQueryBuilder('tp')
+      .leftJoin('tp.ride', 'ride')
       .select([
         'COALESCE(SUM(tp.amount), 0) AS "totalEarnings"',
         'COALESCE(SUM(CASE WHEN tp.payment_status = :paid THEN tp.amount ELSE 0 END), 0) AS "paidRevenue"',
-        'COALESCE(SUM(CASE WHEN tp.payment_status = :pending THEN tp.amount ELSE 0 END), 0) AS "pendingPayments"',
         'COALESCE(SUM(CASE WHEN tp.payment_status = :refunded THEN tp.amount ELSE 0 END), 0) AS "refundedAmount"',
         'COUNT(tp.id)::int AS "totalTrips"',
       ])
+      .where('tp.payment_status IN (:...statuses)', { statuses: [PaymentStatus.PAID, PaymentStatus.REFUNDED] })
+      .andWhere('(tp.payment_method != :cash OR ride.status != :cancelled)', { cash: PaymentMethod.CASH, cancelled: 'CANCELLED' })
       .setParameters({
         paid: PaymentStatus.PAID,
-        pending: PaymentStatus.PENDING,
         refunded: PaymentStatus.REFUNDED,
       })
       .getRawOne();
@@ -127,7 +127,6 @@ export class BillingService {
     return {
       totalEarnings: parseFloat(result.totalEarnings),
       paidRevenue: parseFloat(result.paidRevenue),
-      pendingPayments: parseFloat(result.pendingPayments),
       refundedAmount: parseFloat(result.refundedAmount),
       totalTrips: parseInt(result.totalTrips, 10),
     };

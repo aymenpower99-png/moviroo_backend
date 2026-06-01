@@ -236,16 +236,36 @@ export class PaymentService {
   }
 
   /* ══════════════════════════════════════════════════
-     Cash — Admin/Driver confirms cash received
-  ══════════════════════════════════════════════════ */
-
-  async confirmCashPayment(tripPaymentId: string): Promise<TripPayment> {
-    return this.markAsPaid(tripPaymentId, PaymentMethod.CASH);
-  }
-
-  /* ══════════════════════════════════════════════════
      Refund — issue Stripe refund for a card payment
   ══════════════════════════════════════════════════ */
+
+  /**
+   * Unified cancellation cleanup for a ride's payment record.
+   *   - CASH  → delete record entirely (never appears in reporting)
+   *   - CARD + PAID   → issue Stripe refund, set status = REFUNDED
+   *   - CARD + PENDING → delete record (no money was captured)
+   */
+  async cancelPaymentForRide(rideId: string): Promise<void> {
+    const payment = await this.paymentRepo.findOne({ where: { rideId } });
+    if (!payment) return;
+
+    // CASH: delete entirely — cancelled cash trips must not exist in payment system
+    if (payment.paymentMethod === PaymentMethod.CASH) {
+      await this.paymentRepo.remove(payment);
+      this.logger.log(`[CANCEL] Deleted cash payment for ride ${rideId}`);
+      return;
+    }
+
+    // CARD + PAID: issue refund → REFUNDED
+    if (payment.paymentMethod === PaymentMethod.CARD && payment.paymentStatus === PaymentStatus.PAID) {
+      await this.issueRefundByRideId(rideId);
+      return;
+    }
+
+    // CARD + PENDING (or any other state): delete — no financial transaction happened
+    await this.paymentRepo.remove(payment);
+    this.logger.log(`[CANCEL] Deleted pending card payment for ride ${rideId}`);
+  }
 
   /**
    * Issue a full Stripe refund for the TripPayment linked to the given rideId.

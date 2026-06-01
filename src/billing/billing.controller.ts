@@ -177,16 +177,7 @@ export class BillingController {
     return this.paymentService.confirmCardPaymentSuccess(rideId, req.user.id);
   }
 
-  /* ══════════════════════════════════════════════════
-     Cash payment confirmation
-  ══════════════════════════════════════════════════ */
 
-  @Patch('payments/:id/confirm-cash')
-  @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @Roles(UserRole.SUPER_ADMIN)
-  async confirmCash(@Param('id') tripPaymentId: string) {
-    return this.paymentService.confirmCashPayment(tripPaymentId);
-  }
 
   /* ══════════════════════════════════════════════════
      Invoice / Receipt — download PDF
