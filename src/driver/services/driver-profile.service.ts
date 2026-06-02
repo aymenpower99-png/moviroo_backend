@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -14,9 +15,16 @@ import { CompleteDriverProfileDto } from '../dto/complete-driver-profile.dto';
 import { DriverOnlineHistory } from '../../earnings/entities/driver-online-history.entity';
 import { CloudinaryService } from '../../common/services/cloudinary.service';
 import { ConfigService } from '@nestjs/config';
+import { Ride } from '../../rides/domain/entities/ride.entity';
+import { RideStatus } from '../../rides/domain/enums/ride-status.enum';
+import { DispatchOffer } from '../../dispatch/domain/entities/dispatch-offer.entity';
+import { OfferStatus } from '../../dispatch/domain/enums/offer-status.enum';
+import { Between } from 'typeorm';
 
 @Injectable()
 export class DriverProfileService {
+  private readonly logger = new Logger(DriverProfileService.name);
+
   constructor(
     @InjectRepository(Driver) private driverRepo: Repository<Driver>,
     @InjectRepository(Vehicle) private vehicleRepo: Repository<Vehicle>,
@@ -24,6 +32,8 @@ export class DriverProfileService {
     @InjectRepository(WorkArea) private workAreaRepo: Repository<WorkArea>,
     @InjectRepository(DriverOnlineHistory)
     private onlineHistoryRepo: Repository<DriverOnlineHistory>,
+    @InjectRepository(Ride) private rideRepo: Repository<Ride>,
+    @InjectRepository(DispatchOffer) private offerRepo: Repository<DispatchOffer>,
     private readonly cloudinary: CloudinaryService,
     private readonly config: ConfigService,
   ) {}
@@ -164,9 +174,56 @@ export class DriverProfileService {
     });
     const monthlyOnlineMs = history?.onlineTimeMs || 0;
 
+    // ── Compute all stats from rides table (not stored counters) ──
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+
+    const [totalTrips, monthlyRides, cancellationCount] = await Promise.all([
+      this.rideRepo.count({
+        where: { driverId: userId, status: RideStatus.COMPLETED },
+      }),
+      this.rideRepo.count({
+        where: {
+          driverId: userId,
+          status: RideStatus.COMPLETED,
+          completedAt: Between(monthStart, monthEnd),
+        },
+      }),
+      this.rideRepo.count({
+        where: { driverId: userId, status: RideStatus.CANCELLED },
+      }),
+    ]);
+
+    // Acceptance rate from dispatch_offers table
+    const [acceptedOffers, rejectedOffers] = await Promise.all([
+      this.offerRepo.count({
+        where: { driverId: userId, status: OfferStatus.ACCEPTED },
+      }),
+      this.offerRepo.count({
+        where: { driverId: userId, status: OfferStatus.REJECTED },
+      }),
+    ]);
+    const totalOffers = acceptedOffers + rejectedOffers;
+    const acceptanceRate = totalOffers > 0
+      ? Math.round((acceptedOffers / totalOffers) * 100)
+      : 0;
+
+    this.logger.log(
+      `📊 Driver ${userId.slice(0, 8)} acceptance stats: ` +
+        `accepted=${acceptedOffers}, rejected=${rejectedOffers}, ` +
+        `rate=${acceptanceRate}% (from dispatch_offers)`,
+    );
+
     return {
       profileComplete: true,
       ...driver,
+      totalTrips,
+      monthlyRides,
+      cancellationCount,
+      acceptedOffersCount: acceptedOffers,
+      rejectedOffersCount: rejectedOffers,
+      acceptanceRate,
       monthlyOnlineMs,
       vehicle: vehicle
         ? {

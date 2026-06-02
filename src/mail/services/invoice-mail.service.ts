@@ -24,14 +24,21 @@ export class InvoiceMailService extends BaseMailService {
     ref: string,
     pdfPath: string,
   ): Promise<void> {
+    this.logger.log(`Preparing invoice email for ${to}, ref: ${ref}`);
+
     const subtotal = payment.amount;
-    const discount = ride.discountPercent ? (subtotal * ride.discountPercent / 100) : 0;
+    const discount = ride.discountPercent
+      ? (subtotal * ride.discountPercent) / 100
+      : 0;
     const total = subtotal - discount;
 
     const dateStr = payment.paidAt
       ? new Date(payment.paidAt).toLocaleString('en-GB', {
-          day: 'numeric', month: 'short', year: 'numeric',
-          hour: '2-digit', minute: '2-digit',
+          day: 'numeric',
+          month: 'short',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
         })
       : '-';
 
@@ -52,13 +59,17 @@ export class InvoiceMailService extends BaseMailService {
       YEAR: new Date().getFullYear().toString(),
     });
 
-    await this.send(
-      to,
-      `Moviroo — Your ride receipt (${ref})`,
-      html,
-      [{ filename: `${ref}.pdf`, path: pdfPath }],
-    );
-    this.logger.log(`Invoice email sent to ${to} for ${ref}`);
+    this.logger.log(`Invoice email HTML loaded, PDF path: ${pdfPath}`);
+
+    try {
+      await this.send(to, `Moviroo — Your ride receipt (${ref})`, html, [
+        { filename: `${ref}.pdf`, path: pdfPath },
+      ]);
+      this.logger.log(`Invoice email sent successfully to ${to} for ${ref}`);
+    } catch (err) {
+      this.logger.error(`Failed to send invoice email to ${to}: ${err}`);
+      throw err;
+    }
   }
 
   /**

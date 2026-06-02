@@ -29,10 +29,7 @@ import { PaymentService } from './services/payment.service';
 import { InvoiceService } from './services/invoice.service';
 import { SavedCardsService } from './services/saved-cards.service';
 import { DriverEarningsService } from './services/driver-earnings.service';
-import {
-  PaymentFilterDto,
-  EarningsFilterDto,
-} from './dto/billing.dto';
+import { PaymentFilterDto, EarningsFilterDto } from './dto/billing.dto';
 
 @Controller('billing')
 export class BillingController {
@@ -144,14 +141,20 @@ export class BillingController {
     if (webhookSecret) {
       // Production / Stripe CLI mode — verify signature
       try {
-        event = stripe.webhooks.constructEvent(rawBody!, signature, webhookSecret);
+        event = stripe.webhooks.constructEvent(
+          rawBody!,
+          signature,
+          webhookSecret,
+        );
       } catch (err) {
         this.logger.error(`Stripe webhook verification failed: ${err}`);
         return { received: false };
       }
     } else {
       // Dev mode — no secret configured, skip verification and parse body directly
-      this.logger.warn('[DEV] STRIPE_WEBHOOK_SECRET not set — skipping signature verification');
+      this.logger.warn(
+        '[DEV] STRIPE_WEBHOOK_SECRET not set — skipping signature verification',
+      );
       try {
         event = JSON.parse(rawBody!.toString());
       } catch {
@@ -170,14 +173,9 @@ export class BillingController {
 
   @Post('payments/ride/:rideId/confirm-card-success')
   @UseGuards(AuthGuard('jwt'))
-  async confirmCardSuccess(
-    @Param('rideId') rideId: string,
-    @Req() req: any,
-  ) {
+  async confirmCardSuccess(@Param('rideId') rideId: string, @Req() req: any) {
     return this.paymentService.confirmCardPaymentSuccess(rideId, req.user.id);
   }
-
-
 
   /* ══════════════════════════════════════════════════
      Invoice / Receipt — download PDF
@@ -190,13 +188,55 @@ export class BillingController {
     @Req() req: any,
     @Res() res: any,
   ) {
+    this.logger.log(
+      `Invoice download requested for rideId: ${rideId} by user: ${req.user.id}`,
+    );
+
     const payment = await this.billingService.findByRideId(rideId);
-    if (!payment || !payment.receiptUrl) {
+
+    if (!payment) {
+      this.logger.warn(`No payment found for rideId: ${rideId}`);
       throw new NotFoundException('Invoice not found for this ride');
     }
 
+    if (!payment.receiptUrl) {
+      this.logger.warn(
+        `Payment found but no receiptUrl for rideId: ${rideId}, paymentId: ${payment.id}, status: ${payment.paymentStatus}`,
+      );
+
+      // Try to regenerate invoice if payment is PAID
+      if (payment.paymentStatus === 'PAID') {
+        this.logger.log(
+          `Attempting to regenerate invoice for rideId: ${rideId}`,
+        );
+        await this.invoiceService.generateInvoiceIfNeeded(payment.id);
+
+        // Reload payment to check if invoice was generated
+        const updatedPayment = await this.billingService.findByRideId(rideId);
+        if (updatedPayment?.receiptUrl) {
+          this.logger.log(
+            `Invoice regenerated successfully for rideId: ${rideId}`,
+          );
+          payment.receiptUrl = updatedPayment.receiptUrl;
+        } else {
+          this.logger.error(
+            `Failed to regenerate invoice for rideId: ${rideId}`,
+          );
+          throw new NotFoundException('Invoice not found for this ride');
+        }
+      } else {
+        throw new NotFoundException('Invoice not found for this ride');
+      }
+    }
+
     // Authorize: passenger must own the ride
-    if (payment.passengerId !== req.user.id && req.user.role !== UserRole.SUPER_ADMIN) {
+    if (
+      payment.passengerId !== req.user.id &&
+      req.user.role !== UserRole.SUPER_ADMIN
+    ) {
+      this.logger.warn(
+        `Unauthorized invoice access attempt: user ${req.user.id} trying to access ride ${rideId} owned by ${payment.passengerId}`,
+      );
       throw new NotFoundException('Invoice not found');
     }
 
@@ -205,13 +245,35 @@ export class BillingController {
       : payment.receiptUrl;
     const absolutePath = `${process.cwd()}/${filePath}`;
 
+    this.logger.log(`Invoice file path: ${absolutePath}`);
+
     if (!require('fs').existsSync(absolutePath)) {
-      throw new NotFoundException('Invoice file missing');
+      this.logger.error(`Invoice file does not exist at: ${absolutePath}`);
+
+      // Try to regenerate if file is missing but URL exists
+      if (payment.paymentStatus === 'PAID') {
+        this.logger.log(
+          `File missing, attempting to regenerate invoice for rideId: ${rideId}`,
+        );
+        await this.invoiceService.generateInvoiceIfNeeded(payment.id);
+
+        // Check again after regeneration
+        if (require('fs').existsSync(absolutePath)) {
+          this.logger.log(`Invoice file regenerated successfully`);
+        } else {
+          throw new NotFoundException('Invoice file missing');
+        }
+      } else {
+        throw new NotFoundException('Invoice file missing');
+      }
     }
 
     const ref = `TR-${rideId.substring(0, 8).toUpperCase()}`;
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="moviroo-receipt-${ref}.pdf"`);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="moviroo-receipt-${ref}.pdf"`,
+    );
     require('fs').createReadStream(absolutePath).pipe(res);
   }
 
@@ -261,7 +323,15 @@ export class BillingController {
   @Post('commission-tiers')
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(UserRole.SUPER_ADMIN)
-  async createTier(@Body() body: { name: string; requiredRides: number; bonusAmount: number; sortOrder?: number }) {
+  async createTier(
+    @Body()
+    body: {
+      name: string;
+      requiredRides: number;
+      bonusAmount: number;
+      sortOrder?: number;
+    },
+  ) {
     return this.driverEarningsService.createTier(body);
   }
 
@@ -270,7 +340,14 @@ export class BillingController {
   @Roles(UserRole.SUPER_ADMIN)
   async updateTier(
     @Param('id') id: string,
-    @Body() body: Partial<{ name: string; requiredRides: number; bonusAmount: number; sortOrder: number; isActive: boolean }>,
+    @Body()
+    body: Partial<{
+      name: string;
+      requiredRides: number;
+      bonusAmount: number;
+      sortOrder: number;
+      isActive: boolean;
+    }>,
   ) {
     return this.driverEarningsService.updateTier(id, body);
   }

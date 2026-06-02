@@ -6,6 +6,7 @@ import { User } from '../users/entites/user.entity';
 import { WorkArea } from '../work-area/entities/work-area.entity';
 import { DriverOnlineHistory } from '../earnings/entities/driver-online-history.entity';
 import { Ride } from '../rides/domain/entities/ride.entity';
+import { DispatchOffer } from '../dispatch/domain/entities/dispatch-offer.entity';
 import { DriversService } from './drivers.service';
 import { DriversController } from './drivers.controller';
 import { DriverProfileService } from './services/driver-profile.service';
@@ -23,6 +24,7 @@ import { CloudinaryService } from '../common/services/cloudinary.service';
       WorkArea,
       DriverOnlineHistory,
       Ride,
+      DispatchOffer,
     ]),
     EarningsModule,
   ],

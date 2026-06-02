@@ -23,6 +23,10 @@ export class ChatController {
     @Query('translate') translate?: string,
     @Query('lang') targetLang?: string,
   ) {
+    console.log(
+      `[ChatController] Fetching messages for rideId: ${rideId}, translate=${translate}, lang=${targetLang}`,
+    );
+
     const take = Math.min(parseInt(limit || '50', 10) || 50, 100);
     const shouldTranslate = translate === 'true' && targetLang;
 
@@ -41,6 +45,10 @@ export class ChatController {
 
     const messages = await qb.getMany();
 
+    console.log(
+      `[ChatController] Found ${messages.length} messages for rideId: ${rideId}`,
+    );
+
     const result = await Promise.all(
       messages.map(async (m) => {
         let displayText = m.text;
@@ -51,11 +59,14 @@ export class ChatController {
           if (cachedTranslation) {
             displayText = cachedTranslation;
           } else {
-            // Translate and cache
+            // Detect source language and translate
             try {
+              const detectedLang =
+                await this.huggingFaceTranslate.detectLanguage(m.text);
               const translated = await this.huggingFaceTranslate.translate(
                 m.text,
                 targetLang,
+                detectedLang,
               );
               displayText = translated;
 

@@ -135,23 +135,34 @@ export class EndTripUseCase {
 
       // Check if month changed - save previous month stats and reset
       if (driver.currentMonth && driver.currentMonth !== currentMonthStr) {
+        // Compute previous month rides from rides table
+        const [prevYear, prevMonth] = driver.currentMonth.split('-').map(Number);
+        const prevMonthStart = new Date(prevYear, prevMonth - 1, 1);
+        const prevMonthEnd = new Date(prevYear, prevMonth, 0, 23, 59, 59, 999);
+        const prevMonthRides = await this.rideRepo.count({
+          where: {
+            driverId: driverUserId,
+            status: RideStatus.COMPLETED,
+            completedAt: Between(prevMonthStart, prevMonthEnd),
+          },
+        });
+
         // Save previous month stats
         const prevMonthStats = this.monthlyStatsRepo.create({
           driverId: driverUserId,
           month: driver.currentMonth,
-          ridesCount: driver.monthlyRides,
+          ridesCount: prevMonthRides,
           tierAchievedId: driver.currentTierId,
-          totalEarnings: 0, // TODO: Calculate from rides if needed
-          totalCommission: 0, // TODO: Calculate from rides if needed
+          totalEarnings: 0,
+          totalCommission: 0,
         });
         await this.monthlyStatsRepo.save(prevMonthStats);
 
         this.logger.log(
-          `📊 Saved month ${driver.currentMonth} stats for driver ${driverUserId}: ${driver.monthlyRides} rides`,
+          `📊 Saved month ${driver.currentMonth} stats for driver ${driverUserId}: ${prevMonthRides} rides`,
         );
 
         // Reset for new month
-        driver.monthlyRides = 0;
         driver.currentMonth = currentMonthStr;
         driver.currentTierId = null;
         driver.currentCommissionRate = 0.25;
@@ -162,12 +173,14 @@ export class EndTripUseCase {
         await this.driverRepo.save(driver);
       }
 
-      // Increment monthly rides
-      driver.monthlyRides = (driver.monthlyRides || 0) + 1;
-      driver.totalTrips = (driver.totalTrips || 0) + 1;
-      await this.driverRepo.save(driver);
-
-      const monthlyRides = driver.monthlyRides;
+      // Compute monthly rides from rides table for tier logic
+      const monthlyRides = await this.rideRepo.count({
+        where: {
+          driverId: driverUserId,
+          status: RideStatus.COMPLETED,
+          completedAt: Between(monthStart, monthEnd),
+        },
+      });
 
       // Fetch active tiers sorted by required rides ascending
       const allTiers = await this.tierRepo.find({

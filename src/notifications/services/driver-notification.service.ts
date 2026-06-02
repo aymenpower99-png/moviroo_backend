@@ -174,8 +174,10 @@ export class DriverNotificationService {
         rideId,
         senderName: passengerName,
         channelId: 'chat_messages',
+        title: passengerName,
+        body: messagePreview,
       },
-      false,
-    ); // Use data-only for custom icon
+      true, // Include notification to show title and body
+    );
   }
 }

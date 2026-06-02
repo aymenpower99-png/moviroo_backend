@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Facture Moviroo</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      background: #ffffff;
+      color: #1A1A1A;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    .page {
+      width: 210mm;
+      min-height: 297mm;
+      margin: 0;
+      padding: 0;
+      background: #ffffff;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Header ── */
+    .header {
+      background: #ffffff;
+      padding: 20px 28px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 2px solid #6B3FE4;
+    }
+    .logo img {
+      height: 36px;
+      width: auto;
+    }
+    .logo-fallback {
+      font-size: 22px;
+      font-weight: 700;
+      color: #6B3FE4;
+      letter-spacing: -0.5px;
+    }
+    .header-right {
+      text-align: right;
+    }
+    .header-right .ticket-label {
+      font-size: 9px;
+      color: #999;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      margin-bottom: 3px;
+    }
+    .header-right .ref-val {
+      font-size: 15px;
+      font-weight: 700;
+      color: #6B3FE4;
+    }
+    .header-right .date-val {
+      font-size: 10px;
+      color: #888;
+      margin-top: 2px;
+    }
+
+    /* ── Body ── */
+    .body {
+      padding: 18px 28px;
+      flex: 1;
+    }
+
+    .sep {
+      border: none;
+      border-top: 1px solid #EBEBEB;
+      margin: 14px 0;
+    }
+
+    .section-label {
+      font-size: 9px;
+      font-weight: 700;
+      color: #6B3FE4;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+
+    /* ── Client ── */
+    .client-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .sga-number {
+      font-size: 9px;
+      color: #aaa;
+    }
+    .client-card {
+      background: #F5F3FE;
+      border-radius: 7px;
+      padding: 10px 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .client-name {
+      font-size: 13px;
+      font-weight: 700;
+      color: #1A1A1A;
+      margin-bottom: 2px;
+    }
+    .client-address {
+      font-size: 10px;
+      color: #666;
+    }
+    .ref-pill {
+      background: #6B3FE4;
+      color: #fff;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 10px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    /* ── Route ── */
+    .route { display: flex; flex-direction: column; }
+    .route-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 5px 0;
+    }
+    .route-icon-col {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding-top: 3px;
+      width: 14px;
+      flex-shrink: 0;
+    }
+    .dot {
+      width: 12px; height: 12px;
+      border-radius: 50%;
+      background: #6B3FE4;
+    }
+    .sq {
+      width: 10px; height: 10px;
+      border-radius: 2px;
+      background: #6B3FE4;
+      margin-top: 1px;
+    }
+    .connector {
+      width: 2px;
+      height: 18px;
+      background: #D0C4F7;
+      margin: 3px 0;
+    }
+    .route-lbl { font-size: 9px; color: #999; margin-bottom: 1px; }
+    .route-val { font-size: 12px; font-weight: 600; color: #1A1A1A; }
+
+    /* ── Stats ── */
+    .stats {
+      display: flex;
+      border: 1px solid #E0E0E0;
+      border-radius: 7px;
+      overflow: hidden;
+    }
+    .stat {
+      flex: 1;
+      padding: 10px 12px;
+      text-align: center;
+      border-right: 1px solid #E0E0E0;
+    }
+    .stat:last-child { border-right: none; }
+    .stat-lbl { font-size: 9px; color: #999; margin-bottom: 3px; }
+    .stat-val { font-size: 12px; font-weight: 700; color: #1A1A1A; }
+
+    /* ── Détail table ── */
+    .detail-table {
+      width: 100%;
+      border-collapse: collapse;
+      border: 1px solid #D8D8D8;
+      border-radius: 7px;
+      overflow: hidden;
+      font-size: 11px;
+    }
+    .detail-table thead tr {
+      background: #F5F3FE;
+    }
+    .detail-table thead th {
+      padding: 8px 12px;
+      font-size: 10px;
+      font-weight: 700;
+      color: #6B3FE4;
+      text-align: left;
+      border-bottom: 1px solid #D0C4F7;
+    }
+    .detail-table thead th:last-child { text-align: right; }
+    .detail-table tbody tr { border-bottom: 1px solid #EBEBEB; }
+    .detail-table tbody tr:last-child { border-bottom: none; }
+    .detail-table tbody td {
+      padding: 8px 12px;
+      color: #1A1A1A;
+    }
+    .detail-table tbody td:last-child {
+      text-align: right;
+      font-weight: 600;
+    }
+    .detail-table tr.discount td { color: #E63946; }
+
+    /* ── Summary ── */
+    .summary-wrap {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 12px;
+    }
+    .summary {
+      width: 235px;
+      border: 1px solid #E0E0E0;
+      border-radius: 7px;
+      overflow: hidden;
+    }
+    .summary-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 6px 13px;
+      font-size: 10px;
+      color: #666;
+      border-bottom: 1px solid #EBEBEB;
+    }
+    .summary-row:last-child { border-bottom: none; }
+    .summary-row .v { font-weight: 700; color: #1A1A1A; }
+    .total-row {
+      background: #6B3FE4;
+      display: flex;
+      justify-content: space-between;
+      padding: 9px 13px;
+      font-size: 12px;
+      font-weight: 700;
+      color: #ffffff;
+    }
+
+    /* ── Amount words ── */
+    .amount-words {
+      border: 1px solid #E0E0E0;
+      border-radius: 7px;
+      padding: 9px 13px;
+      margin: 14px 0 12px;
+    }
+    .amount-words .lbl {
+      font-size: 9px;
+      color: #999;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      margin-bottom: 3px;
+    }
+    .amount-words .val {
+      font-size: 11px;
+      font-weight: 700;
+      color: #1A1A1A;
+    }
+
+    /* ── Footer ── */
+    .inv-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .paid-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      background: #E8F5E9;
+      color: #2E7D32;
+      padding: 5px 13px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .pm {
+      font-size: 10px;
+      color: #777;
+      margin-top: 5px;
+    }
+    .page-num {
+      font-size: 9px;
+      color: #bbb;
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <!-- Header — white with purple underline -->
+    <div class="header">
+      <div class="logo">
+        <img src="{{logoUrl}}" alt="Moviroo"
+             onerror="this.style.display='none';document.getElementById('logo-fb').style.display='block'">
+        <span id="logo-fb" class="logo-fallback" style="display:none">moviroo</span>
+      </div>
+      <div class="header-right">
+        <div class="ticket-label">Ticket de course</div>
+        <div class="ref-val">{{ref}}</div>
+        <div class="date-val">le : {{date}}</div>
+      </div>
+    </div>
+
+    <div class="body">
+
+      <!-- Client -->
+      <div class="client-header">
+        <div class="section-label" style="margin:0">Client</div>
+        <div class="sga-number">SGA N° 021 00001 1130047583 23</div>
+      </div>
+      <div class="client-card">
+        <div>
+          <div class="client-name">{{clientName}}</div>
+          <div class="client-address">{{clientAddress}}</div>
+        </div>
+        <div class="ref-pill">{{ref}}</div>
+      </div>
+
+      <hr class="sep">
+
+      <!-- Route -->
+      <div class="section-label">Trajet</div>
+      <div class="route">
+        <div class="route-row">
+          <div class="route-icon-col">
+            <div class="dot"></div>
+            <div class="connector"></div>
+          </div>
+          <div>
+            <div class="route-lbl">Départ</div>
+            <div class="route-val">{{pickupAddress}}</div>
+          </div>
+        </div>
+        <div class="route-row">
+          <div class="route-icon-col">
+            <div class="sq"></div>
+          </div>
+          <div>
+            <div class="route-lbl">Arrivée</div>
+            <div class="route-val">{{dropoffAddress}}</div>
+          </div>
+        </div>
+      </div>
+
+      <hr class="sep">
+
+      <!-- Stats -->
+      <div class="stats">
+        <div class="stat">
+          <div class="stat-lbl">Véhicule</div>
+          <div class="stat-val">{{vehicle}}</div>
+        </div>
+        <div class="stat">
+          <div class="stat-lbl">Distance</div>
+          <div class="stat-val">{{distance}}</div>
+        </div>
+        <div class="stat">
+          <div class="stat-lbl">Durée</div>
+          <div class="stat-val">{{duration}}</div>
+        </div>
+      </div>
+
+      <hr class="sep">
+
+      <!-- Détail de la course -->
+      <div class="section-label">Détail de la course</div>
+      <table class="detail-table">
+        <thead>
+          <tr>
+            <th>Désignation</th>
+            <th style="text-align:right">Total HT</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Course de transport — MOVIROO {{vehicleUpper}}</td>
+            <td>{{amount}} TND</td>
+          </tr>
+          <tr>
+            <td>TVA 0%</td>
+            <td>—</td>
+          </tr>
+          <tr class="{{discountClass}}">
+            <td>Remise (Discount)</td>
+            <td>{{discount}}</td>
+          </tr>
+          <tr>
+            <td>Pourboire</td>
+            <td>0.00 TND</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- Summary -->
+      <div class="summary-wrap">
+        <div class="summary">
+          <div class="summary-row">
+            <span>Montant HT Total</span>
+            <span class="v">{{total}} TND</span>
+          </div>
+          <div class="summary-row">
+            <span>TVA 9% Exonéré LFC2021</span>
+            <span></span>
+          </div>
+          <div class="summary-row">
+            <span>Droit de Timbre 1%</span>
+            <span class="v">0.00</span>
+          </div>
+          <div class="summary-row">
+            <span>Pourboire</span>
+            <span class="v">0.00</span>
+          </div>
+          <div class="total-row">
+            <span>Total TTC</span>
+            <span>{{total}} TND</span>
+          </div>
+        </div>
+      </div>
+
+      <hr class="sep">
+
+      <!-- Amount in words -->
+      <div class="amount-words">
+        <div class="lbl">Arrêté le présent Ticket de course à la somme de :</div>
+        <div class="val">{{amountWords}} dinars tunisiens</div>
+      </div>
+
+      <!-- Payment status -->
+      <div class="inv-footer">
+        <div>
+          <div class="paid-badge">✓ Payé</div>
+          <div class="pm">Mode de paiement : {{paymentMethod}}</div>
+        </div>
+        <div class="page-num">1 / 1</div>
+      </div>
+
+    </div>
+  </div>
+</body>
+</html>

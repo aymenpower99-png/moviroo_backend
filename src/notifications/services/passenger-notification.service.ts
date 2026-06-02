@@ -190,6 +190,8 @@ export class PassengerNotificationService {
       rideId,
       senderName: driverName,
       channelId: 'chat_messages',
+      title: driverName,
+      body: messagePreview,
     });
   }
 
