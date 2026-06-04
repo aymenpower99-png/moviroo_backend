@@ -4,6 +4,7 @@ import { Repository, Between } from 'typeorm';
 import { Ride } from '../rides/domain/entities/ride.entity';
 import { Driver } from '../driver/entities/driver.entity';
 import { CommissionTier } from '../billing/entities/commission-tier.entity';
+import { CommissionLedger } from '../billing/entities/commission-ledger.entity';
 import { DriverOnlineHistory } from './entities/driver-online-history.entity';
 import { RideStatus } from '../rides/domain/enums/ride-status.enum';
 
@@ -16,13 +17,15 @@ export class EarningsService {
     private readonly driverRepo: Repository<Driver>,
     @InjectRepository(CommissionTier)
     private readonly tierRepo: Repository<CommissionTier>,
+    @InjectRepository(CommissionLedger)
+    private readonly ledgerRepo: Repository<CommissionLedger>,
     @InjectRepository(DriverOnlineHistory)
     private readonly onlineHistoryRepo: Repository<DriverOnlineHistory>,
   ) {}
 
   /**
    * Get earnings for a driver (called from GET /earnings/me).
-   * Uses per-ride commission model: salary + sum of driverEarnings from completed rides.
+   * Net = Salary + Σ(unlocked tier bonuses) for the selected month.
    */
   async getDriverEarnings(userId: string, monthStr?: string) {
     const driver = await this.driverRepo.findOne({ where: { userId } });
@@ -40,16 +43,14 @@ export class EarningsService {
       },
     });
 
-    // Sum driver earnings (priceFinal minus commission) for all completed rides this month
-    const commissionResult = await this.rideRepo
-      .createQueryBuilder('r')
-      .select('COALESCE(SUM(r.driver_earnings), 0)', 'commission')
-      .where('r.driver_id = :uid', { uid: userId })
-      .andWhere('r.status = :status', { status: RideStatus.COMPLETED })
-      .andWhere('r.completed_at >= :start', { start: startDate })
-      .andWhere('r.completed_at <= :end', { end: endDate })
+    // Sum unlocked tier bonuses from commission_ledger for this month
+    const bonusResult = await this.ledgerRepo
+      .createQueryBuilder('cl')
+      .select('COALESCE(SUM(cl.amount), 0)', 'bonus')
+      .where('cl.driver_id = :uid', { uid: userId })
+      .andWhere('cl.period_key = :m', { m: month })
       .getRawOne();
-    const commission = Number(commissionResult?.commission) || 0;
+    const commission = Number(bonusResult?.bonus) || 0; // keep key name for response compatibility
 
     // Get active commission tiers
     const allTiers = await this.tierRepo.find({
@@ -58,10 +59,13 @@ export class EarningsService {
     });
 
     // Determine current tier reached
-    const currentTier = allTiers.reduce((highest, tier) => {
-      if (completedRides >= tier.requiredRides) return tier;
-      return highest;
-    }, null as CommissionTier | null);
+    const currentTier = allTiers.reduce(
+      (highest, tier) => {
+        if (completedRides >= tier.requiredRides) return tier;
+        return highest;
+      },
+      null as CommissionTier | null,
+    );
 
     // Build tier progress list
     const tiers = allTiers.map((t) => ({
@@ -83,7 +87,7 @@ export class EarningsService {
         }
       : null;
 
-    // Net earnings = salary + sum of driver earnings from rides
+    // Net earnings = salary + sum of unlocked bonuses (no ride fares/fees included)
     const netEarnings = Math.round((salary + commission) * 100) / 100;
 
     // Daily rides breakdown for chart

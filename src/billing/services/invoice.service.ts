@@ -12,9 +12,13 @@ import { InvoiceMailService } from '../../mail/services/invoice-mail.service';
 const LOGO_URL =
   'https://res.cloudinary.com/dox9rfabz/image/upload/v1778712358/moviroo_light_dark_big_xormqg.png';
 
-// ── Design tokens ──────────────────────────────────────────────
 const C_PURPLE   = '#6B3FE4';
 const C_PURPLE_L = '#F0ECFD';
+const C_PURPLE_M = '#E4DCFA';
+const C_TEAL     = '#0891B2';
+const C_TEAL_L   = '#E0F7FA';
+const C_AMBER    = '#D97706';
+const C_AMBER_L  = '#FEF3C7';
 const C_GREEN_L  = '#E8F5E9';
 const C_GREEN    = '#2E7D32';
 const C_RED      = '#E63946';
@@ -103,9 +107,9 @@ export class InvoiceService {
     const stream = fs.createWriteStream(filePath);
     doc.pipe(stream);
 
-    const PW = doc.page.width;   // 595.28 pt
-    const M  = 40;               // page margin
-    const W  = PW - M * 2;      // 515.28 pt content width
+    const PW = doc.page.width;
+    const M  = 40;
+    const W  = PW - M * 2;
     let   y  = 0;
 
     // ── helpers ──────────────────────────────────────────────
@@ -117,15 +121,6 @@ export class InvoiceService {
     const sectionLabel = (text: string) => {
       doc.fontSize(8).font('Helvetica-Bold').fillColor(C_PURPLE).text(text, M, y);
       y += 14;
-    };
-
-    const pill = (
-      text: string, px: number, py: number,
-      bg: string, fg: string, w = 90, h = 16, r = 8,
-    ) => {
-      doc.roundedRect(px, py, w, h, r).fill(bg);
-      doc.fontSize(9).font('Helvetica-Bold').fillColor(fg)
-         .text(text, px, py + 4, { width: w, align: 'center' });
     };
 
     // ── compute amounts ──────────────────────────────────────
@@ -147,15 +142,13 @@ export class InvoiceService {
     const amtWords   = this._numberToWordsFrench(Math.floor(totalNum));
 
     // ════════════════════════════════════════════════════════
-    //  HEADER  (white bg + purple bottom border)
+    //  HEADER
     // ════════════════════════════════════════════════════════
     const HEADER_H = 70;
     doc.rect(0, 0, PW, HEADER_H).fill(C_WHITE);
-    // purple accent line bottom of header
     doc.rect(0, HEADER_H - 2, PW, 2).fill(C_PURPLE);
     y = 0;
 
-    // Logo
     const logoBuffer = await this._downloadLogo();
     if (logoBuffer) {
       doc.image(logoBuffer, M, 12, { height: 80 });
@@ -163,30 +156,19 @@ export class InvoiceService {
       doc.fontSize(24).font('Helvetica-Bold').fillColor(C_PURPLE).text('moviroo', M, 18);
     }
 
-    // Ticket label + ref (right-aligned, no date here)
-    doc.fontSize(8).font('Helvetica').fillColor(C_MUTED)
-       .text('Ticket de course', M, 16, { width: W, align: 'right' });
-    doc.fontSize(14).font('Helvetica-Bold').fillColor(C_PURPLE)
-       .text(ref, M, 30, { width: W, align: 'right' });
-
     y = HEADER_H + 20;
 
     // ════════════════════════════════════════════════════════
     //  CLIENT BLOCK
     // ════════════════════════════════════════════════════════
-    // row: "CLIENT" label  +  SGA number
     doc.fontSize(8).font('Helvetica-Bold').fillColor(C_PURPLE).text('CLIENT', M, y);
-    doc.fontSize(8).font('Helvetica').fillColor(C_MUTED)
-       .text('SGA N° 021 00001 1130047583 23', M, y, { width: W, align: 'right' });
     y += 14;
 
-    // client card
     const cardH = 36;
     doc.roundedRect(M, y, W, cardH, 6).fill(C_PURPLE_L);
     doc.fontSize(11).font('Helvetica-Bold').fillColor(C_DARK).text(clientName, M + 12, y + 8);
     doc.fontSize(9).font('Helvetica').fillColor(C_MID)
        .text(ride.pickupAddress ?? '-', M + 12, y + 22);
-    // ref pill inside client card
     const pillW = 100, pillH = 18;
     doc.roundedRect(M + W - pillW - 10, y + (cardH - pillH) / 2, pillW, pillH, 9).fill(C_PURPLE);
     doc.fontSize(9).font('Helvetica-Bold').fillColor(C_WHITE)
@@ -197,48 +179,34 @@ export class InvoiceService {
     sep(16);
 
     // ════════════════════════════════════════════════════════
-    //  TRAJET  (with date on the right of the label)
+    //  TRAJET
     // ════════════════════════════════════════════════════════
-    // Section label left + date right — same baseline
     doc.fontSize(8).font('Helvetica-Bold').fillColor(C_PURPLE).text('TRAJET', M, y);
     doc.fontSize(8).font('Helvetica').fillColor(C_MUTED)
        .text(`le : ${dateStr}`, M, y, { width: W, align: 'right' });
     y += 16;
 
-    // ── pickup card ──────────────────────────────────────
     const ROUTE_CARD_H = 40;
-    const ROUTE_CARD_W = W;
-    const ICON_CX      = M + 16;  // icon centre-x
+    const ICON_CX      = M + 16;
 
-    // card bg
-    doc.roundedRect(M, y, ROUTE_CARD_W, ROUTE_CARD_H, 6)
+    doc.roundedRect(M, y, W, ROUTE_CARD_H, 6)
        .strokeColor(C_PURPLE).lineWidth(1).stroke();
-    // filled purple dot
     doc.circle(ICON_CX, y + ROUTE_CARD_H / 2, 5).fill(C_PURPLE);
-
-    doc.fontSize(8).font('Helvetica').fillColor(C_MUTED)
-       .text('Départ', M + 32, y + 8);
+    doc.fontSize(8).font('Helvetica').fillColor(C_MUTED).text('Depart', M + 32, y + 8);
     doc.fontSize(10).font('Helvetica-Bold').fillColor(C_DARK)
        .text(ride.pickupAddress ?? '-', M + 32, y + 20, { width: W - 42, lineBreak: false });
     y += ROUTE_CARD_H;
 
-    // ── connector gap with dashed line ───────────────────
     const GAP_H = 18;
-    doc.moveTo(ICON_CX, y + 2)
-       .lineTo(ICON_CX, y + GAP_H - 2)
+    doc.moveTo(ICON_CX, y + 2).lineTo(ICON_CX, y + GAP_H - 2)
        .strokeColor('#C8BAEF').lineWidth(2).dash(3, { space: 3 }).stroke();
     doc.undash();
     y += GAP_H;
 
-    // ── dropoff card ──────────────────────────────────────
-    doc.roundedRect(M, y, ROUTE_CARD_W, ROUTE_CARD_H, 6)
+    doc.roundedRect(M, y, W, ROUTE_CARD_H, 6)
        .strokeColor(C_PURPLE).lineWidth(1).stroke();
-    // filled purple square icon
-    doc.rect(ICON_CX - 5, y + ROUTE_CARD_H / 2 - 5, 10, 10)
-       .fill(C_PURPLE);
-
-    doc.fontSize(8).font('Helvetica').fillColor(C_MUTED)
-       .text('Arrivée', M + 32, y + 8);
+    doc.rect(ICON_CX - 5, y + ROUTE_CARD_H / 2 - 5, 10, 10).fill(C_PURPLE);
+    doc.fontSize(8).font('Helvetica').fillColor(C_MUTED).text('Arrivee', M + 32, y + 8);
     doc.fontSize(10).font('Helvetica-Bold').fillColor(C_DARK)
        .text(ride.dropoffAddress ?? '-', M + 32, y + 20, { width: W - 42, lineBreak: false });
     y += ROUTE_CARD_H + 6;
@@ -246,59 +214,62 @@ export class InvoiceService {
     sep(16);
 
     // ════════════════════════════════════════════════════════
-    //  STATS BAR  (bordered 3-column)
+    //  STATS BAR — 3 cards with PDFKit-safe drawn icons
     // ════════════════════════════════════════════════════════
-    const sbH = 40, colW = W / 3;
-    doc.roundedRect(M, y, W, sbH, 6).strokeColor(C_BORDER).lineWidth(0.5).stroke();
-    // inner dividers
-    doc.moveTo(M + colW,     y).lineTo(M + colW,     y + sbH).strokeColor(C_BORDER).lineWidth(0.5).stroke();
-    doc.moveTo(M + colW * 2, y).lineTo(M + colW * 2, y + sbH).strokeColor(C_BORDER).lineWidth(0.5).stroke();
+    const CARD_H   = 56;
+    const CARD_GAP = 10;
+    const CARD_W   = (W - CARD_GAP * 2) / 3;
 
-    const statCol = (label: string, value: string, cx: number) => {
-      doc.fontSize(8).font('Helvetica').fillColor(C_MUTED).text(label, cx, y + 8, { width: colW, align: 'center' });
-      doc.fontSize(11).font('Helvetica-Bold').fillColor(C_DARK).text(value, cx, y + 20, { width: colW, align: 'center' });
-    };
-    statCol('Véhicule', vehicle,  M);
-    statCol('Distance', distStr,  M + colW);
-    statCol('Durée',    durStr,   M + colW * 2);
-    y += sbH + 18;
+    const statCards = [
+      { label: 'VEHICULE', value: vehicle },
+      { label: 'DISTANCE', value: distStr },
+      { label: 'DUREE',    value: durStr  },
+    ];
 
+    statCards.forEach((card, i) => {
+      const cx = M + i * (CARD_W + CARD_GAP);
+
+      // card background
+      doc.roundedRect(cx, y, CARD_W, CARD_H, 8).fill(C_PURPLE_L);
+
+      // top accent bar
+      doc.roundedRect(cx, y, CARD_W, 4, 2).fill(C_PURPLE);
+      doc.rect(cx, y + 2, CARD_W, 2).fill(C_PURPLE);
+
+      // label
+      doc.fontSize(7).font('Helvetica-Bold').fillColor(C_PURPLE)
+         .text(card.label, cx + 10, y + 12, { width: CARD_W - 20, align: 'center' });
+
+      // value
+      doc.fontSize(13).font('Helvetica-Bold').fillColor(C_DARK)
+         .text(card.value, cx + 10, y + 30, { width: CARD_W - 20, align: 'center' });
+    });
+
+    y += CARD_H + 18;
     sep(16);
 
     // ════════════════════════════════════════════════════════
-    //  DÉTAIL DE LA COURSE  —  full bordered table
+    //  DETAIL DE LA COURSE
     // ════════════════════════════════════════════════════════
-    sectionLabel('DÉTAIL DE LA COURSE');
+    sectionLabel('DETAIL DE LA COURSE');
 
     const COL1_X = M;
     const COL2_X = M + W - 110;
-    const COL_W1 = W - 110;
     const COL_W2 = 110;
     const ROW_H  = 30;
     const TABLE_ROWS = 4;
     const TABLE_H = ROW_H * TABLE_ROWS + ROW_H;
 
-    // outer border
     doc.roundedRect(M, y, W, TABLE_H, 6).strokeColor(C_BORDER).lineWidth(0.5).stroke();
-
-    // header row fill
     doc.roundedRect(M, y, W, ROW_H, 6).fill(C_PURPLE_L);
-    // re-draw bottom corners square so it doesn't bleed into first data row
     doc.rect(M, y + ROW_H / 2, W, ROW_H / 2).fill(C_PURPLE_L);
-
     doc.fontSize(9).font('Helvetica-Bold').fillColor(C_PURPLE)
-       .text('Désignation', COL1_X + 10, y + 11);
+       .text('Designation', COL1_X + 10, y + 11);
     doc.text('Total HT', COL2_X, y + 11, { width: COL_W2 - 10, align: 'right' });
-
-    // header bottom border
     doc.moveTo(M, y + ROW_H).lineTo(M + W, y + ROW_H).strokeColor(C_BORDER).lineWidth(0.5).stroke();
     y += ROW_H;
 
-    // ── table rows ──
-    const tableRow = (
-      label: string, value: string,
-      bold = false, color = C_DARK,
-    ) => {
+    const tableRow = (label: string, value: string, bold = false, color = C_DARK) => {
       if (bold) {
         doc.fontSize(9).font('Helvetica-Bold').fillColor(color).text(label, COL1_X + 10, y + 11);
         doc.text(value, COL2_X, y + 11, { width: COL_W2 - 10, align: 'right' });
@@ -319,33 +290,31 @@ export class InvoiceService {
       tableRow('Remise (Discount)', '—');
     }
     tableRow('Pourboire', '0.00 TND');
-
     y += 14;
 
     // ════════════════════════════════════════════════════════
-    //  SUMMARY  (right-aligned mini table)
+    //  SUMMARY
     // ════════════════════════════════════════════════════════
     const SUM_W = W, SUM_X = M;
     const SROW_H = 26;
 
     doc.roundedRect(SUM_X, y, SUM_W, SROW_H * 3 + 36, 6).strokeColor(C_BORDER).lineWidth(0.5).stroke();
 
-    const sumRow = (label: string, value: string, vy?: number) => {
-      const ry = vy ?? y;
-      doc.fontSize(9).font('Helvetica').fillColor(C_MID).text(label, SUM_X + 12, ry + 9);
+    const sumRow = (label: string, value: string) => {
+      doc.fontSize(9).font('Helvetica').fillColor(C_MID).text(label, SUM_X + 12, y + 9);
       if (value) {
         doc.fontSize(9).font('Helvetica-Bold').fillColor(C_DARK)
-           .text(value, SUM_X, ry + 9, { width: SUM_W - 12, align: 'right' });
+           .text(value, SUM_X, y + 9, { width: SUM_W - 12, align: 'right' });
       }
-      doc.moveTo(SUM_X, ry + SROW_H).lineTo(SUM_X + SUM_W, ry + SROW_H)
+      doc.moveTo(SUM_X, y + SROW_H).lineTo(SUM_X + SUM_W, y + SROW_H)
          .strokeColor(C_BORDER).lineWidth(0.5).stroke();
+      y += SROW_H;
     };
 
-    sumRow('Montant HT Total',   `${totalStr} TND`); y += SROW_H;
-    sumRow('Droit de Timbre 1%', '0.00');            y += SROW_H;
-    sumRow('Pourboire',          '0.00');            y += SROW_H;
+    sumRow('Montant HT Total',   `${totalStr} TND`);
+    sumRow('Droit de Timbre 1%', '0.00');
+    sumRow('Pourboire',          '0.00');
 
-    // total row — full width purple fill
     doc.roundedRect(SUM_X, y, SUM_W, 36, 6).fill(C_PURPLE);
     doc.rect(SUM_X, y, SUM_W, 10).fill(C_PURPLE);
     doc.fontSize(11).font('Helvetica-Bold').fillColor(C_WHITE).text('Total TTC', SUM_X + 14, y + 13);
@@ -359,7 +328,7 @@ export class InvoiceService {
     // ════════════════════════════════════════════════════════
     doc.roundedRect(M, y, W, 38, 6).strokeColor(C_BORDER).lineWidth(0.5).stroke();
     doc.fontSize(8).font('Helvetica').fillColor(C_MUTED)
-       .text('Arrêté le présent Ticket de course à la somme de :', M + 12, y + 7);
+       .text('Arrete le present Ticket de course a la somme de :', M + 12, y + 7);
     doc.fontSize(10).font('Helvetica-Bold').fillColor(C_DARK)
        .text(`${amtWords} dinars tunisiens`, M + 12, y + 19, { width: W - 24 });
     y += 50;
@@ -367,14 +336,15 @@ export class InvoiceService {
     // ════════════════════════════════════════════════════════
     //  PAYMENT STATUS
     // ════════════════════════════════════════════════════════
-    // "Payé" badge
     doc.roundedRect(M, y, 62, 20, 10).fill(C_GREEN_L);
-    doc.fontSize(10).font('Helvetica-Bold').fillColor(C_GREEN).text('✓  Payé', M + 8, y + 6);
+    // draw checkmark instead of emoji ✓
+    doc.moveTo(M + 10, y + 10).lineTo(M + 14, y + 14).lineTo(M + 22, y + 6)
+       .strokeColor(C_GREEN).lineWidth(2).stroke();
+    doc.fontSize(10).font('Helvetica-Bold').fillColor(C_GREEN).text('Paye', M + 26, y + 6);
     doc.fontSize(9).font('Helvetica').fillColor(C_MID)
        .text(`Mode de paiement : ${payMethod}`, M + 72, y + 6);
     y += 30;
 
-    // ── page number ──
     doc.fontSize(8).font('Helvetica').fillColor(C_MUTED)
        .text('1 / 1', M, y, { width: W, align: 'right' });
 
@@ -404,7 +374,7 @@ export class InvoiceService {
 
   // ─────────────────────────────────────────────────────────────
   private _numberToWordsFrench(n: number): string {
-    if (n === 0) return 'zéro';
+    if (n === 0) return 'zero';
     const UNITS = ['','un','deux','trois','quatre','cinq','six','sept','huit','neuf',
       'dix','onze','douze','treize','quatorze','quinze','seize','dix-sept','dix-huit','dix-neuf'];
     const TENS  = ['','','vingt','trente','quarante','cinquante','soixante','soixante','quatre-vingt','quatre-vingt'];

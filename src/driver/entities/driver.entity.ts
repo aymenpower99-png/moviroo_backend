@@ -104,12 +104,15 @@ export class Driver {
   })
   fixedMonthlySalary: number;
 
+  /** @deprecated No longer maintained — metrics are computed on-the-fly from rides / dispatch_offers tables. */
   @Column({ name: 'cancellation_count', type: 'int', default: 0 })
   cancellationCount: number;
 
+  /** @deprecated No longer maintained — metrics are computed on-the-fly from rides / dispatch_offers tables. */
   @Column({ name: 'rejected_offers_count', type: 'int', default: 0 })
   rejectedOffersCount: number;
 
+  /** @deprecated No longer maintained — metrics are computed on-the-fly from rides / dispatch_offers tables. */
   @Column({ name: 'accepted_offers_count', type: 'int', default: 0 })
   acceptedOffersCount: number;
 

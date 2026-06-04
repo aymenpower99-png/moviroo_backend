@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { Ride } from '../rides/domain/entities/ride.entity';
 import { Driver } from '../driver/entities/driver.entity';
 import { CommissionTier } from '../billing/entities/commission-tier.entity';
+import { CommissionLedger } from '../billing/entities/commission-ledger.entity';
 import { DriverOnlineHistory } from './entities/driver-online-history.entity';
 import { EarningsService } from './earnings.service';
 import { EarningsDriverController } from './earnings.controller';
@@ -13,6 +14,7 @@ import { EarningsDriverController } from './earnings.controller';
       Ride,
       Driver,
       CommissionTier,
+      CommissionLedger,
       DriverOnlineHistory,
     ]),
   ],

@@ -98,6 +98,8 @@ export class TripsController {
         ride.passengerId,
         rideId,
         RideStatus.EN_ROUTE_TO_PICKUP,
+        '',
+        '',
       );
     }
 
@@ -128,6 +130,8 @@ export class TripsController {
         ride.passengerId,
         rideId,
         RideStatus.ARRIVED,
+        '',
+        '',
       );
     }
 
@@ -159,6 +163,8 @@ export class TripsController {
         ride.passengerId,
         rideId,
         RideStatus.IN_TRIP,
+        '',
+        '',
       );
     }
 
@@ -195,6 +201,8 @@ export class TripsController {
         ride.passengerId,
         rideId,
         RideStatus.COMPLETED,
+        '',
+        '',
       );
     }
 
@@ -248,6 +256,7 @@ export class TripsController {
     ride.status = RideStatus.CANCELLED;
     ride.cancelledAt = new Date();
     ride.cancellationReason = body?.reason ?? null;
+    ride.cancelledBy = 'DRIVER';
     await this.rideRepo.save(ride);
 
     // Clean up payment record (cash → delete; card + paid → refund; card + pending → delete)

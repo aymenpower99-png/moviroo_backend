@@ -198,6 +198,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
             payload.ride_id,
             driverName,
             payload.text,
+            driver?.logoUrl ?? '',
           );
         }
       } catch (err) {

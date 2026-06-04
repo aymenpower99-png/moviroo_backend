@@ -24,22 +24,28 @@ export class PassengerNotificationService {
     passengerId: string,
     rideId: string,
     driverName: string,
+    driverLogoUrl?: string,
   ) {
     return this.fcm.sendToUser(
       passengerId,
       'Driver Assigned',
       `${driverName} has been assigned to your ride.`,
-      { type: 'DRIVER_ASSIGNED', rideId, channelId: 'ride_updates' },
+      { type: 'DRIVER_ASSIGNED', rideId, driverName, driverLogoUrl: driverLogoUrl ?? '', channelId: 'ride_updates' },
     );
   }
 
   /** Driver accepted the ride — notify the passenger. */
-  async rideAccepted(passengerId: string, rideId: string, driverName: string) {
+  async rideAccepted(
+    passengerId: string,
+    rideId: string,
+    driverName: string,
+    driverLogoUrl?: string,
+  ) {
     return this.fcm.sendToUser(
       passengerId,
       'Driver Accepted',
       `${driverName} is on the way to pick you up.`,
-      { type: 'RIDE_ACCEPTED', rideId, channelId: 'ride_updates' },
+      { type: 'RIDE_ACCEPTED', rideId, driverName, driverLogoUrl: driverLogoUrl ?? '', channelId: 'ride_updates' },
     );
   }
 
@@ -139,12 +145,16 @@ export class PassengerNotificationService {
     passengerId: string,
     rideId: string,
     status: RideStatus,
+    driverName?: string,
+    driverLogoUrl?: string,
   ) {
     const { title, body } = this.buildStatusCopy(status);
     return this.fcm.sendToUser(passengerId, title, body, {
       type: 'RIDE_STATUS_CHANGED',
       rideId,
       status: status.toString(),
+      driverName: driverName ?? '',
+      driverLogoUrl: driverLogoUrl ?? '',
       channelId: 'ride_updates',
     });
   }
@@ -184,11 +194,13 @@ export class PassengerNotificationService {
     rideId: string,
     driverName: string,
     messagePreview: string,
+    driverLogoUrl?: string,
   ) {
     return this.fcm.sendToUser(passengerId, driverName, messagePreview, {
       type: 'CHAT_MESSAGE',
       rideId,
       senderName: driverName,
+      driverLogoUrl: driverLogoUrl ?? '',
       channelId: 'chat_messages',
       title: driverName,
       body: messagePreview,

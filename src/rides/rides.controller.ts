@@ -363,6 +363,9 @@ export class RidesController {
       remainingDistanceMeters: remainingDistanceMeters,
       driverRating: driverProfile?.ratingAverage ?? null,
       passengerRating: passengerProfile?.ratingAverage ?? null,
+      // Expose driver photo for passenger apps (prefer Driver.logoUrl, fallback to User.avatarUrl)
+      driverLogoUrl:
+        driverProfile?.logoUrl ?? (ride as any)?.driver?.avatarUrl ?? null,
     };
   }
 

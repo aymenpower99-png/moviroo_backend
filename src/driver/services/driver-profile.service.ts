@@ -17,9 +17,8 @@ import { CloudinaryService } from '../../common/services/cloudinary.service';
 import { ConfigService } from '@nestjs/config';
 import { Ride } from '../../rides/domain/entities/ride.entity';
 import { RideStatus } from '../../rides/domain/enums/ride-status.enum';
-import { DispatchOffer } from '../../dispatch/domain/entities/dispatch-offer.entity';
-import { OfferStatus } from '../../dispatch/domain/enums/offer-status.enum';
 import { Between } from 'typeorm';
+import { DriverMetricsService } from './driver-metrics.service';
 
 @Injectable()
 export class DriverProfileService {
@@ -33,9 +32,9 @@ export class DriverProfileService {
     @InjectRepository(DriverOnlineHistory)
     private onlineHistoryRepo: Repository<DriverOnlineHistory>,
     @InjectRepository(Ride) private rideRepo: Repository<Ride>,
-    @InjectRepository(DispatchOffer) private offerRepo: Repository<DispatchOffer>,
     private readonly cloudinary: CloudinaryService,
     private readonly config: ConfigService,
+    private readonly metricsService: DriverMetricsService,
   ) {}
 
   async completeProfile(
@@ -179,7 +178,7 @@ export class DriverProfileService {
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
 
-    const [totalTrips, monthlyRides, cancellationCount] = await Promise.all([
+    const [totalTrips, monthlyRides] = await Promise.all([
       this.rideRepo.count({
         where: { driverId: userId, status: RideStatus.COMPLETED },
       }),
@@ -190,29 +189,15 @@ export class DriverProfileService {
           completedAt: Between(monthStart, monthEnd),
         },
       }),
-      this.rideRepo.count({
-        where: { driverId: userId, status: RideStatus.CANCELLED },
-      }),
     ]);
 
-    // Acceptance rate from dispatch_offers table
-    const [acceptedOffers, rejectedOffers] = await Promise.all([
-      this.offerRepo.count({
-        where: { driverId: userId, status: OfferStatus.ACCEPTED },
-      }),
-      this.offerRepo.count({
-        where: { driverId: userId, status: OfferStatus.REJECTED },
-      }),
-    ]);
-    const totalOffers = acceptedOffers + rejectedOffers;
-    const acceptanceRate = totalOffers > 0
-      ? Math.round((acceptedOffers / totalOffers) * 100)
-      : 0;
+    const metrics = await this.metricsService.computeForDriver(userId);
 
     this.logger.log(
-      `📊 Driver ${userId.slice(0, 8)} acceptance stats: ` +
-        `accepted=${acceptedOffers}, rejected=${rejectedOffers}, ` +
-        `rate=${acceptanceRate}% (from dispatch_offers)`,
+      `📊 Driver ${userId.slice(0, 8)} stats: ` +
+        `accepted=${metrics.acceptedOffersCount}, rejected=${metrics.rejectedOffersCount}, expired=${metrics.expiredOffersCount}, ` +
+        `rate=${metrics.acceptanceRate}% | assigned=${metrics.assignedRidesCount}, ` +
+        `driver_cancels=${metrics.cancellationCount}, cancel_rate=${metrics.cancellationRate}%`,
     );
 
     return {
@@ -220,10 +205,14 @@ export class DriverProfileService {
       ...driver,
       totalTrips,
       monthlyRides,
-      cancellationCount,
-      acceptedOffersCount: acceptedOffers,
-      rejectedOffersCount: rejectedOffers,
-      acceptanceRate,
+      assignedRidesCount: metrics.assignedRidesCount,
+      cancellationCount: metrics.cancellationCount,
+      cancellationRate: metrics.cancellationRate,
+      acceptedOffersCount: metrics.acceptedOffersCount,
+      rejectedOffersCount: metrics.rejectedOffersCount,
+      expiredOffersCount: metrics.expiredOffersCount,
+      totalOffersCount: metrics.totalOffersCount,
+      acceptanceRate: metrics.acceptanceRate,
       monthlyOnlineMs,
       vehicle: vehicle
         ? {

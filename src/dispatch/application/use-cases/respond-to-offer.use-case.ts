@@ -6,7 +6,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { DispatchOffer } from '../../domain/entities/dispatch-offer.entity';
 import { OfferStatus } from '../../domain/enums/offer-status.enum';
 import { Ride } from '../../../rides/domain/entities/ride.entity';
@@ -150,10 +150,12 @@ export class RespondToOfferUseCase {
         ]
           .filter(Boolean)
           .join(' ') || 'Your driver';
+      const driverLogoUrl = (fullRide as any)?.driver?.logoUrl ?? '';
       this.passengerNotif.driverAssigned(
         fullRide.passengerId,
         ride.id,
         driverName,
+        driverLogoUrl,
       );
     }
 
@@ -176,12 +178,13 @@ export class RespondToOfferUseCase {
       throw new ForbiddenException('This offer is not for you');
     }
 
+    // Allow rejecting PENDING or already-EXPIRED offers so the action is always recorded.
     const result = await this.offerRepo.update(
-      { id: offerId, status: OfferStatus.PENDING },
+      { id: offerId, status: In([OfferStatus.PENDING, OfferStatus.EXPIRED]) },
       { status: OfferStatus.REJECTED, rejectionReason: reason ?? null },
     );
     if (result.affected === 0) {
-      throw new ConflictException('Offer already expired or responded to');
+      throw new ConflictException('Offer already accepted or responded to');
     }
 
     this.logger.log(

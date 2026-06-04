@@ -11,10 +11,9 @@ import { User } from '../../users/entites/user.entity';
 import { WorkArea } from '../../work-area/entities/work-area.entity';
 import { Ride } from '../../rides/domain/entities/ride.entity';
 import { RideStatus } from '../../rides/domain/enums/ride-status.enum';
-import { DispatchOffer } from '../../dispatch/domain/entities/dispatch-offer.entity';
-import { OfferStatus } from '../../dispatch/domain/enums/offer-status.enum';
 import { CreateDriverDto } from '../dto/create-driver.dto';
 import { UpdateDriverDto } from '../dto/update-driver.dto';
+import { DriverMetricsService } from './driver-metrics.service';
 
 @Injectable()
 export class DriverAdminService {
@@ -24,7 +23,7 @@ export class DriverAdminService {
     @InjectRepository(User) private userRepo: Repository<User>,
     @InjectRepository(WorkArea) private workAreaRepo: Repository<WorkArea>,
     @InjectRepository(Ride) private rideRepo: Repository<Ride>,
-    @InjectRepository(DispatchOffer) private offerRepo: Repository<DispatchOffer>,
+    private readonly metricsService: DriverMetricsService,
   ) {}
 
   // ─── Create ───────────────────────────────────────────────────────────────────
@@ -138,39 +137,30 @@ export class DriverAdminService {
   async findOne(id: string) {
     const driver = await this.findDriverOrFail(id);
 
-    const [user, vehicle, totalTrips, cancellationCount, acceptedOffers, rejectedOffers] =
-      await Promise.all([
-        this.userRepo.findOne({ where: { id: driver.userId } }),
-        this.vehicleRepo.findOne({
-          where: { driverId: driver.id },
-          relations: ['vehicleClass'],
-        }),
-        this.rideRepo.count({
-          where: { driverId: driver.userId, status: RideStatus.COMPLETED },
-        }),
-        this.rideRepo.count({
-          where: { driverId: driver.userId, status: RideStatus.CANCELLED },
-        }),
-        this.offerRepo.count({
-          where: { driverId: driver.userId, status: OfferStatus.ACCEPTED },
-        }),
-        this.offerRepo.count({
-          where: { driverId: driver.userId, status: OfferStatus.REJECTED },
-        }),
-      ]);
+    const [user, vehicle, totalTrips] = await Promise.all([
+      this.userRepo.findOne({ where: { id: driver.userId } }),
+      this.vehicleRepo.findOne({
+        where: { driverId: driver.id },
+        relations: ['vehicleClass'],
+      }),
+      this.rideRepo.count({
+        where: { driverId: driver.userId, status: RideStatus.COMPLETED },
+      }),
+    ]);
 
-    const totalOffers = acceptedOffers + rejectedOffers;
-    const acceptanceRate = totalOffers > 0
-      ? Math.round((acceptedOffers / totalOffers) * 100)
-      : 0;
+    const metrics = await this.metricsService.computeForDriver(driver.userId);
 
     return {
       ...driver,
       totalTrips,
-      cancellationCount,
-      acceptedOffersCount: acceptedOffers,
-      rejectedOffersCount: rejectedOffers,
-      acceptanceRate,
+      cancellationCount: metrics.cancellationCount,
+      assignedRidesCount: metrics.assignedRidesCount,
+      cancellationRate: metrics.cancellationRate,
+      acceptedOffersCount: metrics.acceptedOffersCount,
+      rejectedOffersCount: metrics.rejectedOffersCount,
+      expiredOffersCount: metrics.expiredOffersCount,
+      totalOffersCount: metrics.totalOffersCount,
+      acceptanceRate: metrics.acceptanceRate,
       firstName: user?.firstName ?? null,
       lastName: user?.lastName ?? null,
       email: user?.email ?? null,

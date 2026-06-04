@@ -12,6 +12,7 @@ import { DriversController } from './drivers.controller';
 import { DriverProfileService } from './services/driver-profile.service';
 import { DriverAvailabilityService } from './services/driver-availability.service';
 import { DriverAdminService } from './services/driver-admin.service';
+import { DriverMetricsService } from './services/driver-metrics.service';
 import { EarningsModule } from '../earnings/earnings.module';
 import { CloudinaryService } from '../common/services/cloudinary.service';
 
@@ -34,6 +35,7 @@ import { CloudinaryService } from '../common/services/cloudinary.service';
     DriverProfileService,
     DriverAvailabilityService,
     DriverAdminService,
+    DriverMetricsService,
     CloudinaryService,
   ],
   exports: [DriversService, DriverAvailabilityService],

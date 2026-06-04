@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { TripPayment } from './entities/trip-payment.entity';
 import { CommissionTier } from './entities/commission-tier.entity';
+import { CommissionLedger } from './entities/commission-ledger.entity';
 import { Driver } from '../driver/entities/driver.entity';
 import { User } from '../users/entites/user.entity';
 import { Ride } from '../rides/domain/entities/ride.entity';
@@ -22,6 +23,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     TypeOrmModule.forFeature([
       TripPayment,
       CommissionTier,
+      CommissionLedger,
       Driver,
       User,
       Ride,

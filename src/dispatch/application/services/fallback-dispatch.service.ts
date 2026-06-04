@@ -122,6 +122,7 @@ export class FallbackDispatchService {
     await this.rideRepo.update(ride.id, {
       status: RideStatus.CANCELLED,
       cancelledAt: new Date(),
+      cancelledBy: 'SYSTEM',
       cancellationReason: 'No drivers available after 3 dispatch attempts',
       dispatchSnapshot: failSnap as any,
     });

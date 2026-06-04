@@ -19,6 +19,7 @@ import { PassengerEntity } from '../../../passenger/entities/passengers.entity';
 import { BillingService } from '../../../billing/services/billing.service';
 import { InvoiceService } from '../../../billing/services/invoice.service';
 import { CommissionTier } from '../../../billing/entities/commission-tier.entity';
+import { CommissionLedger } from '../../../billing/entities/commission-ledger.entity';
 import { DriverMonthlyStats } from '../../../billing/entities/driver-monthly-stats.entity';
 import { DriverNotificationService } from '../../../notifications/services/driver-notification.service';
 import { Between } from 'typeorm';
@@ -40,6 +41,8 @@ export class EndTripUseCase {
     private readonly passengerRepo: Repository<PassengerEntity>,
     @InjectRepository(CommissionTier)
     private readonly tierRepo: Repository<CommissionTier>,
+    @InjectRepository(CommissionLedger)
+    private readonly ledgerRepo: Repository<CommissionLedger>,
     @InjectRepository(DriverMonthlyStats)
     private readonly monthlyStatsRepo: Repository<DriverMonthlyStats>,
     private readonly billingService: BillingService,
@@ -136,7 +139,9 @@ export class EndTripUseCase {
       // Check if month changed - save previous month stats and reset
       if (driver.currentMonth && driver.currentMonth !== currentMonthStr) {
         // Compute previous month rides from rides table
-        const [prevYear, prevMonth] = driver.currentMonth.split('-').map(Number);
+        const [prevYear, prevMonth] = driver.currentMonth
+          .split('-')
+          .map(Number);
         const prevMonthStart = new Date(prevYear, prevMonth - 1, 1);
         const prevMonthEnd = new Date(prevYear, prevMonth, 0, 23, 59, 59, 999);
         const prevMonthRides = await this.rideRepo.count({
@@ -247,6 +252,37 @@ export class EndTripUseCase {
         ride.commissionAmount = commission;
         ride.driverEarnings = earnings;
         await this.rideRepo.save(ride);
+      }
+
+      // ── Real-time tier bonus awarding (idempotent via ledger uniqueness) ──
+      // Determine current period key (YYYY-MM) — reuse computed currentMonthStr
+
+      for (const tier of allTiers) {
+        if (monthlyRides >= tier.requiredRides) {
+          const exists = await this.ledgerRepo.findOne({
+            where: {
+              driverId: driverUserId,
+              periodKey: currentMonthStr,
+              tierId: tier.id,
+            },
+          });
+          if (!exists) {
+            const entry = this.ledgerRepo.create({
+              driverId: driverUserId,
+              periodKey: currentMonthStr,
+              tierId: tier.id,
+              amount: Number(tier.bonusAmount) || 0,
+            });
+            try {
+              await this.ledgerRepo.save(entry);
+              this.logger.log(
+                `💰 Tier bonus awarded: driver=${driverUserId} month=${currentMonthStr} tier=${tier.name} amount=${tier.bonusAmount}`,
+              );
+            } catch (_) {
+              // Ignore unique constraint races — idempotent by design
+            }
+          }
+        }
       }
     }
 
