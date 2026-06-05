@@ -14,6 +14,18 @@ export interface ProgressResult {
 export class RouteProgressService {
   private readonly logger = new Logger(RouteProgressService.name);
 
+  /**
+   * Maximum reasonable ETA in minutes. Anything above this is treated as
+   * bad data (stale GPS, missing coordinates, etc.) and rejected.
+   */
+  static readonly MAX_REASONABLE_ETA_MIN = 180; // 3 hours
+
+  /**
+   * Maximum reasonable straight-line distance for a single ride segment.
+   * Used to detect stale or null coordinates.
+   */
+  static readonly MAX_REASONABLE_DISTANCE_M = 100_000; // 100 km
+
   constructor(
     private readonly haversine: HaversineService,
     private readonly routeSnapping: RouteSnappingService,
@@ -72,6 +84,23 @@ export class RouteProgressService {
       `[ROUTE_PROGRESS] Calculate progress: driver (${driverLat}, ${driverLon}) → target (${targetLat}, ${targetLon})`,
     );
 
+    // ── Guard against missing or null coordinates ──
+    if (
+      driverLat == null ||
+      driverLon == null ||
+      targetLat == null ||
+      targetLon == null ||
+      !Number.isFinite(driverLat) ||
+      !Number.isFinite(driverLon) ||
+      !Number.isFinite(targetLat) ||
+      !Number.isFinite(targetLon)
+    ) {
+      this.logger.warn(
+        '[ROUTE_PROGRESS] Aborted — invalid coordinates (null or non-finite)',
+      );
+      return null;
+    }
+
     // Calculate remaining distance
     const remainingDistanceMeters = this.calculateDistance(
       driverLat,
@@ -80,17 +109,29 @@ export class RouteProgressService {
       targetLon,
     );
 
+    // ── Guard against unreasonably large distances (stale GPS, 0,0 coords, etc.) ──
+    if (remainingDistanceMeters > RouteProgressService.MAX_REASONABLE_DISTANCE_M) {
+      this.logger.warn(
+        `[ROUTE_PROGRESS] Aborted — distance ${(remainingDistanceMeters / 1000).toFixed(1)} km exceeds sanity cap`,
+      );
+      return null;
+    }
+
     // Calculate progress
     const progress = this.calculateProgress(
       remainingDistanceMeters,
       totalDistanceMeters,
     );
 
-    // Calculate ETA
+    // Calculate ETA and cap to prevent absurd UI values
     const remainingDurationSeconds =
       remainingDistanceMeters /
       (((speedKmh > 0 ? speedKmh : 40) * 1000) / 3600);
-    const etaMins = Math.ceil(remainingDurationSeconds / 60);
+    const rawEtaMins = Math.ceil(remainingDurationSeconds / 60);
+    const etaMins = Math.min(
+      rawEtaMins,
+      RouteProgressService.MAX_REASONABLE_ETA_MIN,
+    );
 
     this.logger.log(
       `[ROUTE_PROGRESS] Progress: ${(progress * 100).toFixed(1)}%, remaining: ${remainingDistanceMeters.toFixed(0)}m, ETA: ${etaMins}min`,
@@ -150,11 +191,12 @@ export class RouteProgressService {
     const remainingDurationSeconds =
       routeDurationSeconds * (1 - clampedProgress);
 
+    const rawEtaMins = Math.ceil(remainingDurationSeconds / 60);
     const result: ProgressResult = {
       progress: clampedProgress,
       remainingDistanceMeters,
       remainingDurationSeconds,
-      etaMins: Math.ceil(remainingDurationSeconds / 60),
+      etaMins: Math.min(rawEtaMins, RouteProgressService.MAX_REASONABLE_ETA_MIN),
       totalDistanceMeters: routeDistanceMeters,
     };
 

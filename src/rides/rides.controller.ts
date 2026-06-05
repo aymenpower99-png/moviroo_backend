@@ -319,38 +319,49 @@ export class RidesController {
         };
         progress = loc.progress ?? null;
 
-        /* Compute ETA dynamically using RoutingService (same logic as WebSocket) */
-        const targetLat =
-          ride.status === RideStatus.IN_TRIP ? ride.dropoffLat : ride.pickupLat;
-        const targetLon =
-          ride.status === RideStatus.IN_TRIP ? ride.dropoffLon : ride.pickupLon;
-        const totalDistanceMeters = ride.distanceKm
-          ? ride.distanceKm * 1000
-          : 0;
+        /* Compute ETA dynamically using RoutingService (same logic as WebSocket).
+           Skip if the driver location is stale (> 5 min) to avoid absurd ETAs
+           from old coordinates. */
+        const locAgeMs = Date.now() - new Date(loc.lastSeenAt).getTime();
+        const isStale = locAgeMs > 5 * 60 * 1000; // 5 minutes
 
-        if (totalDistanceMeters > 0) {
-          try {
-            const progressData =
-              await this.routingService.calculateProgressForRide(
-                loc.latitude,
-                loc.longitude,
-                targetLat,
-                targetLon,
-                totalDistanceMeters,
-                loc.speedKmh ?? 0,
+        if (!isStale) {
+          const targetLat =
+            ride.status === RideStatus.IN_TRIP ? ride.dropoffLat : ride.pickupLat;
+          const targetLon =
+            ride.status === RideStatus.IN_TRIP ? ride.dropoffLon : ride.pickupLon;
+          const totalDistanceMeters = ride.distanceKm
+            ? ride.distanceKm * 1000
+            : 0;
+
+          if (totalDistanceMeters > 0) {
+            try {
+              const progressData =
+                await this.routingService.calculateProgressForRide(
+                  loc.latitude,
+                  loc.longitude,
+                  targetLat,
+                  targetLon,
+                  totalDistanceMeters,
+                  loc.speedKmh ?? 0,
+                );
+
+              /* Override with FRESH computed values (not stale DB snapshot) */
+              if (progressData) {
+                progress = progressData.progress;
+                etaMins = progressData.etaMins;
+                remainingDistanceMeters = progressData.remainingDistanceMeters;
+              }
+            } catch (err) {
+              this.logger.error(
+                `Failed to calculate progress for ride ${id}: ${err}`,
               );
-
-            /* Override with FRESH computed values (not stale DB snapshot) */
-            if (progressData) {
-              progress = progressData.progress;
-              etaMins = progressData.etaMins;
-              remainingDistanceMeters = progressData.remainingDistanceMeters;
             }
-          } catch (err) {
-            this.logger.error(
-              `Failed to calculate progress for ride ${id}: ${err}`,
-            );
           }
+        } else {
+          this.logger.warn(
+            `Ride ${id} — driver location stale (${(locAgeMs / 60_000).toFixed(1)} min), skipping dynamic ETA`,
+          );
         }
       }
     }

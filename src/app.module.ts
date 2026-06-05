@@ -1,4 +1,13 @@
 import { Module } from '@nestjs/common';
+import { DashboardAnalyticsModule } from './analytics/dashboard/dashboard.module';
+import { DriversAnalyticsModule } from './analytics/drivers/drivers.module';
+import { DispatchAnalyticsModule } from './analytics/dispatch/dispatch.module';
+import { RidesAnalyticsModule } from './analytics/rides/rides.module';
+import { SupportAnalyticsModule } from './analytics/support/support.module';
+import { RatingsAnalyticsModule } from './analytics/ratings/ratings.module';
+import { VehiclesAnalyticsModule } from './analytics/vehicles/vehicles.module';
+import { PassengersAnalyticsModule } from './analytics/passengers/passengers.module';
+import { DemandAnalyticsModule } from './analytics/demand/demand.module';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
@@ -63,6 +72,15 @@ import { PublicStatsModule } from './public-stats/public-stats.module';
     HelpCenterModule,
     EarningsModule,
     NotificationsModule,
+    DashboardAnalyticsModule,
+    DriversAnalyticsModule,
+    DispatchAnalyticsModule,
+    RidesAnalyticsModule,
+    SupportAnalyticsModule,
+    RatingsAnalyticsModule,
+    VehiclesAnalyticsModule,
+    PassengersAnalyticsModule,
+    DemandAnalyticsModule,
     ChatModule,
     PlacesModule,
     MembershipLevelsModule,
