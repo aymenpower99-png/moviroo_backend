@@ -15,6 +15,19 @@ import { Driver } from '../../../driver/entities/driver.entity';
 import { PassengerEntity } from '../../../passenger/entities/passengers.entity';
 import { User, UserRole } from '../../../users/entites/user.entity';
 import { SubmitRatingDto } from '../dtos/submit-rating.dto';
+import { TripTrackingGateway } from '../../gateway/trip-tracking.gateway';
+
+export interface RatingResult {
+  rating: RideRating;
+  driverRating?: {
+    average: number;
+    totalRatings: number;
+  };
+  passengerRating?: {
+    average: number;
+    totalRatings: number;
+  };
+}
 
 @Injectable()
 export class SubmitRatingUseCase {
@@ -29,13 +42,14 @@ export class SubmitRatingUseCase {
     private readonly driverRepo: Repository<Driver>,
     @InjectRepository(PassengerEntity)
     private readonly passengerRepo: Repository<PassengerEntity>,
+    private readonly tripGateway: TripTrackingGateway,
   ) {}
 
   async execute(
     currentUser: User,
     rideId: string,
     dto: SubmitRatingDto,
-  ): Promise<RideRating> {
+  ): Promise<RatingResult> {
     const ride = await this.rideRepo.findOne({ where: { id: rideId } });
     if (!ride) throw new NotFoundException('Ride not found');
 
@@ -59,6 +73,25 @@ export class SubmitRatingUseCase {
       rating = this.ratingRepo.create({ rideId });
     }
 
+    /* ── Duplicate rating guard ───────────────────────────────────────────
+       A passenger may only submit passenger_rating once per trip.
+       A driver may only submit driver_rating once per trip.
+       Admins can overwrite (bypass guard). ──────────────────────────────── */
+    if (isPassenger && !isAdmin) {
+      if (dto.passenger_rating != null && rating.passengerRating != null) {
+        throw new ConflictException(
+          'You have already rated this driver for this trip',
+        );
+      }
+    }
+    if (isDriver && !isAdmin) {
+      if (dto.driver_rating != null && rating.driverRating != null) {
+        throw new ConflictException(
+          'You have already rated this passenger for this trip',
+        );
+      }
+    }
+
     /* Passenger rates the driver */
     if (isPassenger || isAdmin) {
       if (dto.passenger_rating != null) rating.passengerRating = dto.passenger_rating;
@@ -73,42 +106,67 @@ export class SubmitRatingUseCase {
 
     await this.ratingRepo.save(rating);
 
-    /* ── Update Driver's rolling average (display only) ──── */
+    const result: RatingResult = { rating };
+
+    /* ── Update Driver's rolling average ──────────────────────────────────── */
     if (dto.passenger_rating != null && ride.driverId) {
       const driver = await this.driverRepo.findOne({
         where: { userId: ride.driverId },
       });
       if (driver) {
-        const newTotal = driver.totalRatings + 1;
-        const newAvg =
-          (driver.ratingAverage * driver.totalRatings + dto.passenger_rating) / newTotal;
+        const oldTotal = driver.totalRatings;
+        const oldAvg = driver.ratingAverage;
+        const newTotal = oldTotal + 1;
+        const newAvg = (oldAvg * oldTotal + dto.passenger_rating) / newTotal;
+
         driver.totalRatings = newTotal;
         driver.ratingAverage = +newAvg.toFixed(2);
         await this.driverRepo.save(driver);
+
+        result.driverRating = {
+          average: driver.ratingAverage,
+          totalRatings: driver.totalRatings,
+        };
+
         this.logger.log(
-          `Driver ${ride.driverId} rating updated: ${driver.ratingAverage} (${newTotal} ratings)`,
+          `Driver ${ride.driverId} rating updated: ${driver.ratingAverage} (${driver.totalRatings} ratings)`,
         );
       }
     }
 
-    /* ── Update Passenger's rolling average (display only) ──── */
+    /* ── Update Passenger's rolling average ───────────────────────────────── */
     if (dto.driver_rating != null && ride.passengerId) {
       const passenger = await this.passengerRepo.findOne({
         where: { userId: ride.passengerId },
       });
       if (passenger) {
-        const newTotal = passenger.totalRatings + 1;
-        const newAvg =
-          (passenger.ratingAverage * passenger.totalRatings + dto.driver_rating) / newTotal;
+        const oldTotal = passenger.totalRatings;
+        const oldAvg = passenger.ratingAverage;
+        const newTotal = oldTotal + 1;
+        const newAvg = (oldAvg * oldTotal + dto.driver_rating) / newTotal;
+
         passenger.totalRatings = newTotal;
         passenger.ratingAverage = +newAvg.toFixed(2);
         await this.passengerRepo.save(passenger);
+
+        result.passengerRating = {
+          average: passenger.ratingAverage,
+          totalRatings: passenger.totalRatings,
+        };
+
         this.logger.log(
-          `Passenger ${ride.passengerId} rating updated: ${passenger.ratingAverage} (${newTotal} ratings)`,
+          `Passenger ${ride.passengerId} rating updated: ${passenger.ratingAverage} (${passenger.totalRatings} ratings)`,
         );
       }
     }
 
-    return rating;
+    /* ── Push real-time update to both parties ──────────────────────────── */
+    this.tripGateway.emitToRide(rideId, 'trip:rating_updated', {
+      rideId,
+      driverRating: result.driverRating,
+      passengerRating: result.passengerRating,
+    });
+
+    return result;
   }
 }

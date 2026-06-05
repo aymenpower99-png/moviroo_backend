@@ -47,15 +47,6 @@ export class DemandAnalyticsService {
       })
       .getMany();
 
-    console.log(
-      `📍 Demand Analytics: Found ${recentRides.length} rides in last 7 days`,
-    );
-    recentRides.forEach((ride) => {
-      console.log(
-        `  - Ride: ${ride.pickupAddress} (${ride.pickupLat}, ${ride.pickupLon}) - Status: ${ride.status}`,
-      );
-    });
-
     // Cluster rides by approximate location (simple grid clustering)
     const clusters = this.clusterRides(recentRides);
 

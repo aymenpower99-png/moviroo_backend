@@ -52,6 +52,12 @@ export class PassengersService {
   ): Promise<PassengerEntity> {
     const passenger = await this.findByUserId(userId);
     Object.assign(passenger, dto);
+
+    // Handle language field - it's in the User table, not Passenger table
+    if (dto.language) {
+      await this.userRepo.update(userId, { language: dto.language });
+    }
+
     return this.passengerRepo.save(passenger);
   }
 

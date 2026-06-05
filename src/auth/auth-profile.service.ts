@@ -27,6 +27,7 @@ export class AuthProfileService {
           ...(dto.firstName && { firstName: dto.firstName }),
           ...(dto.lastName  && { lastName:  dto.lastName  }),
           ...(phone         && { phone }),
+          ...(dto.language  && { language:  dto.language  }),
         });
       }
       return this.emailChangeService.requestEmailChange(user, dto.email);
@@ -37,6 +38,7 @@ export class AuthProfileService {
       ...(dto.firstName && { firstName: dto.firstName }),
       ...(dto.lastName  && { lastName:  dto.lastName  }),
       ...(phone         && { phone }),
+      ...(dto.language  && { language:  dto.language  }),
     });
 
     const updated = await this.userRepo.findOneOrFail({ where: { id: userId } });

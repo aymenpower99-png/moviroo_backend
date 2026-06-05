@@ -1,4 +1,4 @@
-import { IsEmail, IsOptional, IsString, Length } from 'class-validator';
+import { IsEmail, IsOptional, IsString, Length, IsIn } from 'class-validator';
 
 export class UpdateProfileDto {
   @IsOptional()
@@ -18,4 +18,9 @@ export class UpdateProfileDto {
   @IsOptional()
   @IsString()
   phone?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['en', 'fr', 'ar'])
+  language?: string;
 }

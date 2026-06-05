@@ -5,6 +5,7 @@ import {
   IsEnum,
   IsUUID,
   MaxLength,
+  IsIn,
 } from 'class-validator';
 import { PaymentMethod } from '../entities/passengers.entity';
 
@@ -47,4 +48,9 @@ export class UpdatePassengerDto {
   @IsOptional()
   @IsBoolean()
   newsletterOptIn?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['en', 'fr', 'ar'])
+  language?: string;
 }
