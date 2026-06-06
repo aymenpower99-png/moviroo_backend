@@ -8,6 +8,7 @@ import { RatingsAnalyticsModule } from './analytics/ratings/ratings.module';
 import { VehiclesAnalyticsModule } from './analytics/vehicles/vehicles.module';
 import { PassengersAnalyticsModule } from './analytics/passengers/passengers.module';
 import { DemandAnalyticsModule } from './analytics/demand/demand.module';
+import { LiveMapModule } from './analytics/live-map/live-map.module';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
@@ -81,6 +82,7 @@ import { PublicStatsModule } from './public-stats/public-stats.module';
     VehiclesAnalyticsModule,
     PassengersAnalyticsModule,
     DemandAnalyticsModule,
+    LiveMapModule,
     ChatModule,
     PlacesModule,
     MembershipLevelsModule,

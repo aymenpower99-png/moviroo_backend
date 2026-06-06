@@ -138,6 +138,25 @@ export class TripTrackingGateway
     return { event: 'left', data: { ride_id: data.ride_id } };
   }
 
+  /* ── Join admin live map room ──── */
+  @SubscribeMessage('join-admin-map')
+  handleJoinAdminMap(@ConnectedSocket() client: Socket) {
+    this.logger.log(`Admin client ${client.id} joining admin:live-map room`);
+    client.join('admin:live-map');
+    this.logger.log(
+      `Client rooms after joining admin map: ${Array.from(client.rooms)}`,
+    );
+    return { event: 'joined-admin-map', data: { room: 'admin:live-map' } };
+  }
+
+  /* ── Leave admin live map room ──── */
+  @SubscribeMessage('leave-admin-map')
+  handleLeaveAdminMap(@ConnectedSocket() client: Socket) {
+    this.logger.log(`Admin client ${client.id} leaving admin:live-map room`);
+    client.leave('admin:live-map');
+    return { event: 'left-admin-map', data: { room: 'admin:live-map' } };
+  }
+
   /* ── Driver streams GPS every 5s ──── */
   @SubscribeMessage('trip:gps')
   async handleGps(

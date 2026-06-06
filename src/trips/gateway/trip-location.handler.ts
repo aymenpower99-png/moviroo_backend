@@ -27,14 +27,20 @@ export class TripLocationHandler {
     private readonly bufferHandler: TripBufferHandler,
     private readonly gpsBuffer: Map<string, Partial<TripWaypoint>[]>,
     private readonly sequenceCounters: Map<string, number>,
-    private readonly progressCache: Map<string, { data: any; timestamp: number }>,
+    private readonly progressCache: Map<
+      string,
+      { data: any; timestamp: number }
+    >,
     private readonly server: Server,
   ) {}
 
   /**
    * Handle GPS location updates from driver
    */
-  async handleGps(client: Socket, payload: GpsPayload): Promise<{ event: string; data: any }> {
+  async handleGps(
+    client: Socket,
+    payload: GpsPayload,
+  ): Promise<{ event: string; data: any }> {
     this.logger.log(
       `GPS received from client ${client.id}: ride_id=${payload.ride_id}, lat=${payload.latitude}, lng=${payload.longitude}`,
     );
@@ -278,6 +284,24 @@ export class TripLocationHandler {
       `Broadcasting trip:location_update to room ride:${rideId}: ${JSON.stringify(locationData)}`,
     );
     this.server.to(`ride:${rideId}`).emit('trip:location_update', locationData);
+
+    /* Broadcast to admin live map room */
+    const adminLocationData = {
+      driver_id: rideId, // Will be updated to actual driver_id
+      latitude: payload.latitude,
+      longitude: payload.longitude,
+      speed_kmh: payload.speed_kmh ?? 0,
+      is_online: true,
+      last_seen_at: new Date(),
+      progress: progressData?.progress,
+    };
+
+    this.logger.log(
+      `Broadcasting admin:driver_location_update to room admin:live-map`,
+    );
+    this.server
+      .to('admin:live-map')
+      .emit('admin:driver_location_update', adminLocationData);
 
     return { event: 'ack', data: { sequence: seq } };
   }
