@@ -1,15 +1,20 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  UpdateDateColumn,
+} from 'typeorm';
 
 export enum ArticleStatus {
-  AUTO = 'auto',
-  REVIEWED = 'reviewed',
+  ACTIVE = 'active',
   DISABLED = 'disabled',
 }
 
 /** One step in the article answer, stored as multilingual JSONB. */
 export interface ArticleStep {
   order: number;
-  title: Record<string, string>;       // { en, fr, ar }
+  title: Record<string, string>; // { en, fr, ar }
   description: Record<string, string>; // { en, fr, ar }
 }
 
@@ -19,22 +24,22 @@ export class HelpArticle {
   id: string;
 
   @Column({ type: 'jsonb', default: {} })
-  title: Record<string, string>;  // { en: "...", fr: "...", ar: "..." }
+  title: Record<string, string>; // { en: "...", fr: "...", ar: "..." }
 
   @Column({ type: 'jsonb', default: {} })
   description: Record<string, string>;
 
   @Column({ type: 'varchar', length: 50 })
-  categoryKey: string;  // e.g. 'account', 'payments', 'trips', 'safety'
+  categoryKey: string; // e.g. 'account', 'payments', 'trips', 'safety'
 
   @Column({ type: 'jsonb', default: {} })
-  categoryLabel: Record<string, string>;  // { en: "Account", fr: "Compte", ar: "الحساب" }
+  categoryLabel: Record<string, string>; // { en: "Account", fr: "Compte", ar: "الحساب" }
 
   @Column({
     type: 'enum',
     enum: ArticleStatus,
     enumName: 'article_status',
-    default: ArticleStatus.AUTO,
+    default: ArticleStatus.ACTIVE,
   })
   status: ArticleStatus;
 

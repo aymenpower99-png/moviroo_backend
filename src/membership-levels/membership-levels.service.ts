@@ -92,6 +92,13 @@ export class MembershipLevelsService {
     };
   }
 
+  // ── Hard Delete ─────────────────────────────────────────────────────────────
+
+  async remove(id: string): Promise<void> {
+    const level = await this.findOne(id);
+    await this.repo.delete(id);
+  }
+
   // ── Eligibility: resolve highest level a user qualifies for ─────────────────
 
   async resolveEligibleLevel(

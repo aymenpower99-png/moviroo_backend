@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -17,6 +18,8 @@ import { DriverMetricsService } from './driver-metrics.service';
 
 @Injectable()
 export class DriverAdminService {
+  private readonly logger = new Logger(DriverAdminService.name);
+
   constructor(
     @InjectRepository(Driver) private driverRepo: Repository<Driver>,
     @InjectRepository(Vehicle) private vehicleRepo: Repository<Vehicle>,
@@ -221,11 +224,32 @@ export class DriverAdminService {
           throw new BadRequestException(reason);
         }
 
-        // Enforce one-to-one
+        // ── Handle vehicle reassignment between drivers ───────────────────────
         if (vehicle.driverId && vehicle.driverId !== driver.id) {
-          throw new BadRequestException(
-            `This vehicle is already assigned to another driver. Unassign it first.`,
-          );
+          // Vehicle is assigned to another driver - reassign it
+          const oldDriverId = vehicle.driverId;
+
+          // Clear the old driver's assignment from this vehicle
+          await this.vehicleRepo.update(vehicle.id, { driverId: null });
+
+          // Set old driver status to SETUP_REQUIRED since they're losing their vehicle
+          const oldDriver = await this.driverRepo.findOne({
+            where: { id: oldDriverId },
+          });
+          if (oldDriver) {
+            const activeStatuses: DriverAvailabilityStatus[] = [
+              DriverAvailabilityStatus.OFFLINE,
+              DriverAvailabilityStatus.ONLINE,
+            ];
+            if (activeStatuses.includes(oldDriver.availabilityStatus)) {
+              await this.driverRepo.update(oldDriver.id, {
+                availabilityStatus: DriverAvailabilityStatus.SETUP_REQUIRED,
+              });
+              this.logger.log(
+                `Driver "${oldDriver.id}" set to SETUP_REQUIRED — vehicle "${dto.vehicleId}" reassigned to driver "${driver.id}".`,
+              );
+            }
+          }
         }
 
         // Unlink this driver from any previously assigned vehicle
@@ -256,7 +280,9 @@ export class DriverAdminService {
           where: { id: dto.workAreaId },
         });
         if (!area)
-          throw new NotFoundException(`Work area "${dto.workAreaId}" not found.`);
+          throw new NotFoundException(
+            `Work area "${dto.workAreaId}" not found.`,
+          );
         driver.workAreaId = dto.workAreaId;
       }
       await this.driverRepo.save(driver);
@@ -290,13 +316,14 @@ export class DriverAdminService {
       await this.driverRepo.save(driver);
     }
 
-    // If vehicle was removed and driver has no vehicle, demote to PENDING
+    // If vehicle was removed and driver has no vehicle, set to SETUP_REQUIRED
     if (
       !hasVehicle &&
       (driver.availabilityStatus === DriverAvailabilityStatus.SETUP_REQUIRED ||
-        driver.availabilityStatus === DriverAvailabilityStatus.OFFLINE)
+        driver.availabilityStatus === DriverAvailabilityStatus.OFFLINE ||
+        driver.availabilityStatus === DriverAvailabilityStatus.ONLINE)
     ) {
-      driver.availabilityStatus = DriverAvailabilityStatus.PENDING;
+      driver.availabilityStatus = DriverAvailabilityStatus.SETUP_REQUIRED;
       await this.driverRepo.save(driver);
     }
 

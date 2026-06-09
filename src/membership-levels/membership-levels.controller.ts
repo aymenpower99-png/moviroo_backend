@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Body,
   Param,
   ParseUUIDPipe,
@@ -65,5 +66,13 @@ export class MembershipLevelsController {
   @HttpCode(HttpStatus.OK)
   toggleActive(@Param('id', ParseUUIDPipe) id: string) {
     return this.service.toggleActive(id);
+  }
+
+  // ── DELETE /admin/membership-levels/:id ───────────────────────────────────
+  // Hard delete - permanently remove from database
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async remove(@Param('id', ParseUUIDPipe) id: string) {
+    await this.service.remove(id);
   }
 }

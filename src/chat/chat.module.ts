@@ -23,6 +23,6 @@ import { NotificationsModule } from '../notifications/notifications.module';
   ],
   controllers: [ChatController],
   providers: [ChatGateway, HuggingFaceTranslateService],
-  exports: [ChatGateway],
+  exports: [ChatGateway, HuggingFaceTranslateService],
 })
 export class ChatModule {}

@@ -91,6 +91,18 @@ export class AdminInviteService {
       throw new BadRequestException('A user with this email already exists.');
     }
 
+    // Check for duplicate phone number
+    const phoneExists = await this.userRepo.findOne({
+      where: { phone },
+      withDeleted: true,
+    });
+
+    if (phoneExists) {
+      throw new BadRequestException(
+        'A user with this phone number already exists.',
+      );
+    }
+
     const user = this.userRepo.create({
       firstName: dto.firstName,
       lastName: dto.lastName,

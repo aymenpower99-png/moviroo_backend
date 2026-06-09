@@ -1,4 +1,12 @@
-import { IsOptional, IsObject, IsString, IsNumber, IsEnum, IsBoolean, IsArray, ValidateNested } from 'class-validator';
+import {
+  IsOptional,
+  IsObject,
+  IsString,
+  IsEnum,
+  IsBoolean,
+  IsArray,
+  ValidateNested,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import { ArticleStatus } from '../entities/help-article.entity';
 import { StepInput } from './create-article.dto';
@@ -27,10 +35,6 @@ export class UpdateArticleDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
-
-  @IsOptional()
-  @IsNumber()
-  sortOrder?: number;
 
   @IsOptional()
   @IsArray()

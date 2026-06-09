@@ -1,9 +1,14 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { HelpArticle, ArticleStep, ArticleStatus } from './entities/help-article.entity';
+import {
+  HelpArticle,
+  ArticleStep,
+  ArticleStatus,
+} from './entities/help-article.entity';
 import { CreateArticleDto, StepInput } from './dto/create-article.dto';
 import { UpdateArticleDto } from './dto/update-article.dto';
+import { HuggingFaceTranslateService } from '../chat/services/huggingface-translate.service';
 
 const AUTO_TRANSLATE_LANGS = ['fr', 'ar'];
 
@@ -12,22 +17,21 @@ export class HelpCenterService {
   constructor(
     @InjectRepository(HelpArticle)
     private readonly repo: Repository<HelpArticle>,
+    private readonly translateService: HuggingFaceTranslateService,
   ) {}
 
-  // ── Internal: call MyMemory free translation API ──
-  private async translateText(text: string, targetLang: string): Promise<string> {
+  // ── Internal: call DeepL translation API ──
+  private async translateText(
+    text: string,
+    targetLang: string,
+  ): Promise<string> {
     try {
-      const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=en|${targetLang}`;
-      const res = await fetch(url);
-      const data = (await res.json()) as {
-        responseStatus: number;
-        responseData?: { translatedText?: string };
-      };
-      if (data.responseStatus === 200 && data.responseData?.translatedText) {
-        return data.responseData.translatedText;
-      }
-    } catch { /* fall through to EN fallback */ }
-    return text;
+      return await this.translateService.translate(text, targetLang, 'en');
+    } catch (error) {
+      // Fall back to original text on error
+      console.error(`Translation failed for ${targetLang}:`, error);
+      return text;
+    }
   }
 
   // ── Internal: build multilingual steps from English-only inputs ──
@@ -77,14 +81,15 @@ export class HelpCenterService {
       order: { sortOrder: 'ASC', createdAt: 'DESC' },
     });
 
-    return articles.map(a => ({
+    return articles.map((a) => ({
       id: a.id,
       title: a.title[lang] || a.title['en'] || '',
       description: a.description[lang] || a.description['en'] || '',
       categoryKey: a.categoryKey,
-      categoryLabel: a.categoryLabel[lang] || a.categoryLabel['en'] || a.categoryKey,
+      categoryLabel:
+        a.categoryLabel[lang] || a.categoryLabel['en'] || a.categoryKey,
       status: a.status,
-      steps: (a.steps || []).map(s => ({
+      steps: (a.steps || []).map((s) => ({
         order: s.order,
         title: s.title[lang] || s.title['en'] || '',
         description: s.description[lang] || s.description['en'] || '',
@@ -114,8 +119,7 @@ export class HelpCenterService {
       description: { en: dto.description },
       categoryKey: dto.categoryKey,
       categoryLabel: { en: dto.categoryLabel || dto.categoryKey },
-      sortOrder: dto.sortOrder ?? 0,
-      status: dto.status ?? ArticleStatus.AUTO,
+      status: dto.status ?? ArticleStatus.ACTIVE,
       steps,
     });
     const saved = await this.repo.save(article);
@@ -128,12 +132,16 @@ export class HelpCenterService {
   async updateArticle(id: string, dto: UpdateArticleDto) {
     const article = await this.adminGetOne(id);
     if (dto.title) article.title = { ...article.title, ...dto.title };
-    if (dto.description) article.description = { ...article.description, ...dto.description };
+    if (dto.description)
+      article.description = { ...article.description, ...dto.description };
     if (dto.categoryKey) article.categoryKey = dto.categoryKey;
-    if (dto.categoryLabel) article.categoryLabel = { ...article.categoryLabel, ...dto.categoryLabel };
+    if (dto.categoryLabel)
+      article.categoryLabel = {
+        ...article.categoryLabel,
+        ...dto.categoryLabel,
+      };
     if (dto.status) article.status = dto.status;
     if (dto.isActive !== undefined) article.isActive = dto.isActive;
-    if (dto.sortOrder !== undefined) article.sortOrder = dto.sortOrder;
 
     // Replace steps entirely when provided (always English input → re-translate)
     if (dto.steps !== undefined) {
@@ -160,9 +168,10 @@ export class HelpCenterService {
       where: { isActive: true },
       select: ['categoryKey', 'categoryLabel'],
     });
-    
+
     const seen = new Set<string>();
-    const categories: { key: string; label: string; articleCount: number }[] = [];
+    const categories: { key: string; label: string; articleCount: number }[] =
+      [];
     const counts: Record<string, number> = {};
 
     for (const a of articles) {
@@ -171,13 +180,13 @@ export class HelpCenterService {
         seen.add(a.categoryKey);
         categories.push({
           key: a.categoryKey,
-          label: a.categoryLabel[lang] || a.categoryLabel['en'] || a.categoryKey,
+          label:
+            a.categoryLabel[lang] || a.categoryLabel['en'] || a.categoryKey,
           articleCount: 0,
         });
       }
     }
     // Attach counts
-    return categories.map(c => ({ ...c, articleCount: counts[c.key] || 0 }));
+    return categories.map((c) => ({ ...c, articleCount: counts[c.key] || 0 }));
   }
 }
-

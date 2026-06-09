@@ -31,7 +31,11 @@ export class SupportService {
   // ── helpers ────────────────────────────────────────────────────────────────
 
   /** Notify all admin users via FCM (best-effort). */
-  private async _notifyAdmins(title: string, body: string, data?: Record<string, string>): Promise<void> {
+  private async _notifyAdmins(
+    title: string,
+    body: string,
+    data?: Record<string, string>,
+  ): Promise<void> {
     const admins = await this.userRepo.find({
       where: { role: UserRole.SUPER_ADMIN },
       select: ['id'],
@@ -115,16 +119,12 @@ export class SupportService {
     const saved = await this.ticketRepo.save(ticket);
 
     // Notify admins that a new ticket was opened
-    this._notifyAdmins(
-      'New Support Ticket',
-      dto.subject,
-      {
-        type: 'SUPPORT_TICKET_CREATED',
-        ticketId: saved.id,
-        subject: dto.subject,
-        channelId: 'support_messages',
-      },
-    ).catch(() => {});
+    this._notifyAdmins('New Support Ticket', dto.subject, {
+      type: 'SUPPORT_TICKET_CREATED',
+      ticketId: saved.id,
+      subject: dto.subject,
+      channelId: 'support_messages',
+    }).catch(() => {});
 
     // Real-time WebSocket broadcast to all admins
     this.gateway.emitToAdmins('support:ticket:created', {
@@ -136,12 +136,28 @@ export class SupportService {
 
   // ── User: list own tickets ─────────────────────────────────────────────────
   async listMyTickets(authorId: string, page = 1, limit = 20) {
-    const [data, total] = await this.ticketRepo.findAndCount({
+    const [tickets, total] = await this.ticketRepo.findAndCount({
       where: { authorId },
       order: { createdAt: 'DESC' },
       skip: (page - 1) * limit,
       take: limit,
     });
+
+    // Enrich each ticket with lastMessage and lastMessageAt
+    const data = await Promise.all(
+      tickets.map(async (t) => {
+        const lastMsg = await this.messageRepo.findOne({
+          where: { ticketId: t.id },
+          order: { createdAt: 'DESC' },
+        });
+        return {
+          ...t,
+          lastMessage: lastMsg?.body ?? null,
+          lastMessageAt: lastMsg?.createdAt ?? null,
+        };
+      }),
+    );
+
     return { data, total, page, limit };
   }
 
@@ -191,7 +207,8 @@ export class SupportService {
 
     // Push notify the assigned admin (or all admins if unassigned)
     const notifyTitle = 'Ticket Reply';
-    const notifyBody = dto.body.length > 100 ? dto.body.substring(0, 100) + '…' : dto.body;
+    const notifyBody =
+      dto.body.length > 100 ? dto.body.substring(0, 100) + '…' : dto.body;
     const notifyData: Record<string, string> = {
       type: 'SUPPORT_TICKET_REPLY',
       ticketId,
@@ -199,7 +216,9 @@ export class SupportService {
       channelId: 'support_messages',
     };
     if (ticket.assignedAdminId) {
-      this.fcmService.sendToUser(ticket.assignedAdminId, notifyTitle, notifyBody, notifyData).catch(() => {});
+      this.fcmService
+        .sendToUser(ticket.assignedAdminId, notifyTitle, notifyBody, notifyData)
+        .catch(() => {});
     } else {
       this._notifyAdmins(notifyTitle, notifyBody, notifyData).catch(() => {});
     }
@@ -302,19 +321,17 @@ export class SupportService {
     });
 
     // Push notify the ticket author
-    const notifyBody = dto.body.length > 100 ? dto.body.substring(0, 100) + '…' : dto.body;
-    this.fcmService.sendToUser(
-      ticket.authorId,
-      'Support Reply',
-      notifyBody,
-      {
+    const notifyBody =
+      dto.body.length > 100 ? dto.body.substring(0, 100) + '…' : dto.body;
+    this.fcmService
+      .sendToUser(ticket.authorId, 'Support Reply', notifyBody, {
         type: 'SUPPORT_TICKET_REPLY',
         ticketId,
         senderId: adminId,
         status: newStatus,
         channelId: 'support_messages',
-      },
-    ).catch(() => {});
+      })
+      .catch(() => {});
 
     return saved;
   }
@@ -368,7 +385,9 @@ export class SupportService {
       throw new ForbiddenException('Ticket is resolved');
     if (ticket.authorId !== userId) throw new ForbiddenException();
 
-    const message = await this.messageRepo.findOne({ where: { id: messageId, ticketId } });
+    const message = await this.messageRepo.findOne({
+      where: { id: messageId, ticketId },
+    });
     if (!message) throw new NotFoundException('Message not found');
     if (message.senderId !== userId)
       throw new ForbiddenException('You can only edit your own messages');
@@ -387,18 +406,16 @@ export class SupportService {
   }
 
   // ── User: delete own message ──────────────────────────────────────────────
-  async deleteMyMessage(
-    ticketId: string,
-    messageId: string,
-    userId: string,
-  ) {
+  async deleteMyMessage(ticketId: string, messageId: string, userId: string) {
     const ticket = await this.ticketRepo.findOne({ where: { id: ticketId } });
     if (!ticket) throw new NotFoundException('Ticket not found');
     if (ticket.status === TicketStatus.RESOLVED)
       throw new ForbiddenException('Ticket is resolved');
     if (ticket.authorId !== userId) throw new ForbiddenException();
 
-    const message = await this.messageRepo.findOne({ where: { id: messageId, ticketId } });
+    const message = await this.messageRepo.findOne({
+      where: { id: messageId, ticketId },
+    });
     if (!message) throw new NotFoundException('Message not found');
     if (message.senderId !== userId)
       throw new ForbiddenException('You can only delete your own messages');
@@ -426,7 +443,9 @@ export class SupportService {
     if (ticket.status === TicketStatus.RESOLVED)
       throw new ForbiddenException('Ticket is resolved');
 
-    const message = await this.messageRepo.findOne({ where: { id: messageId, ticketId } });
+    const message = await this.messageRepo.findOne({
+      where: { id: messageId, ticketId },
+    });
     if (!message) throw new NotFoundException('Message not found');
     if (message.senderId !== adminId)
       throw new ForbiddenException('You can only edit your own messages');
@@ -455,7 +474,9 @@ export class SupportService {
     if (ticket.status === TicketStatus.RESOLVED)
       throw new ForbiddenException('Ticket is resolved');
 
-    const message = await this.messageRepo.findOne({ where: { id: messageId, ticketId } });
+    const message = await this.messageRepo.findOne({
+      where: { id: messageId, ticketId },
+    });
     if (!message) throw new NotFoundException('Message not found');
     if (message.senderId !== adminId)
       throw new ForbiddenException('You can only delete your own messages');

@@ -26,6 +26,7 @@ export class HuggingFaceTranslateService {
   /**
    * Translate text to target language using DeepL API.
    * DeepL supports many languages with high quality translations.
+   * Note: DeepL Free API does NOT support Arabic.
    *
    * @param text - Text to translate
    * @param targetLang - Target language code (e.g., 'en', 'fr', 'ar', 'es')
@@ -41,6 +42,14 @@ export class HuggingFaceTranslateService {
       throw new Error('DEEPL_API_KEY not configured');
     }
 
+    // DeepL Free API doesn't support Arabic - skip translation for Arabic
+    if (targetLang === 'ar') {
+      this.logger.warn(
+        `[DeepL] Arabic not supported by DeepL Free API - skipping translation`,
+      );
+      return text;
+    }
+
     try {
       this.logger.log(
         `[DeepL] Requesting translation to ${targetLang} for: "${text.substring(0, 30)}..."`,
@@ -48,16 +57,11 @@ export class HuggingFaceTranslateService {
 
       // DeepL uses different language codes (e.g., 'EN-US', 'FR', 'AR')
       const deepLTargetLang = this.normalizeDeepLLangCode(targetLang);
-      const deepLSourceLang = sourceLang
-        ? this.normalizeDeepLLangCode(sourceLang)
-        : undefined;
 
       const body = new URLSearchParams();
       body.append('text', text);
       body.append('target_lang', deepLTargetLang);
-      if (deepLSourceLang) {
-        body.append('source_lang', deepLSourceLang);
-      }
+      // Don't send source_lang - let DeepL auto-detect (avoids 400 error)
 
       const headers: Record<string, string> = {
         Authorization: `DeepL-Auth-Key ${this.deepLApiKey}`,
