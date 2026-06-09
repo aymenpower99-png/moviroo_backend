@@ -1,21 +1,24 @@
 import {
-  Entity, PrimaryGeneratedColumn, Column,
-  CreateDateColumn, UpdateDateColumn,
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  UpdateDateColumn,
 } from 'typeorm';
 
 export enum TicketStatus {
-  OPEN             = 'open',
-  IN_PROGRESS      = 'in_progress',
+  OPEN = 'open',
+  IN_PROGRESS = 'in_progress',
   WAITING_FOR_USER = 'waiting_for_user',
-  RESOLVED         = 'resolved',
+  RESOLVED = 'resolved',
 }
 
 export enum TicketCategory {
-  ACCOUNT   = 'account',
-  PAYMENT   = 'payment',
-  RIDE      = 'ride',
+  ACCOUNT = 'account',
+  PAYMENT = 'payment',
+  RIDE = 'ride',
   TECHNICAL = 'technical',
-  OTHER     = 'other',
+  OTHER = 'other',
 }
 
 @Entity('support_tickets')
@@ -48,7 +51,12 @@ export class SupportTicket {
   @Column({ name: 'author_id', type: 'uuid' })
   authorId: string;
 
-  @Column({ name: 'assigned_admin_id', type: 'uuid', nullable: true, default: null })
+  @Column({
+    name: 'assigned_admin_id',
+    type: 'uuid',
+    nullable: true,
+    default: null,
+  })
   assignedAdminId: string | null;
 
   @Column({ name: 'ride_id', type: 'uuid', nullable: true, default: null })
@@ -57,8 +65,15 @@ export class SupportTicket {
   @Column({ name: 'metadata', type: 'jsonb', nullable: true, default: null })
   metadata: Record<string, any> | null;
 
-  @Column({ name: 'resolved_at', type: 'timestamptz', nullable: true, default: null })
+  @Column({
+    name: 'resolved_at',
+    type: 'timestamptz',
+    nullable: true,
+    default: null,
+  })
   resolvedAt: Date | null;
+  @Column({ name: 'has_unread', type: 'boolean', default: false })
+  hasUnread: boolean;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

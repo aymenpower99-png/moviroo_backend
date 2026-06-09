@@ -213,8 +213,11 @@ export class EarningsService {
       year = now.getFullYear();
       month = now.getMonth() + 1;
     }
-    const startDate = new Date(year, month - 1, 1);
-    const endDate = new Date(year, month, 0, 23, 59, 59, 999);
+    // Use UTC boundaries so the comparison is consistent with
+    // PostgreSQL `completed_at` (timestamptz) regardless of the
+    // server's local timezone.
+    const startDate = new Date(Date.UTC(year, month - 1, 1, 0, 0, 0));
+    const endDate = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
     const monthStrFormatted = `${year}-${month.toString().padStart(2, '0')}`;
     return { startDate, endDate, month: monthStrFormatted };
   }

@@ -93,6 +93,28 @@ export class Ride {
   })
   passengerCount: number | null;
 
+  /* ── Snapshot of passenger info at booking time ───────────────────────────
+     Preserved so the admin dashboard can still display the passenger name
+     even after the user deletes their account (soft-delete).              */
+
+  @Column({
+    name: 'passenger_name',
+    type: 'varchar',
+    length: 200,
+    nullable: true,
+    default: null,
+  })
+  passengerName: string | null;
+
+  @Column({
+    name: 'passenger_phone',
+    type: 'varchar',
+    length: 50,
+    nullable: true,
+    default: null,
+  })
+  passengerPhone: string | null;
+
   /* ── Trip metrics ──────────────────────────── */
 
   @Column({

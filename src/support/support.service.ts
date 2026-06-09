@@ -173,6 +173,24 @@ export class SupportService {
     return enriched;
   }
 
+  // ── User: mark ticket as read ─────────────────────────────────────────────
+  async markAsRead(ticketId: string, userId: string) {
+    const ticket = await this.ticketRepo.findOne({ where: { id: ticketId } });
+    if (!ticket) throw new NotFoundException('Ticket not found');
+    if (ticket.authorId !== userId) throw new ForbiddenException();
+    await this.ticketRepo.update(ticketId, { hasUnread: false });
+    return { success: true };
+  }
+
+  // ── User: mark all own tickets as read ──────────────────────────────────────
+  async markAllAsRead(userId: string) {
+    await this.ticketRepo.update(
+      { authorId: userId, hasUnread: true },
+      { hasUnread: false },
+    );
+    return { success: true };
+  }
+
   // ── User: add a reply to own ticket ────────────────────────────────────────
   async replyToTicket(
     ticketId: string,
@@ -195,6 +213,7 @@ export class SupportService {
     if (ticket.status === TicketStatus.WAITING_FOR_USER) {
       await this.ticketRepo.update(ticketId, {
         status: TicketStatus.IN_PROGRESS,
+        hasUnread: false,
       });
     }
 
@@ -310,6 +329,7 @@ export class SupportService {
     await this.ticketRepo.update(ticketId, {
       status: newStatus,
       assignedAdminId: adminId,
+      hasUnread: true,
     });
 
     // Emit to user that admin replied

@@ -215,6 +215,8 @@ export class CreateRideUseCase {
       dropoffLat,
       dropoffLon,
       passengerCount: dto.passenger_count ?? null,
+      passengerName: `${currentUser.firstName ?? ''} ${currentUser.lastName ?? ''}`.trim() || null,
+      passengerPhone: currentUser.phone ?? null,
       distanceKm: pricingResult.distanceKm,
       durationMin: pricingResult.durationMin,
       priceEstimate: pricingResult.exactPrice,

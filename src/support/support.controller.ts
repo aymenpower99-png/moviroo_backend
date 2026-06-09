@@ -70,6 +70,16 @@ export class SupportUserController {
     return this.svc.replyToTicket(id, dto, userId(req));
   }
 
+  @Patch(':id/read')
+  markAsRead(@Param('id', ParseUUIDPipe) id: string, @Req() req: Request) {
+    return this.svc.markAsRead(id, userId(req));
+  }
+
+  @Patch('read-all')
+  markAllAsRead(@Req() req: Request) {
+    return this.svc.markAllAsRead(userId(req));
+  }
+
   @Patch(':ticketId/messages/:messageId')
   updateMessage(
     @Param('ticketId', ParseUUIDPipe) ticketId: string,
