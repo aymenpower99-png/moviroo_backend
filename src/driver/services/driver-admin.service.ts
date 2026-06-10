@@ -109,11 +109,45 @@ export class DriverAdminService {
 
     const userById = new Map(users.map((u) => [u.id, u]));
 
+    // Calculate totalTrips for each driver (COMPLETED rides)
+    const totalTripsByUserId = new Map<string, number>();
+    if (userIds.length > 0) {
+      this.logger.log(
+        `[DRIVERS_LIST] Calculating totalTrips for ${userIds.length} drivers`,
+      );
+      const completedRides = await this.rideRepo
+        .createQueryBuilder('r')
+        .select('r.driverId, COUNT(*) as count')
+        .where('r.driverId IN (:...userIds)', { userIds })
+        .andWhere('r.status = :status', { status: RideStatus.COMPLETED })
+        .groupBy('r.driverId')
+        .getRawMany();
+
+      this.logger.log(
+        `[DRIVERS_LIST] Completed rides query result: ${JSON.stringify(completedRides)}`,
+      );
+
+      completedRides.forEach((row: any) => {
+        const count = parseInt(row.count);
+        if (row.driver_id) {
+          totalTripsByUserId.set(row.driver_id, count);
+          this.logger.log(
+            `[DRIVERS_LIST] Driver ${row.driver_id.slice(0, 8)} has ${count} completed rides`,
+          );
+        } else {
+          this.logger.warn(
+            `[DRIVERS_LIST] Row without driver_id: ${JSON.stringify(row)}`,
+          );
+        }
+      });
+    }
+
     const data = drivers.map((d) => {
       const user = userById.get(d.userId);
       const v = vehicleByDriverId.get(d.id);
       return {
         ...d,
+        totalTrips: totalTripsByUserId.get(d.userId) ?? 0,
         firstName: user?.firstName ?? null,
         lastName: user?.lastName ?? null,
         email: user?.email ?? null,

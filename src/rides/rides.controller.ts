@@ -74,6 +74,19 @@ export class RidesController {
     private readonly passengerRepo: Repository<PassengerEntity>,
   ) {}
 
+  /* ─── Public config: Mapbox token for admin dashboard maps ───
+   * MUST be defined BEFORE any parameterized routes like :id
+   * otherwise NestJS will match /rides/config/mapbox-token as an ID.
+   * ───────────────────────────────────────────────────────────── */
+  @Get('config/mapbox-token')
+  getMapboxToken() {
+    const token = process.env.MAPBOX_ACCESS_TOKEN;
+    if (!token) {
+      throw new NotFoundException('Mapbox token not configured');
+    }
+    return { token };
+  }
+
   /* ─── Get vehicle class prices by coordinates ───────────────────── */
   @Get('pricing')
   @UseGuards(AuthGuard('jwt'))
@@ -490,4 +503,5 @@ export class RidesController {
     // 4. Finally delete the ride
     await this.rideRepo.delete(id);
   }
+
 }
