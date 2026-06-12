@@ -39,7 +39,7 @@ import { CancelRideUseCase } from './application/use-cases/cancel-ride.use-case'
 import { GetVehiclePricesUseCase } from './application/use-cases/get-vehicle-prices.use-case';
 import { RideMailService } from '../mail/services/ride-mail.service';
 import { DispatchOffer } from '../dispatch/domain/entities/dispatch-offer.entity';
-import { TripPayment } from '../billing/entities/trip-payment.entity';
+import { TripPayment, PaymentStatus } from '../billing/entities/trip-payment.entity';
 import { DriverLocation } from '../dispatch/domain/entities/driver-location.entity';
 import { Driver } from '../driver/entities/driver.entity';
 import { PassengerEntity } from '../passenger/entities/passengers.entity';
@@ -249,6 +249,7 @@ export class RidesController {
     const ride = await this.cancelRideUC.execute(user, id, dto);
 
     // Send cancellation + refund email to passenger
+    // Skip email when payment is still pending (nothing to refund yet)
     try {
       const rideWithPassenger = await this.rideRepo.findOne({
         where: { id: ride.id },
@@ -257,7 +258,10 @@ export class RidesController {
       const payment = await this.paymentRepo.findOne({
         where: { rideId: ride.id },
       });
-      if (rideWithPassenger?.passenger?.email) {
+      if (
+        rideWithPassenger?.passenger?.email &&
+        payment?.paymentStatus !== PaymentStatus.PENDING
+      ) {
         await this.rideMail.sendRideCancelledRefundEmail(
           rideWithPassenger.passenger.email,
           rideWithPassenger.passenger.firstName || 'Passenger',

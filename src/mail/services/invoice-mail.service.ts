@@ -26,11 +26,13 @@ export class InvoiceMailService extends BaseMailService {
   ): Promise<void> {
     this.logger.log(`Preparing invoice email for ${to}, ref: ${ref}`);
 
-    const subtotal = payment.amount;
-    const discount = ride.discountPercent
-      ? (subtotal * ride.discountPercent) / 100
+    const paidAmount = payment.amount;
+    const discountPercent = ride.discountPercent ?? 0;
+    const originalPrice = ride.priceEstimate ?? paidAmount;
+    const discount = discountPercent > 0
+      ? originalPrice - paidAmount
       : 0;
-    const total = subtotal - discount;
+    const total = paidAmount;
 
     const dateStr = payment.paidAt
       ? new Date(payment.paidAt).toLocaleString('en-GB', {
@@ -51,7 +53,7 @@ export class InvoiceMailService extends BaseMailService {
       VEHICLE: ride.vehicleClass?.name ?? 'Standard',
       DISTANCE: `${ride.distanceKmReal ?? ride.distanceKm ?? '-'} km`,
       DURATION: `${ride.durationMinReal ?? ride.durationMin ?? '-'} min`,
-      SUBTOTAL: `${subtotal.toFixed(2)} TND`,
+      SUBTOTAL: `${originalPrice.toFixed(2)} TND`,
       DISCOUNT: discount > 0 ? `-${discount.toFixed(2)} TND` : '-',
       TOTAL: `${total.toFixed(2)} TND`,
       METHOD: methodLabel,

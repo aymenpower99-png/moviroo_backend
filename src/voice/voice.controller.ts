@@ -8,11 +8,15 @@ import {
   Logger,
   HttpCode,
   HttpStatus,
+  UseGuards,
+  Get,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { AuthGuard } from '@nestjs/passport';
 import { VoiceService } from '../voice/voice.service';
 
 @Controller('voice')
+@UseGuards(AuthGuard('jwt'))
 export class VoiceController {
   private readonly logger = new Logger(VoiceController.name);
   constructor(private readonly voiceService: VoiceService) {}
@@ -52,5 +56,15 @@ export class VoiceController {
       throw new BadRequestException('No file uploaded');
     }
     return this.voiceService.answer(file, body);
+  }
+
+  @Get('health')
+  async healthCheck() {
+    const status = await this.voiceService.healthCheck();
+    return {
+      backend: 'ok',
+      voiceEngine: status ? 'ok' : 'unavailable',
+      model: status?.model ?? null,
+    };
   }
 }

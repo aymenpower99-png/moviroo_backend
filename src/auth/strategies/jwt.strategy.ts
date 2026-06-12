@@ -1,10 +1,11 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, ForbiddenException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from '../../users/entites/user.entity';
+import { UserStatus } from '../../users/entites/user.entity';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
@@ -21,6 +22,9 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
   async validate(payload: { sub: string; email: string; role: string }) {
     const user = await this.userRepo.findOne({ where: { id: payload.sub } });
     if (!user || !user.isActive) throw new UnauthorizedException();
+    if (user.status === UserStatus.BLOCKED) {
+      throw new ForbiddenException('Your account has been blocked. Please contact support.');
+    }
     return user;
   }
 }

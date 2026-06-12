@@ -214,7 +214,7 @@ export class PassengerNotificationService {
     return this.fcm.sendToUser(
       passengerId,
       'Payment Successful',
-      `Your payment of $${amount.toFixed(2)} was successful.`,
+      'Your payment was successful.',
       {
         type: 'PAYMENT_SUCCESSFUL',
         rideId,

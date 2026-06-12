@@ -17,6 +17,7 @@ import {
   CouponStatus,
 } from './entities/membership-coupon.entity';
 import { User } from '../users/entites/user.entity';
+import { FcmService } from '../notifications/services/fcm.service';
 
 @Injectable()
 export class PassengersService {
@@ -28,6 +29,7 @@ export class PassengersService {
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
     private readonly membershipLevelsService: MembershipLevelsService,
+    private readonly fcmService: FcmService,
   ) {}
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
@@ -241,7 +243,24 @@ export class PassengersService {
       status: CouponStatus.ACTIVE,
     });
 
-    return this.couponRepo.save(coupon);
+    const saved = await this.couponRepo.save(coupon);
+
+    // Notify user about their new promo code
+    this.fcmService.sendToUser(
+      passenger.userId,
+      '🎉 Reward Unlocked!',
+      `You unlocked ${level.name}! Your promo code is ${code} (${level.discountPercentage}% off).`,
+      {
+        type: 'MEMBERSHIP_REWARD_CLAIMED',
+        levelId: level.id,
+        levelName: level.name,
+        code,
+        discountPercentage: String(level.discountPercentage),
+        channelId: 'membership_rewards',
+      },
+    ).catch(() => {});
+
+    return saved;
   }
 
   async validateCoupon(

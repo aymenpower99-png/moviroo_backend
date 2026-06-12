@@ -133,10 +133,14 @@ export class InvoiceService {
     const distStr    = `${(ride.distanceKmReal ?? ride.distanceKm ?? 0).toFixed(2)} km`;
     const durStr     = `${ride.durationMinReal ?? ride.durationMin ?? 0} min`;
     const amountNum  = payment.amount;
-    const discountNum = ride.discountPercent
-      ? (amountNum * ride.discountPercent) / 100 : 0;
-    const totalNum   = amountNum - discountNum;
-    const amountStr  = amountNum.toFixed(2);
+    const discountPercent = ride.discountPercent ?? 0;
+    // Use priceEstimate as the original undiscounted price, or fall back to payment amount
+    const originalPrice = ride.priceEstimate ?? amountNum;
+    const discountNum = discountPercent > 0
+      ? originalPrice - amountNum
+      : 0;
+    const totalNum   = amountNum;
+    const amountStr  = originalPrice.toFixed(2);
     const totalStr   = totalNum.toFixed(2);
     const payMethod  = payment.paymentMethod === 'CARD' ? 'Carte bancaire' : 'Espèces';
     const amtWords   = this._numberToWordsFrench(Math.floor(totalNum));

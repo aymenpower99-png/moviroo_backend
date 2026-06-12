@@ -229,6 +229,13 @@ export class AuthController {
     return this.authService.safeUser(user);
   }
 
+  /** Lightweight endpoint for apps to poll user status (active/blocked). */
+  @Get('me/status')
+  @UseGuards(AuthGuard('jwt'))
+  myStatus(@CurrentUser() user: User) {
+    return { status: user.status, isActive: user.isActive };
+  }
+
   @Patch('me')
   @UseGuards(AuthGuard('jwt'))
   @HttpCode(200)

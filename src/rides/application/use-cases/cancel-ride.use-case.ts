@@ -93,7 +93,8 @@ export class CancelRideUseCase {
     await this.rideRepo.save(ride);
 
     // Send push notification to passenger about cancellation
-    if (ride.passengerId) {
+    // Skip notification when payment is still pending (nothing to refund yet)
+    if (ride.passengerId && payment?.paymentStatus !== PaymentStatus.PENDING) {
       if (ride.cancelledBy === 'PASSENGER') {
         this.passengerNotif.rideCancelledByPassenger(
           ride.passengerId,
