@@ -84,6 +84,11 @@ export class RespondToOfferUseCase {
     ride.driverId = currentUser.id;
     ride.vehicleId = vehicle.id;
 
+    // Store driver snapshot so admin dashboard can display name even after
+    // the driver deletes their account.
+    ride.driverName = `${currentUser.firstName ?? ''} ${currentUser.lastName ?? ''}`.trim() || null;
+    ride.driverPhone = currentUser.phone ?? null;
+
     // Calculate and store pickup route (driver → pickup) in RouteHistory
     // Also store initial pickup distance for progress calculation
     let initialPickupDistanceMeters: number | null = null;

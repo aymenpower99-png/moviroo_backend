@@ -370,7 +370,12 @@ export class TripsController {
         const locAgeMs = Date.now() - new Date(loc.lastSeenAt).getTime();
         const isStale = locAgeMs > 5 * 60 * 1000; // 5 minutes
 
-        if (!isStale) {
+        if (ride.status === RideStatus.ARRIVED) {
+          // Driver has arrived — no need to calculate progress.
+          progress = 1.0;
+          etaMins = 0;
+          remainingDistanceMeters = 0;
+        } else if (!isStale) {
           const targetLat =
             ride.status === 'IN_TRIP' ? ride.dropoffLat : ride.pickupLat;
           const targetLon =

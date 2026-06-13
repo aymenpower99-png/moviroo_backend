@@ -152,7 +152,12 @@ export class TripLocationHandler {
           let routeDistanceMeters: number | null = null;
           let routeDurationSeconds: number | null = null;
 
-          if (ride.status === 'EN_ROUTE_TO_PICKUP') {
+          if (ride.status === 'ARRIVED') {
+            // Driver is at pickup — progress is irrelevant, skip calculation.
+            this.logger.log(
+              `[PROGRESS] Ride ${rideId} is ARRIVED — skipping progress calculation`,
+            );
+          } else if (ride.status === 'EN_ROUTE_TO_PICKUP') {
             // Use pickup route (sequence 1)
             const pickupRoute =
               await this.routeHistoryRepo.findByRideIdAndSequence(rideId, 1);

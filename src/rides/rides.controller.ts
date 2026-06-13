@@ -368,7 +368,12 @@ export class RidesController {
         const locAgeMs = Date.now() - new Date(loc.lastSeenAt).getTime();
         const isStale = locAgeMs > 5 * 60 * 1000; // 5 minutes
 
-        if (!isStale) {
+        if (ride.status === RideStatus.ARRIVED) {
+          // Driver has arrived — show 100% progress with no remaining distance.
+          progress = 1.0;
+          etaMins = 0;
+          remainingDistanceMeters = 0;
+        } else if (!isStale) {
           const targetLat =
             ride.status === RideStatus.IN_TRIP ? ride.dropoffLat : ride.pickupLat;
           const targetLon =
@@ -458,6 +463,17 @@ export class RidesController {
         remainingDurationSeconds: ride.durationMin ? ride.durationMin * 60 : 0,
         totalDistanceMeters: ride.distanceKm ? ride.distanceKm * 1000 : 0,
         etaMins: ride.durationMin || 0,
+      };
+    }
+
+    // Driver has arrived — no need to calculate progress.
+    if (ride.status === RideStatus.ARRIVED) {
+      return {
+        progress: 1.0,
+        remainingDistanceMeters: 0,
+        remainingDurationSeconds: 0,
+        totalDistanceMeters: ride.initialPickupDistanceMeters ?? 0,
+        etaMins: 0,
       };
     }
 

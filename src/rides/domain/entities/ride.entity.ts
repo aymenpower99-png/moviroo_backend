@@ -115,6 +115,28 @@ export class Ride {
   })
   passengerPhone: string | null;
 
+  /* ── Snapshot of driver info at assignment time ───────────────────────────
+     Preserved so the admin dashboard can still display the driver name
+     even after the user deletes their account (soft-delete).              */
+
+  @Column({
+    name: 'driver_name',
+    type: 'varchar',
+    length: 200,
+    nullable: true,
+    default: null,
+  })
+  driverName: string | null;
+
+  @Column({
+    name: 'driver_phone',
+    type: 'varchar',
+    length: 50,
+    nullable: true,
+    default: null,
+  })
+  driverPhone: string | null;
+
   /* ── Trip metrics ──────────────────────────── */
 
   @Column({

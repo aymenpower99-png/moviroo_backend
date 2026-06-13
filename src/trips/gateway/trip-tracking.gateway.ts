@@ -131,6 +131,25 @@ export class TripTrackingGateway
     client.join(`ride:${data.ride_id}`);
     this.logger.log(`${client.id} joined room ride:${data.ride_id}`);
     this.logger.log(`Client rooms after join: ${Array.from(client.rooms)}`);
+
+    // Send the last known progress data to the newly joined client so they
+    // don't have to wait for the next 5% step broadcast.
+    const cachedProgress = this.progressCache.get(data.ride_id);
+    if (cachedProgress?.data) {
+      const progressData = cachedProgress.data;
+      const initialData = {
+        progress: progressData.progress,
+        remainingDistanceMeters: progressData.remainingDistanceMeters,
+        remainingDurationSeconds: progressData.remainingDurationSeconds,
+        etaMins: progressData.etaMins,
+        totalDistanceMeters: progressData.totalDistanceMeters,
+      };
+      this.logger.log(
+        `Sending initial progress data to ${client.id}: ${JSON.stringify(initialData)}`,
+      );
+      client.emit('trip:location_update', initialData);
+    }
+
     return { event: 'joined', data: { ride_id: data.ride_id } };
   }
 
