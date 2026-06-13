@@ -45,6 +45,12 @@ export class TripTrackingGateway
   /* Progress cache: rideId → { data, timestamp } for throttling */
   private progressCache = new Map<string, { data: any; timestamp: number }>();
 
+  /* Last sent progress cache: rideId → { progressStep, etaMins } for 5% step thresholding */
+  private lastSentProgressCache = new Map<
+    string,
+    { progressStep: number; etaMins: number; timestamp: number }
+  >();
+
   /* Handler instances */
   private locationHandler: TripLocationHandler;
   private bufferHandler: TripBufferHandler;
@@ -91,6 +97,7 @@ export class TripTrackingGateway
       this.gpsBuffer,
       this.sequenceCounters,
       this.progressCache,
+      this.lastSentProgressCache,
       this.server,
     );
   }

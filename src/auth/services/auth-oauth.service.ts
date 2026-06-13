@@ -83,7 +83,6 @@ export class AuthOAuthService {
         }),
       );
 
-      this.welcomeMail.sendWelcome(user.role, user.email, user.firstName);
     }
 
     await this.userRepo.update(user.id, { lastLoginAt: new Date() });

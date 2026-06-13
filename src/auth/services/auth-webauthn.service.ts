@@ -3,6 +3,7 @@ import {
   BadRequestException,
   UnauthorizedException,
   NotFoundException,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -25,6 +26,8 @@ import { AuthSessionService } from './auth-session.service';
 
 @Injectable()
 export class AuthWebAuthnService {
+  private readonly logger = new Logger(AuthWebAuthnService.name);
+
   /**
    * In-memory challenge store with TTL. Key = optionsId or userId.
    *
@@ -132,7 +135,7 @@ export class AuthWebAuthnService {
 
   // ─── Registration ───────────────────────────────────────────────────────────
 
-  private readonly MAX_PASSKEYS_PER_USER = 5;
+  private readonly MAX_PASSKEYS_PER_USER = 1;
 
   /** Stable user handle for a given user. Must be identical across
    *  all registrations so the OS groups passkeys under a single account. */
@@ -147,16 +150,18 @@ export class AuthWebAuthnService {
       where: { userId: user.id },
     });
 
-    if (existing.length >= this.MAX_PASSKEYS_PER_USER) {
+    const activePasskeys = existing.filter((c) => c.status === 'ACTIVE');
+
+    if (activePasskeys.length >= this.MAX_PASSKEYS_PER_USER) {
       throw new BadRequestException(
-        `Maximum of ${this.MAX_PASSKEYS_PER_USER} passkeys reached. Remove one before adding a new passkey.`,
+        `You already have a passkey. Remove it first to add a new one.`,
       );
     }
 
-    // Device-level deduplication: if a passkey with the same device name
+    // Device-level deduplication: if an active passkey with the same device name
     // already exists, return the existing one instead of creating a duplicate.
     const effectiveDeviceName = deviceName ?? 'Unknown Device';
-    const sameDevice = existing.find((c) => c.deviceName === effectiveDeviceName);
+    const sameDevice = activePasskeys.find((c) => c.deviceName === effectiveDeviceName);
     if (sameDevice) {
       return {
         optionsId: null,
@@ -167,6 +172,8 @@ export class AuthWebAuthnService {
       };
     }
 
+    // Exclude ALL credentials (active + revoked + deleted) from the OS
+    // so the user cannot re-register a credential that already exists.
     const excludeCredentials = existing.map((c) => ({
       id: c.credentialId,
       type: 'public-key' as const,
@@ -245,6 +252,19 @@ export class AuthWebAuthnService {
       };
     }
 
+    // ─── 1-ACTIVE MODEL: revoke all existing active passkeys ─────────────
+    const existingActive = await this.passkeyRepo.find({
+      where: { userId: user.id, status: 'ACTIVE' },
+    });
+    for (const old of existingActive) {
+      old.status = 'REVOKED';
+      old.revokedAt = new Date();
+      await this.passkeyRepo.save(old);
+      this.logger.log(
+        `Revoked old passkey ${old.credentialId.slice(0, 8)} for user ${user.id.slice(0, 8)}`,
+      );
+    }
+
     const passkey = this.passkeyRepo.create({
       userId: user.id,
       credentialId: credential.id,
@@ -253,6 +273,7 @@ export class AuthWebAuthnService {
       transports: credential.transports as string[] | null,
       deviceName: dto.deviceName ?? 'Unknown Device',
       userHandle: entry.userHandle ?? null,
+      status: 'ACTIVE',
     });
 
     await this.passkeyRepo.save(passkey);
@@ -270,13 +291,36 @@ export class AuthWebAuthnService {
   async startAuthentication(dto?: { email?: string }) {
     const { rpID } = this.getRpConfig();
 
-    // Use discoverable credentials (empty allowCredentials) so the OS
-    // groups all passkeys for the same RP under a single account identity.
-    // Passing a list of credential IDs causes Android to show one picker
-    // entry per ID, which creates duplicate account rows.
+    let allowCredentials: { id: string; type: 'public-key'; transports?: any }[] | undefined;
+
+    // If email is provided, look up the user's active passkey and restrict
+    // the OS picker to only that credential. If no active passkey exists,
+    // the user will get a clean error instead of a picker with stale credentials.
+    if (dto?.email) {
+      const user = await this.userRepo.findOne({
+        where: { email: dto.email.toLowerCase().trim() },
+        select: ['id'],
+      });
+      if (user) {
+        const active = await this.passkeyRepo.findOne({
+          where: { userId: user.id, status: 'ACTIVE' },
+        });
+        if (active) {
+          allowCredentials = [{
+            id: active.credentialId,
+            type: 'public-key',
+            transports: (active.transports as any) ?? undefined,
+          }];
+        }
+      }
+    }
+
+    // If no email or no active passkey found, fall back to discoverable
+    // credentials. The OS will show all passkeys for this RP; the backend
+    // validates the chosen credential's status in finishAuthentication.
     const options = await generateAuthenticationOptions({
       rpID,
-      allowCredentials: undefined, // ← discoverable: OS finds by RP ID
+      allowCredentials, // undefined = discoverable
       userVerification: 'required',
     });
 
@@ -317,7 +361,18 @@ export class AuthWebAuthnService {
       where: { credentialId },
     });
     if (!passkey) {
-      throw new UnauthorizedException('Unknown credential.');
+      throw new UnauthorizedException(
+        'PASSKEY_NOT_FOUND: This passkey was removed. Please create a new one in Settings > Security > Passkeys.',
+      );
+    }
+
+    if (passkey.status !== 'ACTIVE') {
+      const reason = passkey.status === 'REVOKED'
+        ? 'replaced by a newer passkey'
+        : 'deleted from the app';
+      throw new UnauthorizedException(
+        `PASSKEY_REVOKED: This passkey has been ${reason}. Please create a new one in Settings > Security > Passkeys.`,
+      );
     }
 
     const credential = {
@@ -369,7 +424,7 @@ export class AuthWebAuthnService {
 
   async listPasskeys(userId: string) {
     const passkeys = await this.passkeyRepo.find({
-      where: { userId },
+      where: { userId, status: 'ACTIVE' },
       order: { createdAt: 'DESC' },
     });
     return passkeys.map((p) => ({
@@ -389,7 +444,11 @@ export class AuthWebAuthnService {
     if (!passkey) {
       throw new NotFoundException('Passkey not found.');
     }
-    await this.passkeyRepo.remove(passkey);
+    // Soft delete: preserve the row so finishAuthentication can detect
+    // if the OS still offers this credential (and tell the user it was deleted).
+    passkey.status = 'DELETED';
+    passkey.deletedAt = new Date();
+    await this.passkeyRepo.save(passkey);
     return { message: 'Passkey removed.' };
   }
 

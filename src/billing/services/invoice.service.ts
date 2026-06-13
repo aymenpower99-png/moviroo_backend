@@ -137,7 +137,7 @@ export class InvoiceService {
     // Use priceEstimate as the original undiscounted price, or fall back to payment amount
     const originalPrice = ride.priceEstimate ?? amountNum;
     const discountNum = discountPercent > 0
-      ? originalPrice - amountNum
+      ? parseFloat((originalPrice * (discountPercent / 100)).toFixed(2))
       : 0;
     const totalNum   = amountNum;
     const amountStr  = originalPrice.toFixed(2);

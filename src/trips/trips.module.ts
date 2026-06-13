@@ -13,6 +13,7 @@ import { CommissionLedger } from '../billing/entities/commission-ledger.entity';
 import { DriverMonthlyStats } from '../billing/entities/driver-monthly-stats.entity';
 import { BillingModule } from '../billing/billing.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { MembershipLevelsModule } from '../membership-levels/membership-levels.module';
 import { RidesModule } from '../rides/rides.module';
 
 import { TripsController } from './trips.controller';
@@ -40,6 +41,7 @@ import { SubmitRatingUseCase } from './application/use-cases/submit-rating.use-c
     ]),
     BillingModule,
     NotificationsModule,
+    MembershipLevelsModule,
     RidesModule,
   ],
   controllers: [TripsController],

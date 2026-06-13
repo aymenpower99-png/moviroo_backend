@@ -17,6 +17,8 @@ export class TripLocationHandler {
   private readonly logger = new Logger(TripLocationHandler.name);
   private static readonly FLUSH_THRESHOLD = 5;
   private static readonly PROGRESS_CACHE_TTL = 5000; // 5 seconds
+  private static readonly PROGRESS_STEP = 0.05; // 5% step threshold
+  private static readonly ETA_CHANGE_THRESHOLD = 1; // 1 minute
 
   constructor(
     private readonly rideRepo: Repository<Ride>,
@@ -30,6 +32,10 @@ export class TripLocationHandler {
     private readonly progressCache: Map<
       string,
       { data: any; timestamp: number }
+    >,
+    private readonly lastSentProgressCache: Map<
+      string,
+      { progressStep: number; etaMins: number; timestamp: number }
     >,
     private readonly server: Server,
   ) {}
@@ -210,9 +216,12 @@ export class TripLocationHandler {
               ride.status === 'IN_TRIP' ? ride.dropoffLat : ride.pickupLat;
             const targetLon =
               ride.status === 'IN_TRIP' ? ride.dropoffLon : ride.pickupLon;
-            const totalDistanceMeters = ride.distanceKm
-              ? ride.distanceKm * 1000
-              : 0;
+            // Use correct total distance based on ride phase
+            const totalDistanceMeters =
+              ride.status === 'IN_TRIP'
+                ? (ride.distanceKm ? ride.distanceKm * 1000 : 0)
+                : (ride.initialPickupDistanceMeters ??
+                   (ride.distanceKm ? ride.distanceKm * 1000 : 0));
 
             if (totalDistanceMeters > 0) {
               progressData = await this.routingService.calculateProgressForRide(
@@ -269,15 +278,32 @@ export class TripLocationHandler {
       sequence: seq,
     };
 
-    // Add progress data to broadcast if available
+    // Add progress data to broadcast with 5% step thresholding
     if (progressData) {
-      locationData.progress = progressData.progress;
-      locationData.remainingDistanceMeters =
-        progressData.remainingDistanceMeters;
-      locationData.remainingDurationSeconds =
-        progressData.remainingDurationSeconds;
-      locationData.etaMins = progressData.etaMins;
-      locationData.totalDistanceMeters = progressData.totalDistanceMeters;
+      const currentStep =
+        Math.floor(progressData.progress / TripLocationHandler.PROGRESS_STEP) *
+        TripLocationHandler.PROGRESS_STEP;
+      const lastSent = this.lastSentProgressCache.get(rideId);
+      const shouldSendProgress =
+        !lastSent ||
+        currentStep > lastSent.progressStep ||
+        Math.abs(progressData.etaMins - lastSent.etaMins) >
+          TripLocationHandler.ETA_CHANGE_THRESHOLD;
+
+      if (shouldSendProgress) {
+        this.lastSentProgressCache.set(rideId, {
+          progressStep: currentStep,
+          etaMins: progressData.etaMins,
+          timestamp: Date.now(),
+        });
+        locationData.progress = progressData.progress;
+        locationData.remainingDistanceMeters =
+          progressData.remainingDistanceMeters;
+        locationData.remainingDurationSeconds =
+          progressData.remainingDurationSeconds;
+        locationData.etaMins = progressData.etaMins;
+        locationData.totalDistanceMeters = progressData.totalDistanceMeters;
+      }
     }
 
     this.logger.log(

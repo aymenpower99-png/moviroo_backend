@@ -46,6 +46,7 @@ import { PassengerEntity } from '../passenger/entities/passengers.entity';
 import { GeocodingService } from './infrastructure/services/geocoding/geocoding.service';
 import { GeocodingGoogleService } from './infrastructure/services/geocoding/geocoding-google.service';
 import { RoutingService } from './infrastructure/services/routing/routing.service';
+import { PricingConfigService } from '../common/services/pricing-config.service';
 
 @Controller('rides')
 export class RidesController {
@@ -60,6 +61,7 @@ export class RidesController {
     private readonly googlePlacesService: GeocodingGoogleService,
     private readonly routingService: RoutingService,
     private readonly rideMail: RideMailService,
+    private readonly pricingConfig: PricingConfigService,
     @InjectRepository(Ride)
     private readonly rideRepo: Repository<Ride>,
     @InjectRepository(DispatchOffer)
@@ -85,6 +87,30 @@ export class RidesController {
       throw new NotFoundException('Mapbox token not configured');
     }
     return { token };
+  }
+
+  /* ─── Admin: Get pricing config (reads from PostgreSQL via Config API) ─── */
+  @Get('pricing/config')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN)
+  async getPricingConfig() {
+    const cfg = await this.pricingConfig.getConfig();
+    return { source: 'postgresql', config: cfg };
+  }
+
+  /* ─── Admin: Update pricing config (writes to PostgreSQL via Config API) ─── */
+  @Post('pricing/config')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN)
+  @HttpCode(200)
+  async updatePricingConfig(@Body() body: Record<string, any>) {
+    const result = await this.pricingConfig.updateConfig(body);
+    if (!result.success) {
+      throw new ForbiddenException(
+        `Failed to update pricing config: ${result.error}`,
+      );
+    }
+    return { success: true, updated: body };
   }
 
   /* ─── Get vehicle class prices by coordinates ───────────────────── */
@@ -347,9 +373,12 @@ export class RidesController {
             ride.status === RideStatus.IN_TRIP ? ride.dropoffLat : ride.pickupLat;
           const targetLon =
             ride.status === RideStatus.IN_TRIP ? ride.dropoffLon : ride.pickupLon;
-          const totalDistanceMeters = ride.distanceKm
-            ? ride.distanceKm * 1000
-            : 0;
+          // Use correct total distance based on ride phase
+          const totalDistanceMeters =
+            ride.status === RideStatus.IN_TRIP
+              ? (ride.distanceKm ? ride.distanceKm * 1000 : 0)
+              : (ride.initialPickupDistanceMeters ??
+                 (ride.distanceKm ? ride.distanceKm * 1000 : 0));
 
           if (totalDistanceMeters > 0) {
             try {
@@ -437,7 +466,12 @@ export class RidesController {
       ride.status === RideStatus.IN_TRIP ? ride.dropoffLat : ride.pickupLat;
     const targetLon =
       ride.status === RideStatus.IN_TRIP ? ride.dropoffLon : ride.pickupLon;
-    const totalDistanceMeters = ride.distanceKm ? ride.distanceKm * 1000 : 0;
+    // Use correct total distance based on ride phase
+    const totalDistanceMeters =
+      ride.status === RideStatus.IN_TRIP
+        ? (ride.distanceKm ? ride.distanceKm * 1000 : 0)
+        : (ride.initialPickupDistanceMeters ??
+           (ride.distanceKm ? ride.distanceKm * 1000 : 0));
 
     // Calculate progress using RoutingService
     const progressResult = await this.routingService.calculateProgressForRide(

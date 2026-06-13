@@ -4,6 +4,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from '../../users/entites/user.entity';
 import { Driver } from '../../driver/entities/driver.entity';
+import { I18nService } from '../../i18n/i18n.service';
 
 /**
  * Low-level Firebase Cloud Messaging service.
@@ -20,6 +21,7 @@ export class FcmService implements OnModuleInit {
   constructor(
     @InjectRepository(User) private readonly userRepo: Repository<User>,
     @InjectRepository(Driver) private readonly driverRepo: Repository<Driver>,
+    private readonly i18nService: I18nService,
   ) {}
 
   onModuleInit() {
@@ -104,7 +106,7 @@ export class FcmService implements OnModuleInit {
 
     const user = await this.userRepo.findOne({
       where: { id: userId },
-      select: ['id', 'fcmToken', 'pushNotificationsEnabled', 'role'],
+      select: ['id', 'fcmToken', 'pushNotificationsEnabled', 'role', 'language'],
     });
 
     this.logger.log(
@@ -136,11 +138,18 @@ export class FcmService implements OnModuleInit {
       return false;
     }
 
+    // Translate title and body if they are translation keys (start with 'notif_')
+    const lang = user?.language || 'en';
+    const isTitleKey = title.startsWith('notif_');
+    const isBodyKey = body.startsWith('notif_');
+    const finalTitle = isTitleKey ? this.i18nService.translate(title, lang) : title;
+    const finalBody = isBodyKey ? this.i18nService.translate(body, lang) : body;
+
     try {
       const channelId = data?.channelId ?? 'ride_offers';
       const message: admin.messaging.Message = {
         token: user.fcmToken,
-        data: { ...data, title, body },
+        data: { ...data, title: finalTitle, body: finalBody },
         android: {
           priority: 'high',
           notification: {
@@ -151,11 +160,11 @@ export class FcmService implements OnModuleInit {
       };
 
       if (includeNotification) {
-        message.notification = { title, body };
+        message.notification = { title: finalTitle, body: finalBody };
       }
 
       await admin.messaging().send(message);
-      this.logger.log(` Push sent to ${userId.slice(0, 8)}: "${title}"`);
+      this.logger.log(` Push sent to ${userId.slice(0, 8)}: "${finalTitle}"`);
       return true;
     } catch (err) {
       const errorMsg = (err as Error).message;
@@ -185,7 +194,7 @@ export class FcmService implements OnModuleInit {
   ): Promise<boolean> {
     return this.sendToUser(
       driverId,
-      'New Ride Request',
+      'notif_ride_offer_title',
       `${pickupAddress} → ${dropoffAddress}`,
       {
         type: 'RIDE_OFFER',
@@ -203,8 +212,8 @@ export class FcmService implements OnModuleInit {
   async sendRideCancelled(driverId: string, rideId: string): Promise<boolean> {
     return this.sendToUser(
       driverId,
-      'Ride Cancelled',
-      'The passenger has cancelled this ride.',
+      'notif_ride_cancelled_title',
+      'notif_ride_cancelled_body',
       { type: 'RIDE_CANCELLED', rideId },
     );
   }

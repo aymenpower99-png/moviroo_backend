@@ -291,6 +291,14 @@ export class Ride {
   arrivedAt: Date | null;
 
   @Column({
+    name: 'initial_pickup_distance_meters',
+    type: 'double precision',
+    nullable: true,
+    default: null,
+  })
+  initialPickupDistanceMeters: number | null;
+
+  @Column({
     name: 'trip_started_at',
     type: 'timestamptz',
     nullable: true,

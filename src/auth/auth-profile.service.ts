@@ -4,12 +4,14 @@ import { Repository } from 'typeorm';
 import { User } from '../users/entites/user.entity';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { AuthEmailChangeService } from './auth-email-change.service';
+import { WelcomeMailService } from '../mail/services/welcome-mail.service';
 
 @Injectable()
 export class AuthProfileService {
   constructor(
     @InjectRepository(User) private userRepo: Repository<User>,
     private emailChangeService: AuthEmailChangeService,
+    private welcomeMail: WelcomeMailService,
   ) {}
 
   async updateProfile(userId: string, dto: UpdateProfileDto) {
@@ -42,6 +44,17 @@ export class AuthProfileService {
     });
 
     const updated = await this.userRepo.findOneOrFail({ where: { id: userId } });
+
+    // Send welcome email on first profile completion (phone goes from empty → filled)
+    const isFirstProfileCompletion = !user.phone && !!phone;
+    if (isFirstProfileCompletion) {
+      this.welcomeMail.sendWelcome(
+        user.role,
+        user.email,
+        updated.firstName || user.firstName,
+      );
+    }
+
     const { password, refreshToken, otpCode, totpSecret, inviteToken, emailChangeToken, ...safe } = updated;
     return { ...safe, emailChangePending: !!safe.pendingEmail };
   }

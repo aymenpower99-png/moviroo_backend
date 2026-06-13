@@ -22,6 +22,8 @@ import { CommissionTier } from '../../../billing/entities/commission-tier.entity
 import { CommissionLedger } from '../../../billing/entities/commission-ledger.entity';
 import { DriverMonthlyStats } from '../../../billing/entities/driver-monthly-stats.entity';
 import { DriverNotificationService } from '../../../notifications/services/driver-notification.service';
+import { PassengerNotificationService } from '../../../notifications/services/passenger-notification.service';
+import { MembershipLevelsService } from '../../../membership-levels/membership-levels.service';
 import { Between } from 'typeorm';
 
 @Injectable()
@@ -48,6 +50,8 @@ export class EndTripUseCase {
     private readonly billingService: BillingService,
     private readonly invoiceService: InvoiceService,
     private readonly driverNotif: DriverNotificationService,
+    private readonly passengerNotif: PassengerNotificationService,
+    private readonly membershipLevelsService: MembershipLevelsService,
   ) {}
 
   async execute(driverUserId: string, rideId: string): Promise<Ride> {
@@ -289,6 +293,12 @@ export class EndTripUseCase {
     /* ── 6. Award loyalty points to passenger ──── */
     const pointsEarned = ride.loyaltyPointsEarned ?? 0;
     if (pointsEarned > 0) {
+      // Fetch current points before update
+      const passengerBefore = await this.passengerRepo.findOne({
+        where: { userId: ride.passengerId },
+      });
+      const oldPoints = passengerBefore?.membershipPoints ?? 0;
+
       await this.passengerRepo
         .createQueryBuilder()
         .update(PassengerEntity)
@@ -301,6 +311,32 @@ export class EndTripUseCase {
       this.logger.log(
         `Passenger ${ride.passengerId}: +${pointsEarned} loyalty points`,
       );
+
+      // Check if passenger reached a new membership level
+      try {
+        const newTotalPoints = oldPoints + pointsEarned;
+        const eligibleLevel =
+          await this.membershipLevelsService.resolveEligibleLevel(newTotalPoints);
+        if (eligibleLevel) {
+          const oldEligibleLevel =
+            await this.membershipLevelsService.resolveEligibleLevel(oldPoints);
+          const oldLevelName = oldEligibleLevel?.name ?? 'Starter';
+          if (eligibleLevel.name !== oldLevelName) {
+            this.passengerNotif
+              .membershipLevelUpgraded(
+                ride.passengerId,
+                eligibleLevel.name,
+                `${eligibleLevel.discountPercentage}% discount`,
+              )
+              .catch(() => {});
+            this.logger.log(
+              `Passenger ${ride.passengerId} upgraded to ${eligibleLevel.name}`,
+            );
+          }
+        }
+      } catch (_) {
+        // Ignore errors — notification is best-effort
+      }
     }
 
     /* ── 7. Increment passenger totalBookings ──── */

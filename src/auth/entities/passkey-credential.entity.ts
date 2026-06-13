@@ -54,4 +54,22 @@ export class PasskeyCredential {
 
   @Column({ name: 'last_used_at', type: 'timestamp', nullable: true })
   lastUsedAt: Date | null;
+
+  /** Lifecycle status: ACTIVE, REVOKED, DELETED.
+   *  ACTIVE = can be used for authentication.
+   *  REVOKED = replaced by a newer passkey (soft-revoked).
+   *  DELETED = removed by user from the app (soft-deleted). */
+  @Column({
+    name: 'status',
+    type: 'enum',
+    enum: ['ACTIVE', 'REVOKED', 'DELETED'],
+    default: 'ACTIVE',
+  })
+  status: 'ACTIVE' | 'REVOKED' | 'DELETED';
+
+  @Column({ name: 'revoked_at', type: 'timestamp', nullable: true })
+  revokedAt: Date | null;
+
+  @Column({ name: 'deleted_at', type: 'timestamp', nullable: true })
+  deletedAt: Date | null;
 }

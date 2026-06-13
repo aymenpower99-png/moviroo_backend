@@ -80,7 +80,7 @@ export class PricingService {
       this.logger.warn(
         `[PRICING] ML API unavailable, using fallback pricing: ${err}`,
       );
-      const fallbackResult = this.pricingFallback.fallback(req);
+      const fallbackResult = await this.pricingFallback.fallback(req);
       const fallbackDuration = Date.now() - fallbackStart;
       const totalDuration = Date.now() - startTime;
 
@@ -143,7 +143,7 @@ export class PricingService {
       );
       let fallbackResult: BatchPricingResult;
       try {
-        fallbackResult = this.pricingFallback.batchFallback(req);
+        fallbackResult = await this.pricingFallback.batchFallback(req);
       } catch (fallbackErr) {
         this.logger.error(
           `[PRICING] batchFallback itself threw: ${fallbackErr}`,

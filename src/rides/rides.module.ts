@@ -27,6 +27,7 @@ import { GeocodingGoogleService } from './infrastructure/services/geocoding/geoc
 import { PricingService } from './infrastructure/services/pricing/pricing.service';
 import { PricingMlService } from './infrastructure/services/pricing/pricing-ml.service';
 import { PricingFallbackService } from './infrastructure/services/pricing/pricing-fallback.service';
+import { PricingConfigService } from '../common/services/pricing-config.service';
 import { RoutingService } from './infrastructure/services/routing/routing.service';
 import { RouteCalculationService } from './infrastructure/services/routing/route-calculation.service';
 import { RouteProgressService } from './infrastructure/services/routing/route-progress.service';
@@ -82,6 +83,7 @@ import { MailModule } from '../mail/mail.module';
     PricingService,
     PricingMlService,
     PricingFallbackService,
+    PricingConfigService,
     RoutingService,
     RouteCalculationService,
     RouteProgressService,

@@ -17,7 +17,7 @@ import {
   CouponStatus,
 } from './entities/membership-coupon.entity';
 import { User } from '../users/entites/user.entity';
-import { FcmService } from '../notifications/services/fcm.service';
+import { PassengerNotificationService } from '../notifications/services/passenger-notification.service';
 
 @Injectable()
 export class PassengersService {
@@ -29,7 +29,7 @@ export class PassengersService {
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
     private readonly membershipLevelsService: MembershipLevelsService,
-    private readonly fcmService: FcmService,
+    private readonly passengerNotif: PassengerNotificationService,
   ) {}
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
@@ -126,16 +126,17 @@ export class PassengersService {
     // Fetch all active levels sorted by level ASC
     const levels = await this.membershipLevelsService.findAllActive();
 
-    // ── Current level: claim-based (highest level the user has ever claimed) ─
+    // ── All claimed coupons for this user (most recent first) ─
     const claimedCoupons = await this.couponRepo.find({
       where: { userId: passenger.userId },
-      order: { level: 'DESC' },
+      order: { createdAt: 'DESC' },
     });
 
-    const highestClaimedLevelNum =
+    // Current level = most recently claimed level (not highest)
+    const mostRecentLevelNum =
       claimedCoupons.length > 0 ? claimedCoupons[0].level : 0;
     const currentLevel =
-      levels.find((l) => l.level === highestClaimedLevelNum) ?? null;
+      levels.find((l) => l.level === mostRecentLevelNum) ?? null;
 
     // Level IDs that still have an ACTIVE coupon (not yet used)
     const activeCoupons = claimedCoupons.filter(
@@ -245,20 +246,10 @@ export class PassengersService {
 
     const saved = await this.couponRepo.save(coupon);
 
-    // Notify user about their new promo code
-    this.fcmService.sendToUser(
-      passenger.userId,
-      '🎉 Reward Unlocked!',
-      `You unlocked ${level.name}! Your promo code is ${code} (${level.discountPercentage}% off).`,
-      {
-        type: 'MEMBERSHIP_REWARD_CLAIMED',
-        levelId: level.id,
-        levelName: level.name,
-        code,
-        discountPercentage: String(level.discountPercentage),
-        channelId: 'membership_rewards',
-      },
-    ).catch(() => {});
+    // Notify user about their new promo code (uses localized type for app translation)
+    this.passengerNotif
+      .couponReward(passenger.userId, code, level.discountPercentage)
+      .catch(() => {});
 
     return saved;
   }

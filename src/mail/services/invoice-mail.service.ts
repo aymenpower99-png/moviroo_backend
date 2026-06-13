@@ -30,7 +30,7 @@ export class InvoiceMailService extends BaseMailService {
     const discountPercent = ride.discountPercent ?? 0;
     const originalPrice = ride.priceEstimate ?? paidAmount;
     const discount = discountPercent > 0
-      ? originalPrice - paidAmount
+      ? parseFloat((originalPrice * (discountPercent / 100)).toFixed(2))
       : 0;
     const total = paidAmount;
 

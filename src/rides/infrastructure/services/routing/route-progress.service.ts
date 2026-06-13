@@ -46,10 +46,11 @@ export class RouteProgressService {
 
   /**
    * Calculate ETA based on distance and speed
-   * If speed is 0, use average speed of 40 km/h
+   * If speed is too low (< 5 km/h), use average speed of 40 km/h
+   * This prevents absurd ETAs when the driver is stopped or moving slowly
    */
   calculateETA(distanceMeters: number, speedKmh: number): number {
-    const avgSpeed = speedKmh > 0 ? speedKmh : 40; // Default to 40 km/h
+    const avgSpeed = speedKmh > 5 ? speedKmh : 40; // Minimum 5 km/h for realistic ETA
     const speedMetersPerSecond = (avgSpeed * 1000) / 3600;
     const durationSeconds = distanceMeters / speedMetersPerSecond;
     return Math.ceil(durationSeconds / 60); // Return minutes

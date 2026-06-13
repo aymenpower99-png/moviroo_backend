@@ -23,8 +23,8 @@ export class DriverNotificationService {
   async rideAccepted(driverId: string, rideId: string, passengerName: string) {
     return this.fcm.sendToUser(
       driverId,
-      'Ride Accepted',
-      `You are on the way to pick up ${passengerName}.`,
+      'notif_ride_accepted_title',
+      'notif_ride_accepted_body',
       { type: 'RIDE_ACCEPTED', rideId, channelId: 'ride_updates' },
       false, // Use data-only for custom icon
     );
@@ -34,8 +34,8 @@ export class DriverNotificationService {
   async rideCancelledByDriver(driverId: string, rideId: string) {
     return this.fcm.sendToUser(
       driverId,
-      'Ride Cancelled',
-      'You have cancelled this ride.',
+      'notif_ride_cancelled_by_driver_title',
+      'notif_ride_cancelled_by_driver_body',
       { type: 'RIDE_CANCELLED_BY_DRIVER', rideId, channelId: 'ride_updates' },
       false, // Use data-only for custom icon
     );
@@ -45,8 +45,8 @@ export class DriverNotificationService {
   async rideCancelledByPassenger(driverId: string, rideId: string) {
     return this.fcm.sendToUser(
       driverId,
-      'Ride Cancelled',
-      'The passenger has cancelled this ride.',
+      'notif_ride_cancelled_by_passenger_title',
+      'notif_ride_cancelled_by_passenger_body',
       {
         type: 'RIDE_CANCELLED_BY_PASSENGER',
         rideId,
@@ -64,10 +64,8 @@ export class DriverNotificationService {
   ) {
     return this.fcm.sendToUser(
       driverId,
-      'Ride Cancelled by Admin',
-      reason?.trim()
-        ? `This ride was cancelled by an admin. Reason: ${reason}`
-        : 'This ride was cancelled by an admin.',
+      'notif_ride_cancelled_by_admin_title',
+      'notif_ride_cancelled_by_admin_body',
       {
         type: 'RIDE_CANCELLED_BY_ADMIN',
         rideId,
@@ -108,26 +106,29 @@ export class DriverNotificationService {
     switch (status) {
       case RideStatus.EN_ROUTE_TO_PICKUP:
         return {
-          title: 'Ride Started',
-          body: 'You are on the way to the pickup point.',
+          title: 'notif_ride_status_en_route_title',
+          body: 'notif_ride_status_en_route_body',
         };
       case RideStatus.ARRIVED:
         return {
-          title: 'Arrived at Pickup',
-          body: 'You have arrived at the pickup point.',
+          title: 'notif_ride_status_arrived_title',
+          body: 'notif_ride_status_arrived_body',
         };
       case RideStatus.IN_TRIP:
         return {
-          title: 'Trip In Progress',
-          body: 'The trip is now in progress.',
+          title: 'notif_ride_status_in_trip_title',
+          body: 'notif_ride_status_in_trip_body',
         };
       case RideStatus.COMPLETED:
         return {
-          title: 'Ride Completed',
-          body: 'The ride has been completed. Great job!',
+          title: 'notif_ride_status_completed_title',
+          body: 'notif_ride_status_completed_body',
         };
       default:
-        return { title: 'Ride Update', body: `Status: ${status}` };
+        return {
+          title: 'notif_ride_status_changed_title',
+          body: 'notif_ride_status_changed_body',
+        };
     }
   }
 
@@ -143,8 +144,8 @@ export class DriverNotificationService {
     const ratePercent = Math.round(commissionRate * 100);
     return this.fcm.sendToUser(
       driverId,
-      `You unlocked ${tierName} 🎉`,
-      `You reached ${monthlyRides} rides this month. Your commission rate is now ${ratePercent}%.`,
+      'notif_tier_unlocked_title',
+      'notif_tier_unlocked_body',
       {
         type: 'TIER_UNLOCKED',
         tierName,

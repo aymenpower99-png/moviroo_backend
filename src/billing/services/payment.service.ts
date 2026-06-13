@@ -20,6 +20,10 @@ import {
 import { PassengerNotificationService } from '../../notifications/services/passenger-notification.service';
 import { InvoiceService } from './invoice.service';
 import { PassengerEntity } from '../../passenger/entities/passengers.entity';
+import {
+  MembershipCouponEntity,
+  CouponStatus,
+} from '../../passenger/entities/membership-coupon.entity';
 import { Ride } from '../../rides/domain/entities/ride.entity';
 import { RideStatus } from '../../rides/domain/enums/ride-status.enum';
 import { FallbackDispatchService } from '../../dispatch/application/services/fallback-dispatch.service';
@@ -39,6 +43,8 @@ export class PaymentService {
     private readonly passengerRepo: Repository<PassengerEntity>,
     @InjectRepository(Ride)
     private readonly rideRepo: Repository<Ride>,
+    @InjectRepository(MembershipCouponEntity)
+    private readonly couponRepo: Repository<MembershipCouponEntity>,
     @Inject(forwardRef(() => FallbackDispatchService))
     private readonly fallbackService: FallbackDispatchService,
     private readonly savedCardsService: SavedCardsService,
@@ -365,8 +371,33 @@ export class PaymentService {
     // Mark as paid
     const updated = await this.markAsPaid(payment.id, PaymentMethod.CARD);
 
-    // Transition ride status based on booking time
+    // Mark coupon as used if a coupon was applied to this ride
     const ride = payment.ride;
+    if (ride?.couponCode) {
+      try {
+        const coupon = await this.couponRepo.findOne({
+          where: {
+            code: ride.couponCode.toUpperCase(),
+            userId: passengerId,
+            status: CouponStatus.ACTIVE,
+          },
+        });
+        if (coupon) {
+          coupon.status = CouponStatus.USED;
+          coupon.usedAt = new Date();
+          await this.couponRepo.save(coupon);
+          this.logger.log(
+            `Coupon ${coupon.code} marked as USED for ride ${rideId}`,
+          );
+        }
+      } catch (err) {
+        this.logger.error(
+          `Failed to mark coupon as used for ride ${rideId}: ${err}`,
+        );
+      }
+    }
+
+    // Transition ride status based on booking time
     if (ride && ride.status === RideStatus.PENDING) {
       const now = Date.now();
       const rideTime = ride.scheduledAt

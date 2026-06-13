@@ -6,6 +6,7 @@ import { FcmService } from './services/fcm.service';
 import { DriverNotificationService } from './services/driver-notification.service';
 import { PassengerNotificationService } from './services/passenger-notification.service';
 import { NotificationsController } from './notifications.controller';
+import { I18nModule } from '../i18n/i18n.module';
 
 /**
  * Notifications split into focused services:
@@ -19,7 +20,7 @@ import { NotificationsController } from './notifications.controller';
  * emerges (e.g., passenger-notification.service.ts) and export it from here.
  */
 @Module({
-  imports: [TypeOrmModule.forFeature([User, Driver])],
+  imports: [TypeOrmModule.forFeature([User, Driver]), I18nModule],
   controllers: [NotificationsController],
   providers: [
     FcmService,

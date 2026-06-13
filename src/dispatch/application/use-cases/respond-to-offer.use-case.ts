@@ -83,9 +83,10 @@ export class RespondToOfferUseCase {
     ride.status = RideStatus.ASSIGNED;
     ride.driverId = currentUser.id;
     ride.vehicleId = vehicle.id;
-    await this.rideRepo.save(ride);
 
     // Calculate and store pickup route (driver → pickup) in RouteHistory
+    // Also store initial pickup distance for progress calculation
+    let initialPickupDistanceMeters: number | null = null;
     try {
       const driverLoc = await this.locRepo.findOne({
         where: { driverId: currentUser.id },
@@ -101,6 +102,8 @@ export class RespondToOfferUseCase {
           ride.pickupLon,
         );
         if (pickupRoute) {
+          initialPickupDistanceMeters = pickupRoute.distanceMeters;
+          ride.initialPickupDistanceMeters = pickupRoute.distanceMeters;
           // Store pickup route with sequence 1
           await this.routingService.storeRouteInHistory(
             ride.id,
@@ -118,6 +121,8 @@ export class RespondToOfferUseCase {
       // Non-fatal: continue without pickup route, will use fallback
       this.logger.warn(`⚠️ Failed to calculate/store pickup route: ${err}`);
     }
+
+    await this.rideRepo.save(ride);
 
     this.logger.log(
       `✅ Ride ${ride.id} ASSIGNED → driver=${currentUser.id} vehicle=${vehicle.id}`,

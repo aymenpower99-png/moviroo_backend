@@ -12,6 +12,7 @@ import { OtpService } from '../otp/otp.service';
 import { AuthMailService } from '../mail/services/auth-mail.service';
 import { AuthBiometricService } from './auth-passkey.service';
 import { DeleteAccountDto } from './dto/security.dto';
+import { UserProvider } from '../users/entites/user.entity';
 import { Ride } from '../rides/domain/entities/ride.entity';
 import { TripPayment } from '../billing/entities/trip-payment.entity';
 import { SupportTicket } from '../support/entities/support-ticket.entity';
@@ -56,34 +57,42 @@ export class AuthAccountService {
   ) {}
 
   async deleteAccount(userId: string, dto: DeleteAccountDto) {
-    const providedCount =
-      (dto.password ? 1 : 0) + (dto.otp ? 1 : 0) + (dto.passkeyToken ? 1 : 0);
-    if (providedCount !== 1) {
-      throw new BadRequestException(
-        'Provide exactly one of: password, otp, or passkeyToken.',
-      );
-    }
-
     const user = await this.userRepo.findOne({ where: { id: userId } });
     if (!user) throw new UnauthorizedException('User not found');
 
-    // ── Verify re-auth ────────────────────────────────────────────────────
-    if (dto.password) {
-      if (!user.password) {
+    // ── Google users with no security methods skip re-auth ───────────────
+    const isGoogleUser = user.provider === UserProvider.GOOGLE;
+    const hasSecurityMethod =
+      user.is2faEnabled || user.totpEnabled || user.passkeyEnabled;
+    const skipReAuth = isGoogleUser && !hasSecurityMethod;
+
+    if (!skipReAuth) {
+      const providedCount =
+        (dto.password ? 1 : 0) + (dto.otp ? 1 : 0) + (dto.passkeyToken ? 1 : 0);
+      if (providedCount !== 1) {
         throw new BadRequestException(
-          'This account has no password. Please request a verification code via email or use biometric authentication.',
+          'Provide exactly one of: password, otp, or passkeyToken.',
         );
       }
-      const ok = await bcrypt.compare(dto.password, user.password);
-      if (!ok) throw new UnauthorizedException('Invalid credentials');
-    } else if (dto.otp) {
-      await this.otpService.verifyOtp(userId, dto.otp);
-    } else if (dto.passkeyToken) {
-      await this.biometricService.validateActionToken(
-        userId,
-        dto.passkeyToken,
-        'delete-account',
-      );
+
+      // ── Verify re-auth ──────────────────────────────────────────────────
+      if (dto.password) {
+        if (!user.password) {
+          throw new BadRequestException(
+            'This account has no password. Please request a verification code via email or use biometric authentication.',
+          );
+        }
+        const ok = await bcrypt.compare(dto.password, user.password);
+        if (!ok) throw new UnauthorizedException('Invalid credentials');
+      } else if (dto.otp) {
+        await this.otpService.verifyOtp(userId, dto.otp);
+      } else if (dto.passkeyToken) {
+        await this.biometricService.validateActionToken(
+          userId,
+          dto.passkeyToken,
+          'delete-account',
+        );
+      }
     }
 
     this.logger.log(`Starting GDPR deletion for user: ${userId}`);
@@ -122,9 +131,12 @@ export class AuthAccountService {
     await this.sessionRepo.delete({ userId });
     this.logger.log(`Deleted sessions for user: ${userId}`);
 
-    // ── Hard delete passkeys ────────────────────────────────────────────────
-    await this.passkeyRepo.delete({ userId });
-    this.logger.log(`Deleted passkeys for user: ${userId}`);
+    // ── Soft delete passkeys (mark DELETED so the OS can detect stale ones) ─
+    await this.passkeyRepo.update(
+      { userId },
+      { status: 'DELETED', deletedAt: new Date() },
+    );
+    this.logger.log(`Soft-deleted passkeys for user: ${userId}`);
 
     // ── Hard delete support tickets ───────────────────────────────────────
     await this.ticketRepo.delete({ authorId: userId });

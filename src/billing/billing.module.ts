@@ -8,6 +8,7 @@ import { Driver } from '../driver/entities/driver.entity';
 import { User } from '../users/entites/user.entity';
 import { Ride } from '../rides/domain/entities/ride.entity';
 import { PassengerEntity } from '../passenger/entities/passengers.entity';
+import { MembershipCouponEntity } from '../passenger/entities/membership-coupon.entity';
 
 import { BillingService } from './services/billing.service';
 import { PaymentService } from './services/payment.service';
@@ -28,6 +29,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
       User,
       Ride,
       PassengerEntity,
+      MembershipCouponEntity,
     ]),
     forwardRef(() => DispatchModule),
     NotificationsModule,

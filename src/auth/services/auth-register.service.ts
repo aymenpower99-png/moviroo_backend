@@ -216,8 +216,6 @@ export class AuthRegisterService {
       }
     }
 
-    this.welcomeMail.sendWelcome(user.role, user.email, user.firstName);
-
     const tokens = await this.tokenService.generateTokens(user);
     await this.tokenService.saveRefreshToken(user.id, tokens.refreshToken);
 

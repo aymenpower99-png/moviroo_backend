@@ -246,8 +246,8 @@ export class HeartbeatService implements OnModuleInit, OnModuleDestroy {
       this.fcmService
         .sendToUser(
           loc.driverId,
-          'You went offline',
-          'Your status was changed to offline due to inactivity. Open the app to go back online.',
+          'notif_driver_status_offline_title',
+          'notif_driver_status_offline_body',
           { type: 'DRIVER_STATUS_OFFLINE', channelId: 'driver_status' },
         )
         .catch((err) => {
