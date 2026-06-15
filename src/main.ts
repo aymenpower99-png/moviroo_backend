@@ -52,12 +52,19 @@ async function bootstrap() {
   app.use(bodyParser.urlencoded({ extended: true, limit: '10mb' }));
 
   // ─── CORS ─────────────────────────────────────
-  app.enableCors({
-    origin: true,
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Device-Name', 'X-Device-Id'],
-  });
+  // ─── CORS ─────────────────────────────────────
+app.enableCors({
+  origin: true,
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'X-Device-Name',
+    'X-Device-Id',
+    'ngrok-skip-browser-warning',
+  ],
+});
 
   app.set('trust proxy', true);
 
