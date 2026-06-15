@@ -74,10 +74,32 @@ export class EndTripUseCase {
     const now = new Date();
 
     /* ── 1. Calculate real distance from waypoints ──── */
-    const waypoints = await this.waypointRepo.find({
-      where: { rideId },
-      order: { sequence: 'ASC' },
-    });
+    /* BUG FIX: Only use waypoints recorded BETWEEN tripStartedAt and completedAt.
+     * Previously ALL waypoints were summed, including en-route to pickup,
+     * causing wildly inflated distances (e.g., 125 km for a 3 km trip). */
+    let waypoints: TripWaypoint[] = [];
+    if (ride.tripStartedAt) {
+      waypoints = await this.waypointRepo.find({
+        where: {
+          rideId,
+          recordedAt: Between(ride.tripStartedAt, now),
+        },
+        order: { sequence: 'ASC' },
+      });
+      this.logger.log(
+        `Ride ${rideId}: filtering waypoints between ${ride.tripStartedAt.toISOString()} and ${now.toISOString()} — found ${waypoints.length} waypoints`,
+      );
+    } else {
+      /* Fallback: if tripStartedAt is missing (should never happen), use all waypoints
+       * and log a warning so we can investigate the data integrity issue. */
+      waypoints = await this.waypointRepo.find({
+        where: { rideId },
+        order: { sequence: 'ASC' },
+      });
+      this.logger.warn(
+        `Ride ${rideId}: tripStartedAt is NULL — falling back to ALL waypoints (${waypoints.length}). This indicates a data integrity issue.`,
+      );
+    }
 
     let realDistanceKm = 0;
     for (let i = 1; i < waypoints.length; i++) {
@@ -90,12 +112,52 @@ export class EndTripUseCase {
     }
     realDistanceKm = +realDistanceKm.toFixed(2);
 
+    /* Sanity check: if computed distance is 0 or implausibly small,
+     * fall back to straight-line (haversine) pickup→dropoff distance.
+     * This handles cases where no GPS waypoints were recorded during the trip. */
+    if (realDistanceKm < 0.1) {
+      const fallbackDistance = this.haversine(
+        ride.pickupLat,
+        ride.pickupLon,
+        ride.dropoffLat,
+        ride.dropoffLon,
+      );
+      this.logger.warn(
+        `Ride ${rideId}: waypoint distance ${realDistanceKm} km < 0.1 — falling back to pickup→dropoff haversine: ${fallbackDistance.toFixed(2)} km`,
+      );
+      realDistanceKm = +fallbackDistance.toFixed(2);
+    }
+
     /* ── 2. Calculate real duration ──── */
+    /* Duration = completedAt - tripStartedAt (when driver tapped "Start Ride").
+     * This is the actual time the passenger was in the vehicle. */
     const tripStartedAt = ride.tripStartedAt ?? now;
     const realDurationMin = +(
       (now.getTime() - tripStartedAt.getTime()) /
       60000
     ).toFixed(1);
+
+    /* Log the raw values for debugging duration issues */
+    this.logger.log(
+      `Ride ${rideId} duration calculation: ` +
+      `tripStartedAt=${tripStartedAt.toISOString()}, ` +
+      `completedAt=${now.toISOString()}, ` +
+      `rawDurationMin=${realDurationMin}, ` +
+      `bookingEstimateMin=${ride.durationMin ?? 'null'}`,
+    );
+
+    /* Sanity check: if duration is 0 or suspiciously equals the booking estimate,
+     * it may indicate the driver tapped Start/End immediately or the timestamps
+     * are wrong. Log a warning for investigation. */
+    if (realDurationMin <= 0) {
+      this.logger.warn(
+        `Ride ${rideId}: duration ${realDurationMin} min ≤ 0 — tripStartedAt may be missing or equal to completedAt`,
+      );
+    } else if (ride.durationMin != null && Math.abs(realDurationMin - ride.durationMin) < 0.5) {
+      this.logger.warn(
+        `Ride ${rideId}: duration ${realDurationMin} min exactly matches booking estimate ${ride.durationMin} min — verify tripStartedAt is correct`,
+      );
+    }
 
     /* ── 3. Update ride ──── */
     ride.status = RideStatus.COMPLETED;

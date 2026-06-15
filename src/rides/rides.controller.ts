@@ -18,7 +18,7 @@ import {
 import { Throttle } from '@nestjs/throttler';
 import { AuthGuard } from '@nestjs/passport';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -513,7 +513,7 @@ export class RidesController {
   /* ─── List rides ──────────────────────────── */
   @Get()
   @UseGuards(AuthGuard('jwt'))
-  findAll(@CurrentUser() user: User) {
+  async findAll(@CurrentUser() user: User) {
     if (user.role === UserRole.SUPER_ADMIN) {
       return this.rideRepo.find({
         relations: ['passenger', 'vehicleClass', 'driver', 'vehicle'],
@@ -524,10 +524,36 @@ export class RidesController {
 
     // Driver sees rides assigned to them
     if (user.role === UserRole.DRIVER) {
-      return this.rideRepo.find({
+      const rides = await this.rideRepo.find({
         where: { driverId: user.id },
         relations: ['passenger', 'vehicleClass', 'vehicle'],
         order: { createdAt: 'DESC' },
+      });
+
+      // BUG FIX: Include passenger rating_average in the list response.
+      // The 'passenger' relation is the User entity, which does NOT have
+      // rating_average. We must fetch PassengerEntity separately and merge it.
+      const passengerIds = rides
+        .map((r) => r.passengerId)
+        .filter((id): id is string => !!id);
+
+      const passengerProfiles = passengerIds.length
+        ? await this.passengerRepo.find({
+            where: { userId: In(passengerIds) },
+          })
+        : [];
+
+      const profileMap = new Map(
+        passengerProfiles.map((p) => [p.userId, p]),
+      );
+
+      return rides.map((ride) => {
+        const profile = profileMap.get(ride.passengerId ?? '');
+        return {
+          ...ride,
+          passengerRating: profile?.ratingAverage ?? null,
+          passengerTotalRatings: profile?.totalRatings ?? null,
+        };
       });
     }
 

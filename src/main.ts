@@ -53,8 +53,15 @@ async function bootstrap() {
 
   // ─── CORS ─────────────────────────────────────
   // ─── CORS ─────────────────────────────────────
+// ─── CORS ─────────────────────────────────────
 app.enableCors({
-  origin: true,
+  origin: [
+    'https://web-admin-dashboard-pfe-main.onrender.com',
+    'http://localhost:5173',
+    'http://localhost:3000',
+    'https://admin.moviroo.tn', // 🆕 ajouter ça
+
+  ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: [
@@ -63,6 +70,7 @@ app.enableCors({
     'X-Device-Name',
     'X-Device-Id',
     'ngrok-skip-browser-warning',
+    
   ],
 });
 
