@@ -219,15 +219,25 @@ export class AdminInviteService {
   }
 
   private async ensureDriverPending(userId: string): Promise<void> {
-    const existing = await this.driverRepo.findOne({ where: { userId } });
-    if (!existing) {
-      await this.driverRepo.save(
-        this.driverRepo.create({
-          userId,
-          availabilityStatus: DriverAvailabilityStatus.PENDING,
-        }),
-      );
+    const existing = await this.driverRepo.findOne({
+      where: { userId },
+      withDeleted: true,
+    });
+    if (existing) {
+      if (existing.deletedAt) {
+        await this.driverRepo.restore(existing.id);
+      }
+      await this.driverRepo.update(existing.id, {
+        availabilityStatus: DriverAvailabilityStatus.PENDING,
+      });
+      return;
     }
+    await this.driverRepo.save(
+      this.driverRepo.create({
+        userId,
+        availabilityStatus: DriverAvailabilityStatus.PENDING,
+      }),
+    );
   }
 
   async findUserOrFail(userId: string): Promise<User> {

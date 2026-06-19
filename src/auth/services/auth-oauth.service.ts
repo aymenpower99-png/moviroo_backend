@@ -59,30 +59,70 @@ export class AuthOAuthService {
         );
       }
     } else {
-      user = this.userRepo.create({
-        email,
-        firstName,
-        lastName,
-        provider: UserProvider.GOOGLE,
-        emailVerified: true,
-        status: UserStatus.ACTIVE,
-        role: UserRole.PASSENGER,
+      // Check if a soft-deleted user exists with this email (admin deleted)
+      const deletedUser = await this.userRepo.findOne({
+        where: { email },
+        withDeleted: true,
       });
-      await this.userRepo.save(user);
 
-      await this.passengerRepo.save(
-        this.passengerRepo.create({
-          userId: user.id,
-          preferredClassId: null,
-          membershipLevel: MembershipLevel.GO,
-          membershipPoints: 0,
-          totalBookings: 0,
-          ratingAverage: 5.0,
-          totalRatings: 0,
-          newsletterOptIn: false,
-        }),
-      );
+      if (deletedUser) {
+        // Restore the soft-deleted user and update their info
+        await this.userRepo.restore(deletedUser.id);
+        user = deletedUser;
+        user.provider = UserProvider.GOOGLE;
+        user.emailVerified = true;
+        user.status = UserStatus.ACTIVE;
+        user.firstName = firstName;
+        user.lastName = lastName;
+        await this.userRepo.save(user);
 
+        // Ensure passenger profile exists (may also be soft-deleted)
+        const passenger = await this.passengerRepo.findOne({
+          where: { userId: user.id },
+          withDeleted: true,
+        });
+        if (passenger) {
+          await this.passengerRepo.restore(passenger.id);
+        } else {
+          await this.passengerRepo.save(
+            this.passengerRepo.create({
+              userId: user.id,
+              preferredClassId: null,
+              membershipLevel: MembershipLevel.GO,
+              membershipPoints: 0,
+              totalBookings: 0,
+              ratingAverage: 5.0,
+              totalRatings: 0,
+              newsletterOptIn: false,
+            }),
+          );
+        }
+      } else {
+        // Create brand-new user
+        user = this.userRepo.create({
+          email,
+          firstName,
+          lastName,
+          provider: UserProvider.GOOGLE,
+          emailVerified: true,
+          status: UserStatus.ACTIVE,
+          role: UserRole.PASSENGER,
+        });
+        await this.userRepo.save(user);
+
+        await this.passengerRepo.save(
+          this.passengerRepo.create({
+            userId: user.id,
+            preferredClassId: null,
+            membershipLevel: MembershipLevel.GO,
+            membershipPoints: 0,
+            totalBookings: 0,
+            ratingAverage: 5.0,
+            totalRatings: 0,
+            newsletterOptIn: false,
+          }),
+        );
+      }
     }
 
     await this.userRepo.update(user.id, { lastLoginAt: new Date() });

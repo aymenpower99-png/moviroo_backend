@@ -161,11 +161,25 @@ export class RespondToOfferUseCase {
           .filter(Boolean)
           .join(' ') || 'Your driver';
       const driverLogoUrl = (fullRide as any)?.driver?.logoUrl ?? '';
+      const driverId = (fullRide as any)?.driver?.id ?? fullRide.driverId ?? '';
+      const vehicleName =
+        [
+          (fullRide as any)?.vehicle?.make,
+          (fullRide as any)?.vehicle?.model,
+        ]
+          .filter(Boolean)
+          .join(' ') || '';
+      const vehicleColor = (fullRide as any)?.vehicle?.color ?? '';
+      const plateNumber = (fullRide as any)?.vehicle?.plateNumber ?? '';
       this.passengerNotif.driverAssigned(
         fullRide.passengerId,
         ride.id,
         driverName,
         driverLogoUrl,
+        driverId,
+        vehicleName,
+        vehicleColor,
+        plateNumber,
       );
     }
 

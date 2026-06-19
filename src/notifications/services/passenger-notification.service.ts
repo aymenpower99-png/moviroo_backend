@@ -25,12 +25,26 @@ export class PassengerNotificationService {
     rideId: string,
     driverName: string,
     driverLogoUrl?: string,
+    driverId?: string,
+    vehicleName?: string,
+    vehicleColor?: string,
+    plateNumber?: string,
   ) {
     return this.fcm.sendToUser(
       passengerId,
       'Driver Assigned',
       `${driverName} has been assigned to your ride.`,
-      { type: 'DRIVER_ASSIGNED', rideId, driverName, driverLogoUrl: driverLogoUrl ?? '', channelId: 'ride_updates' },
+      {
+        type: 'DRIVER_ASSIGNED',
+        rideId,
+        driverName,
+        driverLogoUrl: driverLogoUrl ?? '',
+        driverId: driverId ?? '',
+        vehicleName: vehicleName ?? '',
+        vehicleColor: vehicleColor ?? '',
+        plateNumber: plateNumber ?? '',
+        channelId: 'ride_updates',
+      },
     );
   }
 
@@ -147,6 +161,10 @@ export class PassengerNotificationService {
     status: RideStatus,
     driverName?: string,
     driverLogoUrl?: string,
+    driverId?: string,
+    vehicleName?: string,
+    vehicleColor?: string,
+    plateNumber?: string,
   ) {
     const { title, body } = this.buildStatusCopy(status);
     return this.fcm.sendToUser(passengerId, title, body, {
@@ -155,6 +173,10 @@ export class PassengerNotificationService {
       status: status.toString(),
       driverName: driverName ?? '',
       driverLogoUrl: driverLogoUrl ?? '',
+      driverId: driverId ?? '',
+      vehicleName: vehicleName ?? '',
+      vehicleColor: vehicleColor ?? '',
+      plateNumber: plateNumber ?? '',
       channelId: 'ride_updates',
     });
   }

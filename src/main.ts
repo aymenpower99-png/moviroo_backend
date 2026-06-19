@@ -79,6 +79,10 @@ app.enableCors({
   // API prefix (IMPORTANT: AFTER static setup)
   app.setGlobalPrefix('api');
 
+  // ─── Health check (required by Railway) ───────
+  const httpAdapter = app.getHttpAdapter();
+  httpAdapter.get('/health', (_req: any, res: any) => res.status(200).json({ status: 'ok' }));
+
   // ─── Validation ───────────────────────────────
   app.useGlobalPipes(
     new ValidationPipe({
@@ -88,8 +92,9 @@ app.enableCors({
     }),
   );
 
-  await app.listen(3000);
-  console.log('🚀 Backend running on http://localhost:3000/api');
+  const port = parseInt(process.env.PORT || '3000', 10);
+  await app.listen(port, '0.0.0.0');
+  console.log(`🚀 Backend running on port ${port}/api`);
 }
 
 bootstrap();

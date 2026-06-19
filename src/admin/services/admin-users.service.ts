@@ -117,16 +117,18 @@ export class AdminUsersService {
   async deleteUser(userId: string) {
     const user = await this.findUserOrFail(userId);
 
+    // Soft-delete driver profile first (if any) to preserve ride history
     if (user.role === UserRole.DRIVER) {
       const driverProfile = await this.driverRepo.findOne({
         where: { userId: user.id },
       });
       if (driverProfile) {
-        await this.driverRepo.delete(driverProfile.id);
+        await this.driverRepo.softDelete(driverProfile.id);
       }
     }
 
-    await this.userRepo.delete(user.id);
+    // Soft-delete user — preserves foreign-key relationships (rides, etc.)
+    await this.userRepo.softDelete(user.id);
     return { message: 'User has been deleted.' };
   }
 

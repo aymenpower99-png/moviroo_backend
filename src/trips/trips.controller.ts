@@ -94,12 +94,17 @@ export class TripsController {
 
     // Push notification to passenger
     if (ride.passengerId) {
+      const rideWithDriver = await this._getRideWithDriverAndVehicle(rideId);
       this.passengerNotif.rideStatusChanged(
         ride.passengerId,
         rideId,
         RideStatus.EN_ROUTE_TO_PICKUP,
-        '',
-        '',
+        rideWithDriver?.driverName ?? '',
+        rideWithDriver?.driverLogoUrl ?? '',
+        rideWithDriver?.driverId ?? '',
+        rideWithDriver?.vehicleName ?? '',
+        rideWithDriver?.vehicleColor ?? '',
+        rideWithDriver?.plateNumber ?? '',
       );
     }
 
@@ -126,12 +131,17 @@ export class TripsController {
 
     // Push notification to passenger
     if (ride.passengerId) {
+      const rideWithDriver = await this._getRideWithDriverAndVehicle(rideId);
       this.passengerNotif.rideStatusChanged(
         ride.passengerId,
         rideId,
         RideStatus.ARRIVED,
-        '',
-        '',
+        rideWithDriver?.driverName ?? '',
+        rideWithDriver?.driverLogoUrl ?? '',
+        rideWithDriver?.driverId ?? '',
+        rideWithDriver?.vehicleName ?? '',
+        rideWithDriver?.vehicleColor ?? '',
+        rideWithDriver?.plateNumber ?? '',
       );
     }
 
@@ -159,12 +169,17 @@ export class TripsController {
 
     // Push notification to passenger
     if (ride.passengerId) {
+      const rideWithDriver = await this._getRideWithDriverAndVehicle(rideId);
       this.passengerNotif.rideStatusChanged(
         ride.passengerId,
         rideId,
         RideStatus.IN_TRIP,
-        '',
-        '',
+        rideWithDriver?.driverName ?? '',
+        rideWithDriver?.driverLogoUrl ?? '',
+        rideWithDriver?.driverId ?? '',
+        rideWithDriver?.vehicleName ?? '',
+        rideWithDriver?.vehicleColor ?? '',
+        rideWithDriver?.plateNumber ?? '',
       );
     }
 
@@ -197,12 +212,17 @@ export class TripsController {
 
     // Push notification to passenger
     if (ride.passengerId) {
+      const rideWithDriver = await this._getRideWithDriverAndVehicle(rideId);
       this.passengerNotif.rideStatusChanged(
         ride.passengerId,
         rideId,
         RideStatus.COMPLETED,
-        '',
-        '',
+        rideWithDriver?.driverName ?? '',
+        rideWithDriver?.driverLogoUrl ?? '',
+        rideWithDriver?.driverId ?? '',
+        rideWithDriver?.vehicleName ?? '',
+        rideWithDriver?.vehicleColor ?? '',
+        rideWithDriver?.plateNumber ?? '',
       );
     }
 
@@ -443,6 +463,50 @@ export class TripsController {
       arrived_at: ride.arrivedAt,
       trip_started_at: ride.tripStartedAt,
       completed_at: ride.completedAt,
+    };
+  }
+
+  /* ─── Helper: fetch ride with driver/vehicle relations for notifications ─── */
+  private async _getRideWithDriverAndVehicle(rideId: string): Promise<{
+    ride: Ride;
+    driverName: string;
+    driverLogoUrl: string;
+    driverId: string;
+    vehicleName: string;
+    vehicleColor: string;
+    plateNumber: string;
+  } | null> {
+    const ride = await this.rideRepo.findOne({
+      where: { id: rideId },
+      relations: ['driver', 'vehicle'],
+    });
+    if (!ride) return null;
+    const driverName =
+      [
+        (ride as any)?.driver?.firstName,
+        (ride as any)?.driver?.lastName,
+      ]
+        .filter(Boolean)
+        .join(' ') || 'Your driver';
+    const driverLogoUrl = (ride as any)?.driver?.logoUrl ?? '';
+    const driverId = (ride as any)?.driver?.id ?? ride.driverId ?? '';
+    const vehicleName =
+      [
+        (ride as any)?.vehicle?.make,
+        (ride as any)?.vehicle?.model,
+      ]
+        .filter(Boolean)
+        .join(' ') || '';
+    const vehicleColor = (ride as any)?.vehicle?.color ?? '';
+    const plateNumber = (ride as any)?.vehicle?.plateNumber ?? '';
+    return {
+      ride,
+      driverName,
+      driverLogoUrl,
+      driverId,
+      vehicleName,
+      vehicleColor,
+      plateNumber,
     };
   }
 }
